@@ -11,8 +11,11 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 export DJANGO_SECRET_KEY='your-secret'
 export GOOGLE_CLIENT_ID='YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com'
+python manage.py makemigrations
 python manage.py migrate
+python manage.py createsuperuser
 python manage.py runserver 0.0.0.0:8000
 ```
+默认使用 sqlite数据库
 打开 http://127.0.0.1:8000/auth/login/ 体验一键登录或账号登录。
 # ToTP
