@@ -156,6 +156,10 @@ def batch_import(request):
                             group_names.add(group_name)
                         parsed.append((name, secret, group_name))
 
+                if not parsed:
+                    messages.info(request, "没有新的条目导入")
+                    return redirect("totp:list")
+
                 # 预取已存在的分组并一次性创建缺失的分组
                 groups = {g.name: g for g in Group.objects.filter(user=request.user, name__in=group_names)}
                 missing = [Group(user=request.user, name=n) for n in group_names if n not in groups]
@@ -169,10 +173,10 @@ def batch_import(request):
                     TOTPEntry.objects.filter(user=request.user, name__in=names).values_list("name", flat=True)
                 )
 
-            to_create = []
-            for name, secret, group_name in parsed:
-                if name in existing_names:
-                    continue
+                to_create = []
+                for name, secret, group_name in parsed:
+                    if name in existing_names:
+                        continue
         group = groups.get(group_name)
         to_create.append(
             TOTPEntry(
