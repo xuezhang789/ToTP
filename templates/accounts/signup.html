@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block title %}注册 - TOTP动态密码生成器{% endblock %}
+{% block head %}
+  <meta name="google-signin-client_id" content="{{ GOOGLE_CLIENT_ID }}">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+{% endblock %}
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-6 col-lg-5">
+      <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body p-4">
+          <div class="text-center mb-3">
+            <i class="bi bi-person-plus-fill text-primary fs-1"></i>
+          </div>
+          <h1 class="h4 mb-3 text-center">注册</h1>
+          <form method="post" action="{% url 'accounts:signup' %}">{% csrf_token %}
+            <div class="mb-3">
+              <label class="form-label">用户名</label>
+              <input class="form-control" name="username" placeholder="用户名" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">邮箱（可选）</label>
+              <input type="email" class="form-control" name="email" placeholder="邮箱（可选）" autocomplete="email">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">密码</label>
+              <input type="password" class="form-control" name="password" placeholder="密码" required>
+            </div>
+            <button class="btn btn-primary w-100" type="submit">注册并登录</button>
+          </form>
+          <div class="text-center text-muted small my-3">或</div>
+
+        <!-- Google One Tap + Sign Up button -->
+        <div id="g_id_onload"
+             data-client_id="{{ GOOGLE_CLIENT_ID }}"
+             data-context="signup"
+             data-ux_mode="popup"
+             data-callback="handleCredentialResponse"
+             data-auto_prompt="true">
+        </div>
+        <div class="g_id_signin" data-type="standard" data-shape="rect" data-theme="outline" data-text="signup_with" data-size="large" data-logo_alignment="left"></div>
+        <div class="text-center mt-3 small">已有账号？<a href="{% url 'accounts:login' %}">去登录</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function onetapLogin(credential){
+  const r = await fetch("{% url 'accounts:google_onetap' %}", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({credential})
+  });
+  if(r.ok){
+    window.location.href = "{{ request.GET.next|default:'/' }}";
+  }else{
+    const t = await r.text();
+    console.error("Google One Tap failed:", t);
+    alert("Google 登录失败，请重试或使用账号密码登录。");
+  }
+}
+function handleCredentialResponse(resp){ onetapLogin(resp.credential); }
+</script>
+{% endblock %}

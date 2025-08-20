@@ -1,0 +1,23 @@
+<div class="modal fade" id="addGroupModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-3 shadow">
+            <form method="post" action="{% url 'totp:add_group' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">添加分组</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label">名称</label>
+                        <input name="name" class="form-control" placeholder="如：工作" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary" type="submit">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

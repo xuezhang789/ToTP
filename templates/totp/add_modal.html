@@ -1,0 +1,65 @@
+<div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-3 shadow">
+            <form method="post" action="{% url 'totp:add' %}">
+                {% csrf_token %}
+                <div class="modal-header"><h5 class="modal-title">添加密钥</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label">名称</label>
+                        <input name="name" class="form-control" placeholder="如：GitHub @me" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">分组（可选）</label>
+                        <select name="group_id" class="form-select">
+                            <option value="">未分组</option>
+                            {% for g in request.user.totp_groups.all %}
+                            <option value="{{ g.id }}">{{ g.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">密钥（Base32）或 otpauth:// URI</label>
+                        <textarea id="secretInput" name="secret" rows="2" class="form-control"
+                                  placeholder="JBSWY3DPEHPK3PXP 或 otpauth://totp/..." required></textarea>
+                        <div class="form-text">可上传二维码图片自动识别；仅解析 label→名称、secret→密钥，忽略 issuer。</div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">二维码图片（可选）</label>
+                        <input type="file" id="qrFile" accept="image/*" class="form-control"/>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary" type="submit">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+    const qrInput = document.getElementById('qrFile');
+    qrInput?.addEventListener('change', async (e)=>{
+      const file = e.target.files?.[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try{
+          const res = await ZXing.BrowserQRCodeReader.decodeFromImageUrl(reader.result);
+          const text = res?.text || '';
+          if(text){
+            const ta = document.getElementById('secretInput');
+            ta.value = text;
+          } else {
+            alert('未识别到二维码内容');
+          }
+        }catch(err){
+          alert('解析二维码失败');
+          console.error(err);
+        }
+      }
+      reader.readAsDataURL(file);
+    });
+</script>

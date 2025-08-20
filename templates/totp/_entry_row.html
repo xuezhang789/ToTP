@@ -1,0 +1,23 @@
+<tr data-id="{{ e.id }}">
+    <td>{{ e.name }}</td>
+    <td>{{ e.group.name|default:"未分组" }}</td>
+    <td class="text-nowrap">
+        <span class="badge text-bg-dark code-badge code-text">••••••</span>
+        <button class="btn btn-sm btn-outline-secondary copy-btn ms-1" data-code="" title="复制">
+            <i class="bi bi-clipboard"></i>
+        </button>
+    </td>
+    <td>
+        <div class="progress small" role="progressbar">
+            <div class="progress-bar" style="width:0%"></div>
+        </div>
+        <small class="text-muted remain">--s</small>
+    </td>
+    <td class="text-nowrap">
+        <a class="btn btn-sm btn-outline-danger" href="{% url 'totp:delete' e.id %}"
+           onclick="return confirm('确定删除？')" title="删除">
+            <i class="bi bi-trash"></i>
+        </a>
+    </td>
+</tr>
+</tr>

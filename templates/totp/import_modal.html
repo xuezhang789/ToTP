@@ -1,0 +1,30 @@
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 rounded-3 shadow">
+            <form method="post" action="{% url 'totp:batch_import' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">批量导入</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+
+                <div class="modal-body">
+                    <p class="small text-muted mb-2">每行一条，支持两种格式：</p>
+                    <ul class="small">
+                        <li><code>otpauth://totp/标签?secret=ABC...</code></li>
+                        <li><code>SECRET|名称|分组</code>（分组可省略）</li>
+                    </ul>
+                    <p class="small text-muted mb-2">注意：仅解析 <code>label → 名称</code> 与 <code>secret → 密钥</code>，<strong>忽略
+                        issuer</strong>。</p>
+                    <textarea name="bulk_text" rows="8" class="form-control"
+                              placeholder="在此粘贴待导入的内容..."></textarea>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary" type="submit">开始导入</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
