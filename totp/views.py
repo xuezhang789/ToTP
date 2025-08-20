@@ -50,9 +50,18 @@ def dashboard(request):
 def list_view(request):
     """列出用户的所有 TOTP 条目。"""
     q = (request.GET.get("q") or "").strip()
-    entry_qs = TOTPEntry.objects.filter(user=request.user).select_related("group").order_by("-created_at")
+    group_id = (request.GET.get("group") or "").strip()
+    entry_qs = (
+        TOTPEntry.objects.filter(user=request.user)
+        .select_related("group")
+        .order_by("-created_at")
+    )
     if q:
         entry_qs = entry_qs.filter(Q(name__icontains=q))
+    if group_id == "0":
+        entry_qs = entry_qs.filter(group__isnull=True)
+    elif group_id:
+        entry_qs = entry_qs.filter(group_id=group_id)
 
     paginator = Paginator(entry_qs, 15)
     page_number = request.GET.get("page")
@@ -61,7 +70,13 @@ def list_view(request):
     return render(
         request,
         "totp/list.html",
-        {"entries": page_obj, "page_obj": page_obj, "q": q, "groups": groups},
+        {
+            "entries": page_obj,
+            "page_obj": page_obj,
+            "q": q,
+            "groups": groups,
+            "group_id": group_id,
+        },
     )
 
 

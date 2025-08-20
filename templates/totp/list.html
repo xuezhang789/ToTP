@@ -27,11 +27,16 @@
             <form id="searchForm" class="d-flex justify-content-md-end" method="get" role="search"
                   aria-label="按名称搜索">
                 <div class="input-group flex-nowrap w-100 w-md-auto search-group ms-md-auto">
-          <span class="input-group-text bg-transparent">
-            <svg width="18" height="18" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor"
-                                                                    fill="none" stroke-width="2"/><path
-                    d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          </span>
+                    <select id="group" name="group" class="form-select">
+                        <option value="">全部分组</option>
+                        <option value="0" {% if group_id == '0' %}selected{% endif %}>未分组</option>
+                        {% for g in groups %}
+                        <option value="{{ g.id }}" {% if group_id|default:'' == g.id|stringformat:'s' %}selected{% endif %}>{{ g.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="input-group-text bg-transparent">
+                        <svg width="18" height="18" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" fill="none" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </span>
                     <input id="q" name="q" value="{{ q|default_if_none:'' }}" class="form-control search-input"
                            type="search" placeholder="仅按名称搜索" autocomplete="off" enterkeyhint="search"
                            spellcheck="false" maxlength="64">
@@ -42,7 +47,7 @@
                             class="spinner-border spinner-border-sm me-1 d-none" id="searchSpinner" role="status"
                             aria-hidden="true"></span>搜索
                     </button>
-                    {% if q %}<a class="btn btn-outline-secondary" href="{% url 'totp:list' %}">重置</a>{% endif %}
+                    {% if q or group_id %}<a class="btn btn-outline-secondary" href="{% url 'totp:list' %}">重置</a>{% endif %}
                 </div>
             </form>
         </div>
@@ -83,7 +88,7 @@
                 {% if page_obj.has_previous %}
                 <li class="page-item">
                     <a class="page-link"
-                       href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
+                       href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
                        aria-label="Previous">
                         <span aria-hidden="true">&laquo;</span>
                     </a>
@@ -97,15 +102,14 @@
                 <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
                 {% else %}
                 <li class="page-item"><a class="page-link"
-                                         href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}page={{ num }}">{{ num
-                    }}</a></li>
+                                         href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}page={{ num }}">{{ num }}</a></li>
                 {% endif %}
                 {% endfor %}
 
                 {% if page_obj.has_next %}
                 <li class="page-item">
                     <a class="page-link"
-                       href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
+                       href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
                        aria-label="Next">
                         <span aria-hidden="true">&raquo;</span>
                     </a>
@@ -183,13 +187,15 @@
     // 搜索交互
     const form = document.getElementById('searchForm');
     const qInput = document.getElementById('q');
+       const groupSelect = document.getElementById('group');
     const clearBtn = document.getElementById('clearBtn');
     const searchBtn = document.getElementById('searchBtn');
     const spinner = document.getElementById('searchSpinner');
-    function updateClear(){ clearBtn.classList.toggle('d-none', !qInput.value.trim()); }
+    function updateClear(){ clearBtn.classList.toggle('d-none', !qInput.value.trim() && !groupSelect.value); }
     updateClear();
     qInput.addEventListener('input', updateClear);
-    clearBtn.addEventListener('click', ()=>{ qInput.value=''; updateClear(); window.location.href='{% url "totp:list" %}'; });
+    groupSelect.addEventListener('change', updateClear);
+    clearBtn.addEventListener('click', ()=>{ qInput.value=''; groupSelect.value=''; updateClear(); window.location.href='{% url "totp:list" %}'; });
     form.addEventListener('submit', ()=>{ qInput.value=qInput.value.trim(); searchBtn.disabled=true; spinner.classList.remove('d-none'); });
 </script>
 <script>
