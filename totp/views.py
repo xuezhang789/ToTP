@@ -5,7 +5,7 @@ from django.db.models import Q, F, Count
 from django.utils import timezone
 from django.core.paginator import Paginator
 from .models import TOTPEntry, Group
-from .utils import encrypt_str, parse_otpauth
+from .utils import encrypt_str, parse_otpauth, normalize_google_secret
 
 
 def dashboard(request):
@@ -93,9 +93,9 @@ def add_entry(request):
             if not name and label:
                 name = label
             secret = s
-
+        secret = normalize_google_secret(secret)
         if not name or not secret:
-            messages.error(request, "名称和密钥必填")
+            messages.error(request, "名称和密钥必填且需符合要求")
             return redirect("totp:list")
 
         group = None
@@ -153,6 +153,7 @@ def batch_import(request):
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     parsed = []
     group_names = set()
+    invalid_count = 0
     for s in lines:
         name = secret = ""
         group_name = ""
@@ -166,13 +167,20 @@ def batch_import(request):
                 name = parts[1].strip()
                 if len(parts) >= 3:
                     group_name = parts[2].strip()
-                    if name and secret:
-                        if group_name:
-                            group_names.add(group_name)
-                        parsed.append((name, secret, group_name))
+                    secret = normalize_google_secret(secret)
+                    if not name or not secret:
+                        invalid_count += 1
+                        continue
+                    if group_name:
+                        group_names.add(group_name)
+                    parsed.append((name, secret, group_name))
 
                 if not parsed:
-                    messages.info(request, "没有新的条目导入")
+                    msg = "没有新的条目导入"
+                    if invalid_count:
+                        msg += f"（{invalid_count} 条无效密钥已忽略）"
+                        print(msg)
+                    messages.info(request, msg)
                     return redirect("totp:list")
 
                 # 预取已存在的分组并一次性创建缺失的分组
@@ -201,10 +209,16 @@ def batch_import(request):
                 secret_encrypted=encrypt_str(secret),
             )
         )
-        existing_names.add(name)
+
         if to_create:
             TOTPEntry.objects.bulk_create(to_create)
-            messages.success(request, f"成功导入 {len(to_create)} 条")
+            msg = f"成功导入 {len(to_create)} 条"
+            if invalid_count:
+                msg += f"（{invalid_count} 条无效密钥已忽略）"
+            messages.success(request, msg)
     else:
-        messages.info(request, "没有新的条目导入")
+        msg = "没有新的条目导入"
+        if invalid_count:
+            msg += f"（{invalid_count} 条无效密钥已忽略）"
+        messages.info(request, msg)
     return redirect("totp:list")

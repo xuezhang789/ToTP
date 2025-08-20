@@ -3,6 +3,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 from cryptography.fernet import Fernet
 from django.conf import settings
 
+_B32_ALPHABET = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
 _FERNET = None
 
 
@@ -41,6 +42,21 @@ def parse_otpauth(uri: str):
 def _b32_clean(s: str) -> str:
     """去除 Base32 字符串中无效字符。"""
     return "".join(c for c in s if c.isalnum()).upper()
+
+
+def normalize_google_secret(secret: str) -> str:
+    """清理并校验 Google 身份验证器使用的 Base32 密钥。
+
+    返回清理后的密钥；若密钥无效则返回空字符串。
+    """
+    s = _b32_clean(secret)
+    if len(s) < 16 or any(c not in _B32_ALPHABET for c in s):
+        return ""
+    try:
+        base64.b32decode(s + "=" * ((8 - len(s) % 8) % 8), casefold=True)
+    except Exception:
+        return ""
+    return s
 
 
 def totp_code_base32(secret_b32: str, digits: int = 6, period: int = 30):
