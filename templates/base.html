@@ -5,8 +5,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}TOTP管理平台，谷歌动态密码生成器。{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
     <style>
         body{
   font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -33,8 +36,10 @@ footer{border-top:1px solid rgba(0,0,0,.05);}
     <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener"
        class="text-decoration-none">粤ICP备2024000001号</a>
 </footer>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0"></script>
+<!-- Bootstrap Bundle JS (含 Popper) -->
+<script src="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<!-- ZXing Library -->
+<script src="https://cdn.bootcdn.net/ajax/libs/zxing/0.20.0/zxing.min.js"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

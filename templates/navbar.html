@@ -1,29 +1,31 @@
 <nav class="navbar navbar-expand-lg bg-white border-bottom shadow-sm">
-  <div class="container">
+    <div class="container">
         <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'dashboard' %}">
-      <i class="bi bi-shield-lock-fill text-primary"></i>
-      <span class="fw-bold">TOTP管理中心</span>
-    </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-controls="nav" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="nav">
-      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-        {% if request.user.is_authenticated %}
-            <li class="nav-item">
-            <a class="nav-link text-white bg-primary rounded px-3 fw-bold" href="{% url 'totp:list' %}">我的密钥</a>
-          </li>
-        {% endif %}
-      </ul>
-      <div class="d-flex gap-2">
-        {% if request.user.is_authenticated %}
-          <span class="navbar-text small text-muted d-none d-md-inline">Hi, {{ request.user.username }}</span>
-          <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts:logout' %}">退出</a>
-        {% else %}
-          <a class="btn btn-primary btn-sm" href="{% url 'accounts:login' %}">登录</a>
-          <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts:signup' %}">注册</a>
-        {% endif %}
-      </div>
+            <i class="bi bi-shield-lock-fill text-primary"></i>
+            <span class="fw-bold">TOTP管理平台</span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-controls="nav"
+                aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="nav">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                {% if request.user.is_authenticated %}
+                <li class="nav-item">
+                    <a class="nav-link text-white bg-primary rounded px-3 fw-bold"
+                       href="{% url 'totp:list' %}">我的密钥</a>
+                </li>
+                {% endif %}
+            </ul>
+            <div class="d-flex gap-2">
+                {% if request.user.is_authenticated %}
+                <span class="navbar-text small text-muted d-none d-md-inline">Hi, {{ request.user.username }}</span>
+                <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts:logout' %}">退出</a>
+                {% else %}
+                <a class="btn btn-primary btn-sm" href="{% url 'accounts:login' %}">登录</a>
+                <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts:signup' %}">注册</a>
+                {% endif %}
+            </div>
+        </div>
     </div>
-  </div>
 </nav>
