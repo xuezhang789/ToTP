@@ -48,3 +48,9 @@ python manage.py runserver 0.0.0.0:8000
 7. **访问项目**
 浏览器访问 http://127.0.0.1:8000/auth/login/ 即可体验账号密码登录或 Google One Tap 登录。
 
+8. **如果您有更好的建议或者想法，请与我联系**
+
+xuezhang789@gmail.com
+
+
+
