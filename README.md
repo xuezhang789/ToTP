@@ -35,9 +35,11 @@ export GOOGLE_CLIENT_ID="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
 
 5. **初始化数据库并创建管理员账号**
 ```bash
+
 python manage.py makemigrations
 python manage.py migrate
 python manage.py createsuperuser
+
 ```
 
 6. **启动开发服务器**
