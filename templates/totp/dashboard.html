@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}TOTP管理平台，谷歌动态密码生成器{% endblock %}
+{% block title %}TOTP管理控制台 · 动态验证码助手{% endblock %}
 {% block content %}
 {% if request.user.is_authenticated %}
 <div class="container-fluid py-3 py-md-4">
@@ -9,7 +9,7 @@
         <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">
             <div>
                 <h1 class="h4 mb-2">欢迎回来，{{ request.user.username }}</h1>
-                <p class="text-muted mb-0">在这里管理你的 TOTP 密钥和分组，快速查看关键统计并进行导入导出。</p>
+                <p class="text-muted mb-0">集中管理动态口令、掌握核心数据，并随时导入或导出你的密钥。</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
                 <!-- 与现有模态框对接 -->
@@ -30,11 +30,11 @@
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="text-muted small">密钥总数</span>
-                        <span class="badge bg-primary-subtle text-primary">实时</span>
+                        <span class="text-muted small">已保存的密钥</span>
+                        <span class="badge bg-primary-subtle text-primary">最新统计</span>
                     </div>
                     <div class="display-6 fw-bold">{{ stats.total_entries|default:0 }}</div>
-                    <div class="text-muted small mt-1">包含你的全部 TOTP 项目</div>
+                    <div class="text-muted small mt-1">系统中已录入的全部 TOTP 项目</div>
                 </div>
             </div>
         </div>
@@ -43,11 +43,11 @@
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="text-muted small">分组数量</span>
-                        <span class="badge bg-secondary-subtle text-secondary">组织</span>
+                        <span class="text-muted small">启用的分组</span>
+                        <span class="badge bg-secondary-subtle text-secondary">结构化</span>
                     </div>
                     <div class="display-6 fw-bold">{{ stats.group_count|default:0 }}</div>
-                    <div class="text-muted small mt-1">按用途或团队分组，更高效</div>
+                    <div class="text-muted small mt-1">按团队或用途划分，便于快速定位</div>
                 </div>
             </div>
         </div>
@@ -60,7 +60,7 @@
                         <span class="badge bg-success-subtle text-success">+</span>
                     </div>
                     <div class="display-6 fw-bold">{{ stats.today_added|default:0 }}</div>
-                    <div class="text-muted small mt-1">今日新添加的密钥</div>
+                    <div class="text-muted small mt-1">今日新增的密钥条目</div>
                 </div>
             </div>
         </div>
@@ -98,19 +98,19 @@
             <div class="card shadow-sm border-0 h-100">
                 <div class="card-header bg-white border-0">
                     <div class="d-flex align-items-center justify-content-between">
-                        <h2 class="h6 mb-0">快速开始</h2>
-                        <a href="{% url 'totp:list' %}" class="btn btn-sm btn-outline-secondary">查看全部密钥</a>
+                        <h2 class="h6 mb-0">快速上手</h2>
+                        <a href="{% url 'totp:list' %}" class="btn btn-sm btn-outline-secondary">前往“我的密钥”</a>
                     </div>
                 </div>
                 <div class="card-body">
                     <ol class="mb-0 ps-3">
                         <li class="mb-2">
                             点击 <strong>添加密钥</strong> 或 <strong>批量导入</strong>，
-                            录入名称、分组与密钥（支持二维码）。
+                            填写名称、所属分组及密钥（支持上传二维码）。
                         </li>
-                        <li class="mb-2">在“我的密钥”页面可实时查看验证码，点击验证码即可复制。</li>
-                        <li class="mb-2">支持按分组管理与搜索，便于多账号、多团队协作。</li>
-                        <li>如果启用了加密导出，请妥善保管你的导出口令。</li>
+                        <li class="mb-2">在“我的密钥”页面实时查看验证码，并可一键复制。</li>
+                        <li class="mb-2">通过分组与搜索快速筛选，支持多账号、多团队协作。</li>
+                        <li>如启用加密导出，请妥善保存导出密码，确保数据安全。</li>
                     </ol>
                 </div>
             </div>
@@ -147,8 +147,8 @@
 {% else %}
 <div class="container py-5 text-center">
     <i class="bi bi-shield-lock display-4 text-primary mb-3"></i>
-    <h1 class="display-5 mb-3">安全便捷的 TOTP 管理中心</h1>
-    <p class="lead text-muted mb-4">集中管理动态验证码，轻松完成双重验证。</p><br />
+    <h1 class="display-5 mb-3">安全高效的 TOTP 管理中心</h1>
+    <p class="lead text-muted mb-4">统一管理动态验证码，轻松完成双重验证和团队协作。</p><br />
     <a href="{% url 'accounts:login' %}" class="btn btn-primary btn-lg px-4 me-2">立即登录</a>
     <a href="{% url 'accounts:signup' %}" class="btn btn-outline-primary btn-lg px-4">免费注册</a>
 </div>
