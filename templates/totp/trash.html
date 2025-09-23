@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% block title %}回收站-TOTP管理平台{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h2 class="h4 mb-0">回收站</h2>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}">返回我的密钥</a>
+    </div>
+</div>
+<div class="alert alert-info" role="alert">
+    回收站中的密钥会在 30 天后自动彻底删除，请在到期前完成恢复操作。
+</div>
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white">
+        <strong>已删除的密钥</strong>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover table-striped mb-0 align-middle">
+            <thead>
+            <tr>
+                <th>名称</th>
+                <th>分组</th>
+                <th>删除时间</th>
+                <th>剩余天数</th>
+                <th class="text-nowrap">操作</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for e in entries %}
+            <tr>
+                <td>{{ e.name }}</td>
+                <td>{{ e.group.name|default:'未分组' }}</td>
+                <td>{{ e.deleted_at|date:'Y-m-d H:i' }}</td>
+                <td>
+                    {% if e.recycle_remaining_days is not None %}
+                    约 {{ e.recycle_remaining_days }} 天
+                    {% else %}
+                    --
+                    {% endif %}
+                </td>
+                <td>
+                    <form method="post" action="{% url 'totp:restore' e.id %}" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-primary"
+                                onclick="return confirm('确认恢复该密钥？');">
+                            恢复
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" class="text-center text-muted py-5">回收站为空</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer">
+        <nav aria-label="Page navigation">
+            <ul class="pagination justify-content-center mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}" aria-label="Previous">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                {% endif %}
+                {% for num in page_obj.paginator.page_range %}
+                {% if num == page_obj.number %}
+                <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
+                {% else %}
+                <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+                {% endif %}
+                {% endfor %}
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}" aria-label="Next">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

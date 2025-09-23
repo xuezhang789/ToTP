@@ -16,6 +16,8 @@ def dashboard(request):
     stats = {}
     recent_entries = []
     if request.user.is_authenticated:
+        # 登录用户访问仪表盘时也清理一次回收站，保证数据实时。
+        TOTPEntry.purge_expired_trash(user=request.user)
         entries = TOTPEntry.objects.filter(user=request.user)
         # 尽量减少查询次数地聚合统计信息
         agg = entries.aggregate(
@@ -51,6 +53,8 @@ def dashboard(request):
 @login_required
 def list_view(request):
     """列出用户的所有 TOTP 条目。"""
+    # 在展示列表前先顺带清理一下过期的回收站数据，保证统计准确。
+    TOTPEntry.purge_expired_trash(user=request.user)
     q = (request.GET.get("q") or "").strip()
     group_id = (request.GET.get("group") or "").strip()
     entry_qs = (
@@ -138,8 +142,57 @@ def add_group(request):
 def delete_entry(request, pk: int):
     """删除指定的 TOTP 条目。"""
     e = get_object_or_404(TOTPEntry, pk=pk, user=request.user)
-    e.delete()
-    messages.success(request, "已删除")
+    # 改为软删除：仅做标记并记录删除时间，数据进入回收站。
+    e.is_deleted = True
+    e.deleted_at = timezone.now()
+    e.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+    messages.success(request, "已移入回收站，可在 30 天内恢复")
+    return redirect("totp:list")
+
+
+@login_required
+def trash_view(request):
+    """展示当前用户的回收站列表。"""
+
+    # 每次打开回收站时清理超过 30 天的条目，确保自动过期策略生效。
+    TOTPEntry.purge_expired_trash(user=request.user)
+
+    entry_qs = (
+        TOTPEntry.all_objects.filter(user=request.user, is_deleted=True)
+        .select_related("group")
+        .order_by("-deleted_at")
+    )
+    paginator = Paginator(entry_qs, 15)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+    return render(
+        request,
+        "totp/trash.html",
+        {"entries": page_obj, "page_obj": page_obj},
+    )
+
+
+@login_required
+def restore_entry(request, pk: int):
+    """从回收站恢复指定的 TOTP 条目。"""
+
+    if request.method != "POST":
+        messages.error(request, "请求方式不正确")
+        return redirect("totp:trash")
+
+    entry = get_object_or_404(
+        TOTPEntry.all_objects, pk=pk, user=request.user, is_deleted=True
+    )
+
+    # 如果已有同名有效密钥，恢复会因唯一性约束失败，这里提前做校验并给出提示。
+    if TOTPEntry.objects.filter(user=request.user, name=entry.name).exists():
+        messages.error(request, "已存在同名密钥，无法恢复，请先修改现有密钥的名称")
+        return redirect("totp:trash")
+
+    entry.is_deleted = False
+    entry.deleted_at = None
+    entry.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+    messages.success(request, "密钥已成功恢复")
     return redirect("totp:list")
 
 
