@@ -3,7 +3,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, F, Q
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from .models import Group, TOTPEntry
@@ -273,3 +273,30 @@ def export_entries(request):
         f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
     )
     return response
+
+
+@login_required
+def update_entry_group(request, pk: int):
+    """更新指定条目的分组。"""
+
+    if request.method != "POST":
+        return JsonResponse({"error": "method_not_allowed"}, status=405)
+
+    entry = get_object_or_404(TOTPEntry, pk=pk, user=request.user)
+    group_id = (request.POST.get("group_id") or "").strip()
+    group = None
+    if group_id:
+        try:
+            group = Group.objects.get(pk=int(group_id), user=request.user)
+        except (Group.DoesNotExist, ValueError, TypeError):
+            return JsonResponse({"error": "invalid_group"}, status=400)
+
+    entry.group = group
+    entry.save(update_fields=["group", "updated_at"])
+
+    return JsonResponse(
+        {
+            "success": True,
+            "group_name": group.name if group else "未分组",
+        }
+    )

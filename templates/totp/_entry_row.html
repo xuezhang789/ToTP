@@ -1,6 +1,13 @@
-<tr data-id="{{ e.id }}">
+<tr data-id="{{ e.id }}" data-update-url="{% url 'totp:update_group' e.id %}">
     <td>{{ e.name }}</td>
-    <td>{{ e.group.name|default:"未分组" }}</td>
+    <td>
+        <select class="form-select form-select-sm group-select" data-current="{{ e.group_id|default_if_none:'' }}">
+            <option value="" {% if not e.group_id %}selected{% endif %}>未分组</option>
+            {% for g in groups %}
+            <option value="{{ g.id }}" {% if e.group_id == g.id %}selected{% endif %}>{{ g.name }}</option>
+            {% endfor %}
+        </select>
+    </td>
     <td class="text-nowrap">
         <span class="badge text-bg-dark code-badge code-text">••••••</span>
         <button class="btn btn-sm btn-outline-secondary copy-btn ms-1" data-code="" title="复制">
@@ -19,5 +26,4 @@
             <i class="bi bi-trash"></i>
         </a>
     </td>
-</tr>
 </tr>

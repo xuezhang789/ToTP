@@ -75,7 +75,7 @@
             </thead>
             <tbody id="tbody">
             {% for e in entries %}
-            {% include 'totp/_entry_row.html' with e=e %}
+            {% include 'totp/_entry_row.html' with e=e groups=groups %}
             {% empty %}
             <tr class="no-data">
                 <td colspan="5" class="text-center text-muted py-5">暂无数据</td>
@@ -190,7 +190,7 @@
     // 搜索交互
     const form = document.getElementById('searchForm');
     const qInput = document.getElementById('q');
-       const groupSelect = document.getElementById('group');
+    const groupSelect = document.getElementById('group');
     const clearBtn = document.getElementById('clearBtn');
     const searchBtn = document.getElementById('searchBtn');
     const spinner = document.getElementById('searchSpinner');
@@ -200,6 +200,49 @@
     groupSelect.addEventListener('change', updateClear);
     clearBtn.addEventListener('click', ()=>{ qInput.value=''; groupSelect.value=''; updateClear(); window.location.href='{% url "totp:list" %}'; });
     form.addEventListener('submit', ()=>{ qInput.value=qInput.value.trim(); searchBtn.disabled=true; spinner.classList.remove('d-none'); });
+
+    function getCsrfToken(){
+      const match = document.cookie.match(/csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    tbody.addEventListener('change', async (e)=>{
+      const select = e.target.closest('.group-select');
+      if(!select) return;
+      const tr = select.closest('tr[data-update-url]');
+      if(!tr) return;
+      const url = tr.dataset.updateUrl;
+      const previous = select.dataset.current ?? '';
+      const value = select.value;
+      select.disabled = true;
+      select.classList.remove('is-valid', 'is-invalid');
+      try{
+        const formData = new FormData();
+        formData.append('group_id', value);
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'X-Requested-With': 'fetch',
+            'X-CSRFToken': getCsrfToken(),
+          },
+          body: formData,
+        });
+        if(!resp.ok){
+          throw new Error(await resp.text());
+        }
+        await resp.json();
+        select.dataset.current = value;
+        select.classList.add('is-valid');
+        setTimeout(()=> select.classList.remove('is-valid'), 1200);
+      }catch(err){
+        console.error(err);
+        select.value = previous;
+        select.classList.add('is-invalid');
+        setTimeout(()=> select.classList.remove('is-invalid'), 1500);
+      }finally{
+        select.disabled = false;
+      }
+    });
 </script>
 <script>
     (function() {
