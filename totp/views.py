@@ -161,7 +161,7 @@ def batch_import(request):
         group_name = ""
         if s.lower().startswith("otpauth://"):
             label, secret = parse_otpauth(s)
-            name = label or ""
+            name = (label or "").strip()
         else:
             parts = s.split("|")
             if len(parts) >= 2:
@@ -169,10 +169,12 @@ def batch_import(request):
                 name = parts[1].strip()
                 if len(parts) >= 3:
                     group_name = parts[2].strip()
+
                     secret = normalize_google_secret(secret)
                     if not name or not secret:
                         invalid_count += 1
                         continue
+
                     if group_name:
                         group_names.add(group_name)
                     parsed.append((name, secret, group_name))
@@ -181,28 +183,40 @@ def batch_import(request):
                     msg = "没有新的条目导入"
                     if invalid_count:
                         msg += f"（{invalid_count} 条无效密钥已忽略）"
-                        print(msg)
                     messages.info(request, msg)
                     return redirect("totp:list")
 
                 # 预取已存在的分组并一次性创建缺失的分组
-                groups = {g.name: g for g in Group.objects.filter(user=request.user, name__in=group_names)}
-                missing = [Group(user=request.user, name=n) for n in group_names if n not in groups]
+                groups = {
+                    g.name: g
+                    for g in Group.objects.filter(user=request.user, name__in=group_names)
+                }
+                missing = [
+                    Group(user=request.user, name=n) for n in group_names if n not in groups
+                ]
                 if missing:
                     Group.objects.bulk_create(missing)
-                    groups.update({g.name: g for g in Group.objects.filter(user=request.user, name__in=group_names)})
+                    groups.update(
+                        {
+                            g.name: g
+                            for g in Group.objects.filter(
+                            user=request.user, name__in=group_names
+                        )
+                        }
+                    )
 
                 # 一次性查询现有条目名称，避免重复
                 names = [name for name, _, _ in parsed]
                 existing_names = set(
-                    TOTPEntry.objects.filter(user=request.user, name__in=names).values_list("name", flat=True)
+                    TOTPEntry.objects.filter(user=request.user, name__in=names).values_list(
+                        "name", flat=True
+                    )
                 )
-
-                to_create = []
-                for name, secret, group_name in parsed:
-                    if name in existing_names:
-                        continue
-        group = groups.get(group_name)
+    to_create = []
+    for name, secret, group_name in parsed:
+        if name in existing_names:
+            continue
+        group = groups.get(group_name) if group_name else None
         to_create.append(
             TOTPEntry(
                 user=request.user,
@@ -212,18 +226,19 @@ def batch_import(request):
             )
         )
 
-        if to_create:
-            TOTPEntry.objects.bulk_create(to_create)
-            msg = f"成功导入 {len(to_create)} 条"
-            if invalid_count:
-                msg += f"（{invalid_count} 条无效密钥已忽略）"
-            messages.success(request, msg)
+    if to_create:
+        TOTPEntry.objects.bulk_create(to_create)
+        msg = f"成功导入 {len(to_create)} 条"
+        if invalid_count:
+            msg += f"（{invalid_count} 条无效密钥已忽略）"
+        messages.success(request, msg)
     else:
         msg = "没有新的条目导入"
         if invalid_count:
             msg += f"（{invalid_count} 条无效密钥已忽略）"
         messages.info(request, msg)
     return redirect("totp:list")
+
 
 @login_required
 def export_entries(request):
