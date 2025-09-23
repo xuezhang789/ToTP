@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}TOTP管理平台,动态验证码助手,2FA在线工具{% endblock %}
+{% block title %}2FA在线工具,TOTP管理平台,动态验证码助手{% endblock %}
     <meta name="keywords" content="2FA,2fa,2fa在线工具,2FA Auth,2FA live,2FA Code,双重验证工具,2FA在线工具"/>
     <meta name="description" content="免费的TOTP管理平台,动态验证码助手OTP管理平台,2FA在线工具"/>
 {% block content %}
@@ -150,7 +150,7 @@
 <div class="container py-5 text-center">
     <i class="bi bi-shield-lock display-4 text-primary mb-3"></i>
     <h1 class="display-5 mb-3">安全高效的 TOTP 管理中心</h1>
-    <p class="lead text-muted mb-4">统一管理动态验证码，轻松完成双重验证和团队协作。</p><br />
+    <p class="lead text-muted mb-4">统一管理动态验证码，轻松完成双重验证(2FA)和团队协作。</p><br />
     <a href="{% url 'accounts:login' %}" class="btn btn-primary btn-lg px-4 me-2">立即登录</a>
     <a href="{% url 'accounts:signup' %}" class="btn btn-outline-primary btn-lg px-4">免费注册</a>
 </div>
