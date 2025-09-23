@@ -1,13 +1,11 @@
 """TOTP 应用的模型定义。"""
-
 from datetime import timedelta
-
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 User = settings.AUTH_USER_MODEL
-
 
 class Group(models.Model):
     """用户自定义的分组，用于管理多个 TOTP 条目。"""
@@ -60,7 +58,13 @@ class TOTPEntry(models.Model):
     all_objects = AllTOTPEntryManager()
 
     class Meta:
-        unique_together = (("user", "name", "is_deleted"),)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "name"],
+                condition=Q(is_deleted=False),
+                name="uniq_active_totp_entry",
+            )
+        ]
         indexes = [
             models.Index(fields=["user", "name", "is_deleted"]),
             models.Index(fields=["user", "created_at"]),

@@ -69,6 +69,29 @@ class RecycleBinTests(TestCase):
         self.assertTrue(messages)
         self.assertIn("无法恢复", str(messages[0]))
 
+    def test_delete_allows_multiple_entries_in_trash_with_same_name(self):
+        first = TOTPEntry.objects.create(
+            user=self.user,
+            name="Sample",
+            secret_encrypted=self.secret,
+        )
+        resp1 = self.client.get(reverse("totp:delete", args=[first.pk]), follow=True)
+        self.assertEqual(resp1.status_code, 200)
+
+        second = TOTPEntry.objects.create(
+            user=self.user,
+            name="Sample",
+            secret_encrypted=self.secret,
+        )
+
+        resp2 = self.client.get(reverse("totp:delete", args=[second.pk]), follow=True)
+        self.assertEqual(resp2.status_code, 200)
+
+        trashed = TOTPEntry.all_objects.filter(
+            user=self.user, name="Sample", is_deleted=True
+        )
+        self.assertEqual(trashed.count(), 2)
+
     def test_purge_expired_trash_on_visit(self):
         expired = TOTPEntry.all_objects.create(
             user=self.user,

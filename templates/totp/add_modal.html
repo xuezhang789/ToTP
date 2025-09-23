@@ -40,26 +40,79 @@
     </div>
 </div>
 <script>
-    const qrInput = document.getElementById('qrFile');
-    qrInput?.addEventListener('change', async (e)=>{
-      const file = e.target.files?.[0];
-      if(!file) return;
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try{
-          const res = await ZXing.BrowserQRCodeReader.decodeFromImageUrl(reader.result);
-          const text = res?.text || '';
-          if(text){
-            const ta = document.getElementById('secretInput');
-            ta.value = text;
-          } else {
-            alert('未识别到二维码内容');
-          }
-        }catch(err){
-          alert('解析二维码失败');
-          console.error(err);
-        }
-      }
-      reader.readAsDataURL(file);
-    });
+    (function () {
+     function parseOtpAuth(text) {
+       if (!text || typeof text !== 'string' || !text.startsWith('otpauth://')) {
+         return null;
+       }
+       try {
+         const url = new URL(text);
+         if (url.protocol !== 'otpauth:') return null;
+         const rawLabel = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+         const labelParts = rawLabel.split(':');
+         const label = (labelParts.length > 1 ? labelParts.slice(1).join(':') : rawLabel).trim();
+         const secret = (url.searchParams.get('secret') || '').trim();
+         return {label, secret};
+       } catch (err) {
+         console.error('无法解析 otpauth URI', err);
+         return null;
+       }
+     }
+
+     function attachListener() {
+       if (!window.ZXing?.BrowserQRCodeReader) {
+         console.error('二维码识别库未加载');
+         return;
+       }
+       const qrInput = document.getElementById('qrFile');
+       if (!qrInput) {
+         return;
+       }
+       const codeReader = new ZXing.BrowserQRCodeReader();
+       qrInput.addEventListener('change', async (e) => {
+         const file = e.target.files?.[0];
+         if (!file) return;
+
+         const reader = new FileReader();
+         reader.onload = async () => {
+           const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+           if (!dataUrl) return;
+           try {
+             const res = await codeReader.decodeFromImageUrl(dataUrl);
+             const text = typeof res?.getText === 'function' ? res.getText() : (res?.text || '');
+             if (!text) {
+               alert('未识别到二维码内容');
+               return;
+             }
+
+             const secretInput = document.getElementById('secretInput');
+             const nameInput = document.querySelector('input[name="name"]');
+             const parsed = parseOtpAuth(text);
+
+             if (parsed?.secret) {
+               secretInput.value = parsed.secret;
+             } else {
+               secretInput.value = text;
+             }
+
+             if (parsed?.label && nameInput) {
+               nameInput.value = parsed.label;
+             }
+           } catch (err) {
+             alert('解析二维码失败');
+             console.error(err);
+           } finally {
+             qrInput.value = '';
+           }
+         };
+         reader.readAsDataURL(file);
+       });
+     }
+
+     if (document.readyState === 'complete') {
+       attachListener();
+     } else {
+       window.addEventListener('load', attachListener, {once: true});
+    }
+   })();
 </script>
