@@ -164,54 +164,56 @@ def batch_import(request):
             name = (label or "").strip()
         else:
             parts = s.split("|")
-            if len(parts) >= 2:
-                secret = parts[0].strip()
-                name = parts[1].strip()
-                if len(parts) >= 3:
-                    group_name = parts[2].strip()
+            if len(parts) < 2:
+                invalid_count += 1
+                continue
+            secret = parts[0].strip()
+            name = parts[1].strip()
+            if len(parts) >= 3:
+                group_name = parts[2].strip()
 
-                    secret = normalize_google_secret(secret)
-                    if not name or not secret:
-                        invalid_count += 1
-                        continue
+        secret = normalize_google_secret(secret)
+        if not name or not secret:
+            invalid_count += 1
+            continue
 
-                    if group_name:
-                        group_names.add(group_name)
-                    parsed.append((name, secret, group_name))
+        if group_name:
+            group_names.add(group_name)
+        parsed.append((name, secret, group_name))
 
-                if not parsed:
-                    msg = "没有新的条目导入"
-                    if invalid_count:
-                        msg += f"（{invalid_count} 条无效密钥已忽略）"
-                    messages.info(request, msg)
-                    return redirect("totp:list")
+    if not parsed:
+        msg = "没有新的条目导入"
+        if invalid_count:
+            msg += f"（{invalid_count} 条无效密钥已忽略）"
+        messages.info(request, msg)
+        return redirect("totp:list")
 
-                # 预取已存在的分组并一次性创建缺失的分组
-                groups = {
-                    g.name: g
-                    for g in Group.objects.filter(user=request.user, name__in=group_names)
-                }
-                missing = [
-                    Group(user=request.user, name=n) for n in group_names if n not in groups
-                ]
-                if missing:
-                    Group.objects.bulk_create(missing)
-                    groups.update(
-                        {
-                            g.name: g
-                            for g in Group.objects.filter(
-                            user=request.user, name__in=group_names
-                        )
-                        }
-                    )
+    # 预取已存在的分组并一次性创建缺失的分组
+    groups = {
+        g.name: g
+        for g in Group.objects.filter(user=request.user, name__in=group_names)
+    }
+    missing = [
+        Group(user=request.user, name=n) for n in group_names if n not in groups
+    ]
+    if missing:
+        Group.objects.bulk_create(missing)
+        groups.update(
+            {
+                g.name: g
+                for g in Group.objects.filter(
+                user=request.user, name__in=group_names
+            )
+            }
+        )
 
-                # 一次性查询现有条目名称，避免重复
-                names = [name for name, _, _ in parsed]
-                existing_names = set(
-                    TOTPEntry.objects.filter(user=request.user, name__in=names).values_list(
-                        "name", flat=True
-                    )
-                )
+    # 一次性查询现有条目名称，避免重复
+    names = [name for name, _, _ in parsed]
+    existing_names = set(
+        TOTPEntry.objects.filter(user=request.user, name__in=names).values_list(
+            "name", flat=True
+        )
+    )
     to_create = []
     for name, secret, group_name in parsed:
         if name in existing_names:
