@@ -69,7 +69,7 @@ def list_view(request):
     elif group_id:
         entry_qs = entry_qs.filter(group_id=group_id)
 
-    paginator = Paginator(entry_qs, 15)
+    paginator = Paginator(entry_qs, 5)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
     groups = Group.objects.filter(user=request.user).order_by("name")
