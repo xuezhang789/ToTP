@@ -18,6 +18,9 @@
                 <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importModal"
                         type="button">批量导入
                 </button>
+                <a class="btn btn-outline-secondary" href="{% url 'totp:export' %}">
+                    导出密钥
+                </a>
                 <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#addGroupModal"
                         type="button">添加分组
                 </button>

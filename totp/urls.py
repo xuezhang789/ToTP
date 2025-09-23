@@ -8,5 +8,6 @@ urlpatterns = [
     path("group/add/", views.add_group, name="add_group"),
     path("delete/<int:pk>/", views.delete_entry, name="delete"),
     path("batch-import/", views.batch_import, name="batch_import"),
+    path("export/", views.export_entries, name="export"),
     path("api/tokens/", api.api_tokens, name="api_tokens"),
 ]

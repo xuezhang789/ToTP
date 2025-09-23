@@ -1,11 +1,13 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from urllib.parse import quote
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q, F, Count
-from django.utils import timezone
 from django.core.paginator import Paginator
-from .models import TOTPEntry, Group
-from .utils import encrypt_str, parse_otpauth, normalize_google_secret
+from django.db.models import Count, F, Q
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from .models import Group, TOTPEntry
+from .utils import decrypt_str, encrypt_str, normalize_google_secret, parse_otpauth
 
 
 def dashboard(request):
@@ -222,3 +224,35 @@ def batch_import(request):
             msg += f"（{invalid_count} 条无效密钥已忽略）"
         messages.info(request, msg)
     return redirect("totp:list")
+
+@login_required
+def export_entries(request):
+    """导出当前用户的全部密钥，以文本形式下载。"""
+
+    queryset = (
+        TOTPEntry.objects.filter(user=request.user)
+        .select_related("group")
+        .order_by("name")
+    )
+
+    if not queryset.exists():
+        messages.info(request, "当前没有可以导出的密钥")
+        return redirect("totp:list")
+
+    lines = []
+    for entry in queryset:
+        secret = decrypt_str(entry.secret_encrypted)
+        parts = [secret, entry.name]
+        if entry.group:
+            parts.append(entry.group.name)
+        lines.append("|".join(parts))
+
+    content = "\n".join(lines)
+    filename = timezone.now().strftime("totp-export-%Y%m%d-%H%M%S.txt")
+    quoted = quote(filename)
+
+    response = HttpResponse(content, content_type="text/plain; charset=utf-8")
+    response["Content-Disposition"] = (
+        f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
+    )
+    return response
