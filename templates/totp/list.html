@@ -1,12 +1,18 @@
 {% extends 'base.html' %}
 {% block title %}我的密钥-TOTP管理平台{% endblock %}
-{% block content %}
+{% block head %}
+{{ block.super }}
 <style>
     .search-group { white-space: nowrap; }
     .search-input { width: min(100%, 420px); }
     .search-group .btn { white-space: nowrap; }
-    @media (max-width: 576px){ .search-input { width: 100%; } }
+    @media (max-width: 576px) {
+        .search-input { width: 100%; }
+    }
 </style>
+{% endblock %}
+
+{% block content %}
 
 <div class="mb-3">
     <div class="row g-2 align-items-center">
@@ -135,136 +141,276 @@
 
 {% block scripts %}
 <script>
-    const tbody = document.getElementById('tbody');
-    const countdownEl = document.getElementById('countdown');
-    let timer = null;
+(function () {
+  const tbody = document.getElementById('tbody');
+  if (!tbody) {
+    return;
+  }
 
-    async function refreshTokens(){
-      try{
-        const resp = await fetch('{% url "totp:api_tokens" %}', {headers: {'X-Requested-With':'fetch'}});
-        const data = await resp.json();
-        const remaining = data.remaining ?? 30;
-        countdownEl.textContent = remaining;
-        const codes = new Map(data.items.map(i => [i.id, i]));
-        tbody.querySelectorAll('tr[data-id]').forEach(tr => {
-          const id = parseInt(tr.dataset.id);
-          const item = codes.get(id);
-          if(!item) return;
-          tr.querySelector('.code-text').textContent = item.code;
-          tr.querySelector('.copy-btn').dataset.code = item.code;
-          const period = item.period || 30;
-          const percent = Math.round(((period-remaining)/period)*100);
-          tr.querySelector('.progress-bar').style.width = Math.max(0, Math.min(100, percent)) + '%';
-          tr.querySelector('.remain').textContent = remaining + 's';
-        });
-      }catch(e){ console.error(e); }
-    }
+  const countdownEl = document.getElementById('countdown');
+  const state = new Map();
+  let cycleRemaining = 30;
+  let refreshTimer = null;
+  let pendingRequest = null;
 
-    function startTicker(){
-      clearInterval(timer);
-      timer = setInterval(async ()=>{
-        const now = parseInt(countdownEl.textContent)||30;
-        if(now<=1){ await refreshTokens(); }
-        else { countdownEl.textContent = now - 1; }
-        tbody.querySelectorAll('tr[data-id]').forEach(tr => {
-          const remain = parseInt(tr.querySelector('.remain').textContent)||30;
-          const period = 30;
-          const next = Math.max(0, remain-1);
-          const percent = Math.round(((period-next)/period)*100);
-          tr.querySelector('.remain').textContent = next + 's';
-          tr.querySelector('.progress-bar').style.width = Math.max(0, Math.min(100, percent)) + '%';
-        });
-      }, 1000);
-    }
-    refreshTokens().then(startTicker);
-
-    tbody.addEventListener('click', (e)=>{
-      const btn = e.target.closest('.copy-btn');
-      if(!btn) return;
-      navigator.clipboard.writeText(btn.dataset.code).then(()=>{
-        const oldHTML = btn.innerHTML;
-        btn.innerHTML = '已复制';
-        setTimeout(() => { btn.innerHTML = oldHTML; }, 1000);
+  function initRows() {
+    state.clear();
+    tbody.querySelectorAll('tr[data-id]').forEach((tr) => {
+      const id = Number(tr.dataset.id);
+      if (!Number.isFinite(id)) {
+        return;
+      }
+      state.set(id, {
+        tr,
+        codeEl: tr.querySelector('.code-text'),
+        copyBtn: tr.querySelector('.copy-btn'),
+        progressEl: tr.querySelector('.progress-bar'),
+        remainEl: tr.querySelector('.remain'),
+        period: Number(tr.dataset.period) || 30,
+        lastCode: null,
+        lastRemain: null,
       });
     });
+  }
 
-    // 搜索交互
-    const form = document.getElementById('searchForm');
-    const qInput = document.getElementById('q');
-    const groupSelect = document.getElementById('group');
-    const clearBtn = document.getElementById('clearBtn');
-    const searchBtn = document.getElementById('searchBtn');
-    const spinner = document.getElementById('searchSpinner');
-    function updateClear(){ clearBtn.classList.toggle('d-none', !qInput.value.trim() && !groupSelect.value); }
-    updateClear();
-    qInput.addEventListener('input', updateClear);
-    groupSelect.addEventListener('change', updateClear);
-    clearBtn.addEventListener('click', ()=>{ qInput.value=''; groupSelect.value=''; updateClear(); window.location.href='{% url "totp:list" %}'; });
-    form.addEventListener('submit', ()=>{ qInput.value=qInput.value.trim(); searchBtn.disabled=true; spinner.classList.remove('d-none'); });
-
-    function getCsrfToken(){
-      const match = document.cookie.match(/csrftoken=([^;]+)/);
-      return match ? decodeURIComponent(match[1]) : '';
+  function setCountdown(value) {
+    cycleRemaining = Math.max(0, value);
+    if (countdownEl) {
+      countdownEl.textContent = cycleRemaining;
     }
+  }
 
-    tbody.addEventListener('change', async (e)=>{
-      const select = e.target.closest('.group-select');
-      if(!select) return;
-      const tr = select.closest('tr[data-update-url]');
-      if(!tr) return;
-      const url = tr.dataset.updateUrl;
-      const previous = select.dataset.current ?? '';
-      const value = select.value;
-      select.disabled = true;
-      select.classList.remove('is-valid', 'is-invalid');
-      try{
-        const formData = new FormData();
-        formData.append('group_id', value);
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'X-Requested-With': 'fetch',
-            'X-CSRFToken': getCsrfToken(),
-          },
-          body: formData,
-        });
-        if(!resp.ok){
-          throw new Error(await resp.text());
+  function renderRow(row, code, remain, period) {
+    if (code && code !== row.lastCode && row.codeEl) {
+      row.codeEl.textContent = code;
+      row.lastCode = code;
+    }
+    if (row.copyBtn && code && row.copyBtn.dataset.code !== code) {
+      row.copyBtn.dataset.code = code;
+    }
+    if (row.remainEl && remain !== row.lastRemain) {
+      row.remainEl.textContent = `${remain}s`;
+      row.lastRemain = remain;
+    }
+    if (row.progressEl) {
+      const safePeriod = period > 0 ? period : 30;
+      const pct = Math.min(100, Math.max(0, Math.round(((safePeriod - remain) / safePeriod) * 100)));
+      row.progressEl.style.width = `${pct}%`;
+    }
+  }
+
+  async function refreshTokens() {
+    if (pendingRequest) {
+      return pendingRequest;
+    }
+    pendingRequest = fetch('{% url "totp:api_tokens" %}', {
+      headers: { 'X-Requested-With': 'fetch' },
+      cache: 'no-store',
+    })
+      .then(async (resp) => {
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
         }
-        await resp.json();
+        return resp.json();
+      })
+      .then((data) => {
+        const remaining = Number(data.remaining ?? 30);
+        setCountdown(Number.isFinite(remaining) ? remaining : 30);
+        const items = new Map((data.items || []).map((item) => [Number(item.id), item]));
+        state.forEach((row, id) => {
+          const payload = items.get(id);
+          if (!payload) {
+            return;
+          }
+          const period = Number(payload.period) || row.period;
+          row.period = period;
+          renderRow(row, payload.code, cycleRemaining, period);
+        });
+      })
+      .catch((err) => {
+        console.error('Refresh tokens failed:', err);
+      })
+      .finally(() => {
+        pendingRequest = null;
+      });
+    return pendingRequest;
+  }
+
+  function scheduleTicker() {
+    clearInterval(refreshTimer);
+    refreshTimer = setInterval(() => {
+      if (cycleRemaining <= 1) {
+        refreshTokens();
+        return;
+      }
+      setCountdown(cycleRemaining - 1);
+      state.forEach((row) => {
+        renderRow(row, row.lastCode, cycleRemaining, row.period);
+      });
+    }, 1000);
+  }
+
+  async function bootstrapTicker() {
+    initRows();
+    await refreshTokens();
+    scheduleTicker();
+  }
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    const temp = document.createElement('textarea');
+    temp.value = text;
+    temp.style.position = 'fixed';
+    temp.style.opacity = '0';
+    document.body.appendChild(temp);
+    temp.focus({ preventScroll: true });
+    temp.select();
+    try {
+      document.execCommand('copy');
+    } finally {
+      document.body.removeChild(temp);
+    }
+    return Promise.resolve();
+  }
+
+  tbody.addEventListener('click', (event) => {
+    const btn = event.target.closest('.copy-btn');
+    if (!btn || !btn.dataset.code) {
+      return;
+    }
+    const original = btn.dataset.labelDefault || btn.innerHTML;
+    copyToClipboard(btn.dataset.code)
+      .then(() => {
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-success');
+        btn.innerHTML = '已复制';
+        setTimeout(() => {
+          btn.classList.remove('btn-success');
+          btn.classList.add('btn-outline-secondary');
+          btn.innerHTML = original;
+        }, 1200);
+      })
+      .catch((err) => {
+        console.error('Copy failed:', err);
+      });
+  });
+
+  function getCsrfToken() {
+    const match = document.cookie.match(/csrftoken=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  tbody.addEventListener('change', (event) => {
+    const select = event.target.closest('.group-select');
+    if (!select) {
+      return;
+    }
+    const tr = select.closest('tr[data-update-url]');
+    if (!tr) {
+      return;
+    }
+    const url = tr.dataset.updateUrl;
+    const previous = select.dataset.current ?? '';
+    const value = select.value;
+    select.disabled = true;
+    select.classList.remove('is-valid', 'is-invalid');
+    const formData = new FormData();
+    formData.append('group_id', value);
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'fetch',
+        'X-CSRFToken': getCsrfToken(),
+      },
+      body: formData,
+    })
+      .then((resp) => {
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        return resp.json();
+      })
+      .then(() => {
         select.dataset.current = value;
         select.classList.add('is-valid');
-        setTimeout(()=> select.classList.remove('is-valid'), 1200);
-      }catch(err){
-        console.error(err);
+        setTimeout(() => select.classList.remove('is-valid'), 1200);
+      })
+      .catch((err) => {
+        console.error('Update group failed:', err);
         select.value = previous;
         select.classList.add('is-invalid');
-        setTimeout(()=> select.classList.remove('is-invalid'), 1500);
-      }finally{
+        setTimeout(() => select.classList.remove('is-invalid'), 1500);
+      })
+      .finally(() => {
         select.disabled = false;
+      });
+  });
+
+  bootstrapTicker();
+
+  const form = document.getElementById('searchForm');
+  const qInput = document.getElementById('q');
+  const groupSelect = document.getElementById('group');
+  const clearBtn = document.getElementById('clearBtn');
+  const searchBtn = document.getElementById('searchBtn');
+  const spinner = document.getElementById('searchSpinner');
+
+  function updateClearButton() {
+    const hasValue = (qInput && qInput.value.trim()) || (groupSelect && groupSelect.value);
+    if (clearBtn) {
+      clearBtn.classList.toggle('d-none', !hasValue);
+    }
+  }
+
+  updateClearButton();
+
+  if (qInput) {
+    qInput.addEventListener('input', updateClearButton);
+  }
+  if (groupSelect) {
+    groupSelect.addEventListener('change', updateClearButton);
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      if (qInput) {
+        qInput.value = '';
+      }
+      if (groupSelect) {
+        groupSelect.value = '';
+      }
+      updateClearButton();
+      if (form) {
+        form.submit();
       }
     });
-</script>
-<script>
-    (function() {
-      // 读取 URL 参数 modal=add / modal=import
-      const params = new URLSearchParams(window.location.search);
-      const modal = params.get('modal');
+  }
 
-      if (!modal) return;
-
-      const showModal = (id) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        const m = new bootstrap.Modal(el);
-        m.show();
-      };
-
-      if (modal === 'add') {
-        showModal('addModal');      // 请确保你的“添加密钥”模态框 id="addModal"
-      } else if (modal === 'import') {
-        showModal('importModal');   // 请确保你的“批量导入”模态框 id="importModal"
+  if (form) {
+    form.addEventListener('submit', () => {
+      if (qInput) {
+        qInput.value = qInput.value.trim();
       }
-    })();
+      if (searchBtn) {
+        searchBtn.disabled = true;
+      }
+      if (spinner) {
+        spinner.classList.remove('d-none');
+      }
+    });
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const modal = params.get('modal');
+  if (modal === 'add' || modal === 'import') {
+    const id = modal === 'add' ? 'addModal' : 'importModal';
+    const element = document.getElementById(id);
+    if (element && window.bootstrap && typeof window.bootstrap.Modal === 'function') {
+      new window.bootstrap.Modal(element).show();
+    }
+  }
+})();
 </script>
 {% endblock %}

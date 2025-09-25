@@ -1,4 +1,4 @@
-<tr data-id="{{ e.id }}" data-update-url="{% url 'totp:update_group' e.id %}">
+<tr data-id="{{ e.id }}" data-period="30" data-update-url="{% url 'totp:update_group' e.id %}">
     <td>{{ e.name }}</td>
     <td>
         <select class="form-select form-select-sm group-select" data-current="{{ e.group_id|default_if_none:'' }}">
@@ -9,8 +9,8 @@
         </select>
     </td>
     <td class="text-nowrap">
-        <span class="badge text-bg-dark code-badge code-text">••••••</span>
-        <button class="btn btn-sm btn-outline-secondary copy-btn ms-1" data-code="" title="复制">
+        <span class="badge text-bg-dark code-badge code-text" data-code-placeholder="••••••">••••••</span>
+        <button class="btn btn-sm btn-outline-secondary copy-btn ms-1" type="button" data-code="" data-label-default="复制" title="复制">
             <i class="bi bi-clipboard"></i>
         </button>
     </td>
