@@ -11,6 +11,29 @@ from google.auth.transport import requests as grequests
 
 User = get_user_model()
 
+COMMON_WEAK_PASSWORDS = {
+    "password",
+    "123456",
+    "123456789",
+    "qwerty",
+    "abc123",
+    "password1",
+    "111111",
+    "12345678",
+    "123123",
+    "qwertyuiop",
+    "letmein",
+    "admin",
+    "welcome",
+    "iloveyou",
+    "dragon",
+    "monkey",
+    "login",
+    "000000",
+    "1q2w3e4r",
+    "zaq12wsx",
+}
+
 
 def _next_url(request, fallback="/"):
     """获取登录后应跳转的 URL。"""
@@ -39,6 +62,9 @@ def _password_strength_errors(password: str, username: str = ""):
 
     if username and username.lower() in pwd.lower():
         errors.append("密码不能包含用户名")
+
+    if pwd.lower() in COMMON_WEAK_PASSWORDS:
+        errors.append("密码与常见弱口令一致，请重新设置")
 
     return errors
 

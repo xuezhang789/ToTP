@@ -3,6 +3,26 @@
 {% block head %}
 <meta name="google-signin-client_id" content="{{ GOOGLE_CLIENT_ID }}">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+    .password-strength-bar { height: 6px; border-radius: 999px; }
+    .password-assistant button { white-space: nowrap; }
+    .password-tips li { position: relative; padding-left: 1.25rem; }
+    .password-tips li::before {
+        content: "\2713";
+        position: absolute;
+        left: 0;
+        top: 0;
+        color: var(--bs-success);
+    }
+    .password-tips li.is-warning::before {
+        content: "\26A0";
+        color: var(--bs-warning);
+    }
+    .password-tips li.is-error::before {
+        content: "\2717";
+        color: var(--bs-danger);
+    }
+</style>
 {% endblock %}
 {% block content %}
 <div class="row justify-content-center">
@@ -12,25 +32,43 @@
                 <div class="text-center mb-3">
                     <i class="bi bi-person-plus-fill text-primary fs-1"></i>
                 </div>
-                <h1 class="h4 mb-3 text-center">注册</h1>
+                <h1 class="h4 mb-2 text-center">创建你的账户</h1>
+                <p class="text-center text-muted small mb-4">欢迎加入 TOTP 管理平台，几步即可开启更安全的双重验证体验。</p>
                 <form method="post" action="{% url 'accounts:signup' %}">{% csrf_token %}
                     <div class="mb-3">
                         <label class="form-label" for="signup-username">用户名</label>
-                        <input id="signup-username" class="form-control" name="username" placeholder="用户名"
+                        <input id="signup-username" class="form-control" name="username" placeholder="例如：totp_fan"
                                value="{{ username_value|default:'' }}" autocomplete="username" required>
+                        <div class="form-text">用于登录和展示给团队成员，可随时在个人设置中修改。</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="signup-email">邮箱（可选）</label>
-                        <input id="signup-email" type="email" class="form-control" name="email" placeholder="邮箱（可选）"
+                        <input id="signup-email" type="email" class="form-control" name="email" placeholder="便于找回账号的邮箱"
                                value="{{ email_value|default:'' }}" autocomplete="email">
+                        <div class="form-text">推荐填写常用邮箱，忘记密码时可以快速找回。</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="signup-password">密码</label>
-                        <input id="signup-password" type="password" class="form-control" name="password"
-                               placeholder="密码" autocomplete="new-password" required>
-                        <div class="form-text">至少 8 个字符，需包含大写字母、小写字母、数字、符号中的任意三类。</div>
+                        <div class="input-group">
+                            <input id="signup-password" type="password" class="form-control" name="password"
+                                   placeholder="密码" autocomplete="new-password" required>
+                            <button class="btn btn-outline-secondary" type="button" id="password-toggle" aria-label="显示或隐藏密码">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                        <div class="password-assistant mt-2">
+                            <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                                <div class="form-text mb-0" id="passwordHint">为保障账户安全，请使用至少 8 个字符，并混合多种字符类型。</div>
+                                <button class="btn btn-sm btn-outline-primary" type="button" id="password-generate-btn">生成强密码</button>
+                            </div>
+                            <div class="progress password-strength-bar mt-2">
+                                <div class="progress-bar bg-secondary" id="password-strength-fill" style="width: 0%"></div>
+                            </div>
+                            <div class="form-text mt-2" id="password-strength-label">等待输入密码...</div>
+                            <ul class="password-tips list-unstyled small text-muted mt-2" id="password-suggestions"></ul>
+                        </div>
                     </div>
-                    <button class="btn btn-primary w-100" type="submit">注册并登录</button>
+                    <button class="btn btn-primary w-100" type="submit">立即创建并登录</button>
                 </form>
                 <div class="text-center text-muted small my-3">或</div>
 
@@ -52,6 +90,188 @@
 {% endblock %}
 {% block scripts %}
 <script>
+    (function(){
+      const passwordInput = document.getElementById('signup-password');
+      if(!passwordInput) return;
+
+      const usernameInput = document.getElementById('signup-username');
+      const strengthFill = document.getElementById('password-strength-fill');
+      const strengthLabel = document.getElementById('password-strength-label');
+      const suggestionsEl = document.getElementById('password-suggestions');
+      const generateBtn = document.getElementById('password-generate-btn');
+      const toggleBtn = document.getElementById('password-toggle');
+
+      const WEAK_PASSWORDS = new Set([
+        'password','123456','123456789','qwerty','abc123','password1','111111','12345678','123123','qwertyuiop',
+        'letmein','admin','welcome','iloveyou','dragon','monkey','login','000000','1q2w3e4r','zaq12wsx'
+      ]);
+
+      function classifyStrength(score){
+        if(score <= 1) return {variant: 'danger', label: '密码太弱，请继续加强'};
+        if(score === 2) return {variant: 'warning', label: '安全性一般，再提升一下更安心'};
+        if(score === 3) return {variant: 'info', label: '不错的密码，再补充1~2个字符更佳'};
+        return {variant: 'success', label: '安全性很高，可以放心使用'};
+      }
+
+      function evaluatePassword(pwd, username){
+        const suggestions = [];
+        if(!pwd){
+          return {score: 0, label: '等待输入密码...', variant: 'secondary', suggestions: ['输入密码后即可查看强度建议。']};
+        }
+
+        const lengthScore = Math.min(4, Math.floor(pwd.length / 3));
+        let score = lengthScore;
+
+        const varietyChecks = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/];
+        const varietyCount = varietyChecks.reduce((acc, re) => acc + (re.test(pwd) ? 1 : 0), 0);
+        score += varietyCount - 1;
+
+        if(varietyCount < 3){
+          suggestions.push('再加入大写、小写、数字或符号中的缺失类型。');
+        }
+
+        if(/(.)\1{2,}/.test(pwd)){
+          score -= 1;
+          suggestions.push('避免连续重复的字符，比如 "aaa"。');
+        }
+
+        if(/(?=012|123|234|345|456|567|678|789)/.test(pwd)){
+          score -= 1;
+          suggestions.push('尝试打乱递增的数字顺序。');
+        }
+
+        if(/(?=abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz)/i.test(pwd)){
+          score -= 1;
+          suggestions.push('打破键盘上的顺序字符组合。');
+        }
+
+        if(username && pwd.toLowerCase().includes(username.toLowerCase())){
+          score -= 1;
+          suggestions.push('不要把用户名或账号信息放入密码中。');
+        }
+
+        if(WEAK_PASSWORDS.has(pwd.toLowerCase())){
+          score = Math.min(score, 1);
+          suggestions.unshift('这个密码过于常见，换一个独特的吧。');
+        }
+
+        score = Math.max(0, Math.min(4, score));
+
+        const classification = classifyStrength(score);
+
+        if(!suggestions.length && score >= 3){
+          suggestions.push('👍 密码看起来很可靠，请妥善保管并定期更新。');
+        }
+        return {
+          score,
+          label: classification.label,
+          variant: classification.variant,
+          suggestions,
+        };
+      }
+
+      function renderSuggestions(items){
+        suggestionsEl.innerHTML = '';
+        if(!items || !items.length) return;
+        items.forEach((text) => {
+          const li = document.createElement('li');
+          li.textContent = text;
+          li.className = '';
+          if(/换一个|避免|不要|打破/.test(text)){
+            li.classList.add('is-warning');
+          }
+          if(/过于常见|弱|请继续/.test(text)){
+            li.classList.add('is-error');
+          }
+          suggestionsEl.appendChild(li);
+        });
+      }
+
+      function updateStrength(){
+        const pwd = passwordInput.value;
+        const username = usernameInput ? usernameInput.value.trim() : '';
+        const result = evaluatePassword(pwd, username);
+        const basePct = (result.score / 4) * 100;
+        const pct = pwd ? Math.max(10, basePct) : 0;
+        strengthFill.style.width = `${pct}%`;
+        strengthFill.className = `progress-bar bg-${result.variant}`;
+        strengthLabel.textContent = result.label;
+        renderSuggestions(result.suggestions);
+      }
+
+      function generatePassword(){
+        const charset = {
+          upper: 'ABCDEFGHJKLMNPQRSTUVWXYZ',
+          lower: 'abcdefghijkmnopqrstuvwxyz',
+          digits: '23456789',
+          symbols: '@#$%&_+-=~',
+        };
+        const all = Object.values(charset).join('');
+        const parts = [
+          randomFrom(charset.upper),
+          randomFrom(charset.lower),
+          randomFrom(charset.digits),
+          randomFrom(charset.symbols),
+        ];
+        const targetLength = 14 + Math.floor(Math.random() * 5);
+        while(parts.join('').length < targetLength){
+          parts.push(randomFrom(all));
+        }
+        const password = shuffle(parts).join('');
+        passwordInput.value = password;
+        passwordInput.dispatchEvent(new Event('input'));
+        passwordInput.focus();
+        passwordInput.select();
+      }
+
+      function randomFrom(str){
+        if(window.crypto && window.crypto.getRandomValues){
+          const array = new Uint32Array(1);
+          window.crypto.getRandomValues(array);
+          return str[array[0] % str.length];
+        }
+        return str[Math.floor(Math.random() * str.length)];
+      }
+
+      function shuffle(arr){
+        for(let i = arr.length - 1; i > 0; i -= 1){
+          let j;
+          if(window.crypto && window.crypto.getRandomValues){
+            const array = new Uint32Array(1);
+            window.crypto.getRandomValues(array);
+            j = array[0] % (i + 1);
+          }else{
+            j = Math.floor(Math.random() * (i + 1));
+          }
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      }
+
+      if(generateBtn){
+        generateBtn.addEventListener('click', generatePassword);
+      }
+
+      if(toggleBtn){
+        toggleBtn.addEventListener('click', () => {
+          const isHidden = passwordInput.getAttribute('type') === 'password';
+          passwordInput.setAttribute('type', isHidden ? 'text' : 'password');
+          toggleBtn.innerHTML = isHidden ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+        });
+      }
+
+      if(passwordInput){
+        passwordInput.addEventListener('input', updateStrength);
+        passwordInput.addEventListener('blur', updateStrength);
+      }
+
+      if(usernameInput){
+        usernameInput.addEventListener('blur', updateStrength);
+      }
+
+      updateStrength();
+    })();
+
     async function onetapLogin(credential){
       const r = await fetch("{% url 'accounts:google_onetap' %}", {
         method: "POST",
