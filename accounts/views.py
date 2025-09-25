@@ -18,6 +18,31 @@ def _next_url(request, fallback="/"):
     return nxt
 
 
+def _password_strength_errors(password: str, username: str = ""):
+    errors = []
+    pwd = password or ""
+
+    if len(pwd) < 8:
+        errors.append("密码长度至少需要 8 个字符")
+
+    categories = {
+        "upper": bool(re.search(r"[A-Z]", pwd)),
+        "lower": bool(re.search(r"[a-z]", pwd)),
+        "digit": bool(re.search(r"\d", pwd)),
+        "symbol": bool(re.search(r"[^A-Za-z0-9]", pwd)),
+    }
+    if sum(categories.values()) < 3:
+        errors.append("密码需至少包含大写字母、小写字母、数字、符号中的三类")
+
+    if re.search(r"\s", pwd):
+        errors.append("密码不能包含空白字符")
+
+    if username and username.lower() in pwd.lower():
+        errors.append("密码不能包含用户名")
+
+    return errors
+
+
 @require_http_methods(["GET", "POST"])
 def login_view(request):
     """处理用户登录逻辑。"""
@@ -39,20 +64,29 @@ def signup_view(request):
     """处理用户注册逻辑。"""
     if request.user.is_authenticated:
         return redirect("/")
+    context = {}
     if request.method == "POST":
         username = (request.POST.get("username") or "").strip()
         email = (request.POST.get("email") or "").strip()
         password = (request.POST.get("password") or "").strip()
+        context.update({"username_value": username, "email_value": email})
         if not username or not password:
             messages.error(request, "用户名与密码必填")
-            return render(request, "accounts/signup.html", {})
+            return render(request, "accounts/signup.html", context, status=400)
         if User.objects.filter(username=username).exists():
             messages.error(request, "用户名已存在")
-            return render(request, "accounts/signup.html", {})
+            return render(request, "accounts/signup.html", context, status=400)
+
+        strength_errors = _password_strength_errors(password, username=username)
+        if strength_errors:
+            for msg in strength_errors:
+                messages.error(request, msg)
+            return render(request, "accounts/signup.html", context, status=400)
+
         user = User.objects.create_user(username=username, email=email, password=password)
         login(request, user)
         return redirect("/")
-    return render(request, "accounts/signup.html", {})
+    return render(request, "accounts/signup.html", context)
 
 
 def logout_view(request):

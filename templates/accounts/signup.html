@@ -15,17 +15,20 @@
                 <h1 class="h4 mb-3 text-center">注册</h1>
                 <form method="post" action="{% url 'accounts:signup' %}">{% csrf_token %}
                     <div class="mb-3">
-                        <label class="form-label">用户名</label>
-                        <input class="form-control" name="username" placeholder="用户名" required>
+                        <label class="form-label" for="signup-username">用户名</label>
+                        <input id="signup-username" class="form-control" name="username" placeholder="用户名"
+                               value="{{ username_value|default:'' }}" autocomplete="username" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">邮箱（可选）</label>
-                        <input type="email" class="form-control" name="email" placeholder="邮箱（可选）"
-                               autocomplete="email">
+                        <label class="form-label" for="signup-email">邮箱（可选）</label>
+                        <input id="signup-email" type="email" class="form-control" name="email" placeholder="邮箱（可选）"
+                               value="{{ email_value|default:'' }}" autocomplete="email">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">密码</label>
-                        <input type="password" class="form-control" name="password" placeholder="密码" required>
+                        <label class="form-label" for="signup-password">密码</label>
+                        <input id="signup-password" type="password" class="form-control" name="password"
+                               placeholder="密码" autocomplete="new-password" required>
+                        <div class="form-text">至少 8 个字符，需包含大写字母、小写字母、数字、符号中的任意三类。</div>
                     </div>
                     <button class="btn btn-primary w-100" type="submit">注册并登录</button>
                 </form>
