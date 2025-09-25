@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% block title %}备份中心{% endblock %}
+{% block content %}
+<div class="row g-4">
+    <div class="col-12 col-lg-5">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h2 class="h5 mb-3">手动备份</h2>
+                <p class="text-muted small">使用自定义密码生成加密备份，可下载并在离线环境安全保管。</p>
+                <form method="post" action="{% url 'totp:backup_create' %}" class="vstack gap-3">
+                    {% csrf_token %}
+                    <div>
+                        <label class="form-label" for="backupName">备份名称（可选）</label>
+                        <input id="backupName" class="form-control" name="name" placeholder="例如：出差前备份">
+                    </div>
+                    <div>
+                        <label class="form-label" for="backupPassword">备份密码</label>
+                        <input id="backupPassword" type="password" class="form-control" name="password" required
+                               minlength="6" placeholder="至少 6 个字符">
+                        <div class="form-text">备份内容会使用此密码加密，请妥善保管，遗忘将无法解密。</div>
+                    </div>
+                    <button class="btn btn-primary" type="submit">生成备份</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-lg-7">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <h2 class="h5 mb-3">自动备份计划</h2>
+                <p class="text-muted small">配置运行频率后，可在服务器定时执行命令 <code>python manage.py run_backup_schedules</code> 自动生成备份。</p>
+                <form method="post" action="{% url 'totp:backup_schedule_update' %}" class="row g-3 align-items-end">
+                    {% csrf_token %}
+                    <div class="col-sm-4">
+                        <label class="form-label" for="scheduleName">计划名称</label>
+                        <input id="scheduleName" class="form-control" name="name" value="{{ schedule.name|default_if_none:'自动备份' }}">
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label" for="frequency">执行频率</label>
+                        <select id="frequency" class="form-select" name="frequency_hours">
+                            {% for hours,label in ((12,'每 12 小时'),(24,'每天'),(48,'每 2 天'),(168,'每周')) %}
+                            <option value="{{ hours }}" {% if schedule.frequency_hours == hours %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-4">
+                        <label class="form-label" for="keepLast">保留最近份数</label>
+                        <input id="keepLast" type="number" min="1" max="20" class="form-control" name="keep_last"
+                               value="{{ schedule.keep_last|default:5 }}">
+                    </div>
+                    <div class="col-12 d-flex gap-2">
+                        <button class="btn btn-outline-primary" type="submit" name="reset_next_run" value="1">保存并重置执行时间</button>
+                        <button class="btn btn-primary" type="submit">保存计划</button>
+                        {% if schedule and schedule.is_active %}
+                        <form method="post" action="{% url 'totp:backup_schedule_disable' %}">
+                            {% csrf_token %}
+                            <button class="btn btn-outline-danger" type="submit">暂停计划</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                    {% if schedule %}
+                    <div class="col-12 small text-muted">
+                        <div>状态：{{ schedule.is_active|yesno:'运行中,已暂停' }}</div>
+                        <div>下次执行：{{ schedule.next_run_at|date:"Y-m-d H:i" }}</div>
+                        {% if schedule.last_run_at %}<div>最近执行：{{ schedule.last_run_at|date:"Y-m-d H:i" }}</div>{% endif %}
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mt-4">
+    <div class="card-body">
+        <h2 class="h5 mb-3">历史备份</h2>
+        {% if archives %}
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                <tr>
+                    <th>名称</th>
+                    <th>创建时间</th>
+                    <th>加密方式</th>
+                    <th>条目数</th>
+                    <th>来源</th>
+                    <th class="text-nowrap">操作</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for archive in archives %}
+                <tr>
+                    <td>{{ archive.name }}</td>
+                    <td>{{ archive.created_at|date:"Y-m-d H:i" }}</td>
+                    <td>{{ archive.get_encryption_display }}</td>
+                    <td>{{ archive.entry_count }}</td>
+                    <td>{% if archive.schedule %}计划：{{ archive.schedule.name }}{% else %}手动{% endif %}</td>
+                    <td class="text-nowrap">
+                        <form method="post" action="{% url 'totp:backup_download' archive.pk %}" class="d-inline-flex align-items-center gap-2">
+                            {% csrf_token %}
+                            {% if archive.encryption == 'user' %}
+                            <input type="password" name="password" class="form-control form-control-sm" placeholder="密码" required>
+                            {% endif %}
+                            <button class="btn btn-sm btn-outline-secondary" type="submit">下载</button>
+                        </form>
+                        <form method="post" action="{% url 'totp:backup_restore' archive.pk %}" class="d-inline-flex align-items-center gap-2 ms-2">
+                            {% csrf_token %}
+                            {% if archive.encryption == 'user' %}
+                            <input type="password" name="password" class="form-control form-control-sm" placeholder="密码" required>
+                            {% endif %}
+                            <select class="form-select form-select-sm" name="mode">
+                                <option value="replace">替换现有</option>
+                                <option value="append">追加</option>
+                            </select>
+                            <button class="btn btn-sm btn-primary" type="submit" onclick="return confirm('确认恢复该备份？')">恢复</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">还没有备份记录，快来创建第一份安全备份吧。</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

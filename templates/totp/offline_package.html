@@ -21,6 +21,11 @@
         }
         header {
             margin-bottom: 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
         }
         header h1 {
             margin: 0;
@@ -30,6 +35,11 @@
         header p {
             margin: .35rem 0 0;
             color: #475569;
+        }
+        header .actions {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
         }
         .warning {
             border-radius: 1rem;
@@ -104,6 +114,15 @@
             transform: translateY(-1px);
             box-shadow: 0 14px 28px rgba(37, 99, 235, 0.3);
         }
+        .btn-destroy {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: #fff;
+            box-shadow: 0 12px 24px rgba(239, 68, 68, 0.25);
+        }
+        .btn-destroy:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 28px rgba(220, 38, 38, 0.3);
+        }
         footer {
             margin-top: 2.5rem;
             text-align: center;
@@ -127,9 +146,14 @@
 <body>
 <div class="container">
     <header>
-        <h1>离线验证码包</h1>
-        <p>为 {{ owner.username }} 导出。生成时间：{{ generated_at|date:"Y-m-d H:i" }}</p>
-        <p>本页面完全离线运行，请妥善保管，避免在不安全的设备上使用。</p>
+        <div>
+            <h1>离线验证码包</h1>
+            <p>为 {{ owner.username }} 导出。生成时间：{{ generated_at|date:"Y-m-d H:i" }}</p>
+            <p>本页面完全离线运行，请妥善保管，避免在不安全的设备上使用。</p>
+        </div>
+        <div class="actions">
+            <button id="destroyBtn" class="btn-destroy" type="button">立即销毁内容</button>
+        </div>
     </header>
     <section id="unsupported" class="warning support">
         <strong>当前浏览器不支持离线计算验证码。</strong>
@@ -156,6 +180,7 @@
   const supportsCrypto = !!(window.crypto && crypto.subtle && crypto.subtle.importKey);
   const unsupportedEl = document.getElementById('unsupported');
   const grid = document.getElementById('entryGrid');
+  const destroyBtn = document.getElementById('destroyBtn');
 
   if (!supportsCrypto) {
     if (unsupportedEl) {
@@ -235,6 +260,7 @@
     return card;
   }
 
+  let destroyed = false;
   const rendered = [];
   RAW_ENTRIES.forEach((entry) => {
     const secretBytes = decodeBase32(entry.secret);
@@ -274,7 +300,18 @@
     }
   }
 
+  function wipeCard(card) {
+    card._data.codeEl.textContent = '——';
+    card._data.countdownEl.textContent = '已销毁';
+    card._data.copyBtn.disabled = true;
+    card._data.copyBtn.textContent = '已禁用';
+    card.style.opacity = '0.5';
+  }
+
   async function refreshAll(){
+    if (destroyed) {
+      return;
+    }
     const epochSeconds = Math.floor(Date.now() / 1000);
     await Promise.all(rendered.map(async (card) => {
       const { entry, secretBytes, codeEl, countdownEl } = card._data;
@@ -290,7 +327,26 @@
   }
 
   refreshAll();
-  setInterval(refreshAll, 1000);
+  const refreshTimer = setInterval(refreshAll, 1000);
+
+  destroyBtn?.addEventListener('click', () => {
+    if (destroyed) {
+      return;
+    }
+    const confirmed = window.confirm('销毁后页面将不再显示任何验证码，需要重新导出新的离线包才能恢复。是否继续？');
+    if (!confirmed) {
+      return;
+    }
+    destroyed = true;
+    clearInterval(refreshTimer);
+    RAW_ENTRIES.splice(0, RAW_ENTRIES.length);
+    rendered.forEach(wipeCard);
+    if (grid) {
+      grid.innerHTML = '<div class="warning support" style="display:block;">已手动销毁离线数据，如需再次使用，请回到系统重新生成备份。</div>';
+    }
+    destroyBtn.disabled = true;
+    destroyBtn.textContent = '已销毁';
+  });
 })();
 </script>
 </body>
