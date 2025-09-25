@@ -2,185 +2,293 @@
 <html lang="zh-CN">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
     <title>离线验证码包</title>
     <style>
         :root {
             color-scheme: light dark;
+            --bg-start: #eef2ff;
+            --bg-end: #f8fafc;
+            --card-bg: rgba(255, 255, 255, 0.9);
+            --card-border: rgba(148, 163, 184, 0.25);
+            --text: #0f172a;
+            --muted: #475569;
+            --accent: #2563eb;
+            --danger: #ef4444;
+            --success: #0ea5e9;
+            --shadow: 0 24px 60px rgba(15, 23, 42, 0.15);
         }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-start: #0f172a;
+                --bg-end: #1e293b;
+                --card-bg: rgba(15, 23, 42, 0.75);
+                --card-border: rgba(148, 163, 184, 0.2);
+                --text: #e2e8f0;
+                --muted: #94a3b8;
+                --accent: #38bdf8;
+                --success: #22d3ee;
+                --shadow: 0 20px 40px rgba(8, 47, 73, 0.5);
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
             font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #f1f5f9, #ffffff);
-            color: #0f172a;
+            background: radial-gradient(circle at top, var(--bg-start), var(--bg-end));
+            color: var(--text);
         }
-        .container {
-            max-width: 960px;
+
+        .page {
+            max-width: 1080px;
             margin: 0 auto;
-            padding: 2.5rem 1.5rem 3rem;
+            padding: 2.5rem 1.5rem 3.5rem;
         }
-        header {
-            margin-bottom: 2rem;
+
+        header.hero {
+            display: grid;
+            gap: 1.2rem;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            margin-bottom: 2.5rem;
+            align-items: start;
+        }
+
+        .hero-text h1 {
+            margin: 0;
+            font-size: clamp(1.8rem, 3vw, 2.4rem);
+            font-weight: 700;
+        }
+
+        .hero-text p {
+            margin: 0.4rem 0 0;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .hero-actions {
             display: flex;
             flex-wrap: wrap;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
+            justify-content: flex-end;
+            gap: 0.8rem;
         }
-        header h1 {
-            margin: 0;
-            font-size: 2rem;
-            font-weight: 700;
-        }
-        header p {
-            margin: .35rem 0 0;
-            color: #475569;
-        }
-        header .actions {
-            display: flex;
-            align-items: center;
-            gap: .75rem;
-        }
-        .warning {
-            border-radius: 1rem;
-            padding: 1rem 1.25rem;
-            margin-bottom: 1.5rem;
-            border: 1px solid rgba(226, 232, 240, 0.9);
-            background: rgba(248, 250, 252, 0.9);
-            color: #0f172a;
-        }
-        .warning strong {
-            display: block;
-            margin-bottom: .5rem;
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 1.25rem;
-        }
-        .card {
-            border-radius: 1rem;
-            padding: 1.4rem;
-            position: relative;
-            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-            background: rgba(255, 255, 255, 0.94);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(226, 232, 240, 0.6);
-        }
-        .card h2 {
-            margin: 0;
-            font-size: 1.1rem;
-            font-weight: 600;
-        }
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            border-radius: 999px;
-            padding: .25rem .75rem;
-            background: rgba(59, 130, 246, 0.15);
-            color: #1d4ed8;
-            font-size: .75rem;
-            margin-top: .5rem;
-        }
-        .code {
-            font-size: 2.4rem;
-            font-weight: 700;
-            letter-spacing: .3rem;
-            margin: 1.2rem 0 .6rem;
-            text-align: center;
-            color: #111827;
-        }
-        .meta {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: .85rem;
-            color: #64748b;
-        }
+
         button {
             border: none;
-            border-radius: .75rem;
-            padding: .55rem 1.1rem;
-            font-size: .85rem;
+            border-radius: 999px;
+            padding: 0.65rem 1.25rem;
+            font-size: 0.9rem;
+            font-weight: 600;
             cursor: pointer;
-            transition: transform .15s ease, box-shadow .15s ease;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
-        .btn-copy {
-            background: linear-gradient(135deg, #2563eb, #3b82f6);
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), #4c51bf);
             color: #fff;
-            box-shadow: 0 12px 24px rgba(37, 99, 235, 0.25);
+            box-shadow: 0 16px 32px rgba(37, 99, 235, 0.35);
         }
-        .btn-copy:hover {
+
+        .btn-primary:hover {
             transform: translateY(-1px);
-            box-shadow: 0 14px 28px rgba(37, 99, 235, 0.3);
+            box-shadow: 0 18px 36px rgba(37, 99, 235, 0.4);
         }
-        .btn-destroy {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger), #f97316);
             color: #fff;
-            box-shadow: 0 12px 24px rgba(239, 68, 68, 0.25);
+            box-shadow: 0 14px 28px rgba(239, 68, 68, 0.3);
         }
-        .btn-destroy:hover {
+
+        .btn-danger:hover {
             transform: translateY(-1px);
-            box-shadow: 0 14px 28px rgba(220, 38, 38, 0.3);
+            box-shadow: 0 16px 32px rgba(239, 68, 68, 0.4);
         }
-        footer {
+
+        .notice {
+            display: grid;
+            gap: 1rem;
+            padding: 1.3rem 1.5rem;
+            border-radius: 1.2rem;
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid var(--card-border);
+            box-shadow: var(--shadow);
+            margin-bottom: 2rem;
+        }
+
+        .notice h2 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .notice ul {
+            margin: 0.2rem 0 0;
+            padding-left: 1.2rem;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+
+        .stats-bar span {
+            background: rgba(148, 163, 184, 0.15);
+            padding: 0.35rem 0.8rem;
+            border-radius: 999px;
+        }
+
+        .grid {
+            display: grid;
+            gap: 1.3rem;
+            grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+            align-items: stretch;
+        }
+
+        .card {
+            position: relative;
+            padding: 1.6rem;
+            border-radius: 1.4rem;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .card::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(140deg, rgba(37, 99, 235, 0.08), transparent 55%);
+            pointer-events: none;
+        }
+
+        .card h3 {
+            margin: 0;
+            font-size: 1.05rem;
+            font-weight: 600;
+        }
+
+        .card .tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            margin-top: 0.6rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            background: rgba(37, 99, 235, 0.18);
+            color: var(--accent);
+            font-size: 0.75rem;
+        }
+
+        .code {
+            margin: 1.6rem 0 1rem;
+            font-size: clamp(1.8rem, 4vw, 2.6rem);
+            font-weight: 700;
+            letter-spacing: 0.35rem;
+            text-align: center;
+            color: var(--text);
+        }
+
+        .card footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.8rem;
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+
+        .progress-ring {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            position: relative;
+            background: conic-gradient(var(--accent) calc(var(--progress, 0) * 1%), rgba(148, 163, 184, 0.25) 0);
+            display: grid;
+            place-items: center;
+            transition: background 0.3s ease;
+        }
+
+        .progress-ring span {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .footer-note {
             margin-top: 2.5rem;
             text-align: center;
-            font-size: .8rem;
-            color: #94a3b8;
+            font-size: 0.8rem;
+            color: var(--muted);
         }
-        .support {
-            display: none;
-            border: 1px solid rgba(248, 113, 113, 0.35);
-            background: rgba(254, 226, 226, 0.9);
-            color: #991b1b;
-        }
-        @media (max-width: 600px) {
+
+        @media (max-width: 640px) {
+            .page {
+                padding: 1.75rem 1rem 3rem;
+            }
+            .hero-actions {
+                justify-content: flex-start;
+            }
             .code {
-                font-size: 1.9rem;
-                letter-spacing: .25rem;
+                letter-spacing: 0.28rem;
             }
         }
     </style>
 </head>
 <body>
-<div class="container">
-    <header>
-        <div>
+<div class="page">
+    <header class="hero">
+        <div class="hero-text">
             <h1>离线验证码包</h1>
-            <p>为 {{ owner.username }} 导出。生成时间：{{ generated_at|date:"Y-m-d H:i" }}</p>
-            <p>本页面完全离线运行，请妥善保管，避免在不安全的设备上使用。</p>
+            <p>为 {{ owner.username }} 导出 · 生成时间 {{ generated_at|date:"Y-m-d H:i" }}</p>
+            <p>本离线包完全在浏览器本地运行，未与服务器通信。请在用毕后销毁或删除。</p>
+            <div class="stats-bar">
+                <span>总条目：{{ entry_count }}</span>
+                <span>刷新周期：30 秒</span>
+                <span>浏览器：<script>document.write(navigator.userAgent.split(')')[0] + ')');</script></span>
+            </div>
         </div>
-        <div class="actions">
-            <button id="destroyBtn" class="btn-destroy" type="button">立即销毁内容</button>
+        <div class="hero-actions">
+            <button class="btn-primary" id="manualRefresh" type="button">手动刷新</button>
+            <button class="btn-danger" id="destroyBtn" type="button">立即销毁内容</button>
         </div>
     </header>
-    <section id="unsupported" class="warning support">
-        <strong>当前浏览器不支持离线计算验证码。</strong>
-        <span>请使用支持 Web Crypto API 的现代浏览器（Chrome、Firefox、Edge、Safari 等）。</span>
+
+    <section id="unsupported" class="notice" style="display:none; border-color: rgba(248, 113, 113, 0.4); background: rgba(254, 226, 226, 0.92); color:#991b1b;">
+        <h2>浏览器不支持离线计算</h2>
+        <p>请使用支持 Web Crypto API 的现代浏览器（Chrome、Edge、Firefox、Safari 最新版等）。</p>
     </section>
-    <section class="warning">
-        <strong>使用说明</strong>
+
+    <section class="notice">
+        <h2>安全提示</h2>
         <ul>
-            <li>验证码按 30 秒刷新一次，如需同步多个设备，请保证系统时间准确。</li>
-            <li>本离线包含全部密钥明文，使用完毕后请及时删除或安全销毁。</li>
-            <li>如需更新数据，请返回系统重新生成最新离线包。</li>
+            <li>验证码每 30 秒刷新一次，使用前请确认系统时间准确。</li>
+            <li>离线包包含全部密钥明文，务必保存在可信设备，并防止屏幕被拍照或录屏。</li>
+            <li>若设备可能被他人使用，请立即点击“销毁内容”或删除该文件。</li>
         </ul>
     </section>
+
     <section id="entryGrid" class="grid" aria-live="polite"></section>
-    <footer>
-        &copy; {{ generated_at|date:"Y" }} 离线导出 · 不再连接网络亦可使用。
-    </footer>
+
+    <p class="footer-note">&copy; {{ generated_at|date:"Y" }} 离线导出 · 无网络亦可安全使用</p>
 </div>
 <script>
 (function(){
   const RAW_ENTRIES = {{ entries_json|safe }};
-  const ENTRY_COUNT = {{ entry_count }};
-
   const supportsCrypto = !!(window.crypto && crypto.subtle && crypto.subtle.importKey);
   const unsupportedEl = document.getElementById('unsupported');
   const grid = document.getElementById('entryGrid');
   const destroyBtn = document.getElementById('destroyBtn');
+  const manualRefresh = document.getElementById('manualRefresh');
 
   if (!supportsCrypto) {
     if (unsupportedEl) {
@@ -249,13 +357,13 @@
     const card = document.createElement('article');
     card.className = 'card';
     card.innerHTML = `
-      <h2>${entry.name}</h2>
-      ${entry.group ? `<span class="badge">${entry.group}</span>` : ''}
+      <h3>${entry.name}</h3>
+      ${entry.group ? `<span class="tag">@${entry.group}</span>` : ''}
       <div class="code" data-role="code">000000</div>
-      <div class="meta">
-        <span data-role="countdown">准备中...</span>
-        <button class="btn-copy" type="button">复制</button>
-      </div>
+      <footer>
+        <div class="progress-ring" data-role="progress"><span>30s</span></div>
+        <button class="btn-primary btn-copy" type="button">复制</button>
+      </footer>
     `;
     return card;
   }
@@ -269,25 +377,24 @@
       entry,
       secretBytes,
       codeEl: card.querySelector('[data-role="code"]'),
-      countdownEl: card.querySelector('[data-role="countdown"]'),
+      progressEl: card.querySelector('[data-role="progress"]'),
       copyBtn: card.querySelector('button'),
     };
     card._data.copyBtn.addEventListener('click', () => {
-      navigator.clipboard?.writeText(card._data.codeEl.textContent.trim())
-        .then(() => {
-          card._data.copyBtn.textContent = '已复制';
-          card._data.copyBtn.disabled = true;
-          setTimeout(() => {
-            card._data.copyBtn.textContent = '复制';
-            card._data.copyBtn.disabled = false;
-          }, 1500);
-        })
-        .catch(() => {
-          card._data.copyBtn.textContent = '复制失败';
-          setTimeout(() => {
-            card._data.copyBtn.textContent = '复制';
-          }, 1500);
-        });
+      const code = card._data.codeEl.textContent.trim();
+      navigator.clipboard?.writeText(code).then(() => {
+        card._data.copyBtn.textContent = '已复制';
+        card._data.copyBtn.disabled = true;
+        setTimeout(() => {
+          card._data.copyBtn.textContent = '复制';
+          card._data.copyBtn.disabled = false;
+        }, 1500);
+      }).catch(() => {
+        card._data.copyBtn.textContent = '复制失败';
+        setTimeout(() => {
+          card._data.copyBtn.textContent = '复制';
+        }, 1500);
+      });
     });
     rendered.push(card);
   });
@@ -302,10 +409,11 @@
 
   function wipeCard(card) {
     card._data.codeEl.textContent = '——';
-    card._data.countdownEl.textContent = '已销毁';
+    card._data.progressEl.style.setProperty('--progress', 0);
+    card._data.progressEl.querySelector('span').textContent = '已销毁';
     card._data.copyBtn.disabled = true;
     card._data.copyBtn.textContent = '已禁用';
-    card.style.opacity = '0.5';
+    card.style.opacity = '0.45';
   }
 
   async function refreshAll(){
@@ -314,13 +422,15 @@
     }
     const epochSeconds = Math.floor(Date.now() / 1000);
     await Promise.all(rendered.map(async (card) => {
-      const { entry, secretBytes, codeEl, countdownEl } = card._data;
+      const { entry, secretBytes, codeEl, progressEl } = card._data;
       try {
         const { otp, remaining } = await calculateTOTP(secretBytes, entry.digits || 6, entry.period || 30, epochSeconds);
         codeEl.textContent = otp;
-        countdownEl.textContent = `剩余 ${remaining} 秒`;
+        const progress = 1 - (remaining / (entry.period || 30));
+        progressEl.style.setProperty('--progress', Math.max(0, Math.min(1, progress)) * 100);
+        progressEl.querySelector('span').textContent = `${remaining}s`;
       } catch (err) {
-        countdownEl.textContent = '生成失败';
+        progressEl.querySelector('span').textContent = '失败';
         console.error('Failed to generate TOTP', err);
       }
     }));
@@ -328,6 +438,8 @@
 
   refreshAll();
   const refreshTimer = setInterval(refreshAll, 1000);
+
+  manualRefresh?.addEventListener('click', refreshAll);
 
   destroyBtn?.addEventListener('click', () => {
     if (destroyed) {
@@ -342,10 +454,11 @@
     RAW_ENTRIES.splice(0, RAW_ENTRIES.length);
     rendered.forEach(wipeCard);
     if (grid) {
-      grid.innerHTML = '<div class="warning support" style="display:block;">已手动销毁离线数据，如需再次使用，请回到系统重新生成备份。</div>';
+      grid.innerHTML = '<div class="notice" style="color:#ef4444;background:rgba(254,226,226,0.9);border-color:rgba(248,113,113,0.5);">已手动销毁离线数据。如需再次查看，请回到系统重新生成备份。</div>';
     }
     destroyBtn.disabled = true;
     destroyBtn.textContent = '已销毁';
+    manualRefresh.disabled = true;
   });
 })();
 </script>
