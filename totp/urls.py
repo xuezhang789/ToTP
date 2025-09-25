@@ -12,6 +12,7 @@ urlpatterns = [
     path("restore/<int:pk>/", views.restore_entry, name="restore"),
     path("batch-import/", views.batch_import, name="batch_import"),
     path("export/", views.export_entries, name="export"),
+    path("export/offline/", views.export_offline_package, name="export_offline"),
     path(
         "share/one-time/<int:pk>/create/",
         views.create_one_time_link,

@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>离线验证码包</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+        body {
+            margin: 0;
+            font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #f1f5f9, #ffffff);
+            color: #0f172a;
+        }
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 2.5rem 1.5rem 3rem;
+        }
+        header {
+            margin-bottom: 2rem;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        header p {
+            margin: .35rem 0 0;
+            color: #475569;
+        }
+        .warning {
+            border-radius: 1rem;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            background: rgba(248, 250, 252, 0.9);
+            color: #0f172a;
+        }
+        .warning strong {
+            display: block;
+            margin-bottom: .5rem;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1.25rem;
+        }
+        .card {
+            border-radius: 1rem;
+            padding: 1.4rem;
+            position: relative;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(226, 232, 240, 0.6);
+        }
+        .card h2 {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: .25rem .75rem;
+            background: rgba(59, 130, 246, 0.15);
+            color: #1d4ed8;
+            font-size: .75rem;
+            margin-top: .5rem;
+        }
+        .code {
+            font-size: 2.4rem;
+            font-weight: 700;
+            letter-spacing: .3rem;
+            margin: 1.2rem 0 .6rem;
+            text-align: center;
+            color: #111827;
+        }
+        .meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: .85rem;
+            color: #64748b;
+        }
+        button {
+            border: none;
+            border-radius: .75rem;
+            padding: .55rem 1.1rem;
+            font-size: .85rem;
+            cursor: pointer;
+            transition: transform .15s ease, box-shadow .15s ease;
+        }
+        .btn-copy {
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            color: #fff;
+            box-shadow: 0 12px 24px rgba(37, 99, 235, 0.25);
+        }
+        .btn-copy:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 28px rgba(37, 99, 235, 0.3);
+        }
+        footer {
+            margin-top: 2.5rem;
+            text-align: center;
+            font-size: .8rem;
+            color: #94a3b8;
+        }
+        .support {
+            display: none;
+            border: 1px solid rgba(248, 113, 113, 0.35);
+            background: rgba(254, 226, 226, 0.9);
+            color: #991b1b;
+        }
+        @media (max-width: 600px) {
+            .code {
+                font-size: 1.9rem;
+                letter-spacing: .25rem;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>离线验证码包</h1>
+        <p>为 {{ owner.username }} 导出。生成时间：{{ generated_at|date:"Y-m-d H:i" }}</p>
+        <p>本页面完全离线运行，请妥善保管，避免在不安全的设备上使用。</p>
+    </header>
+    <section id="unsupported" class="warning support">
+        <strong>当前浏览器不支持离线计算验证码。</strong>
+        <span>请使用支持 Web Crypto API 的现代浏览器（Chrome、Firefox、Edge、Safari 等）。</span>
+    </section>
+    <section class="warning">
+        <strong>使用说明</strong>
+        <ul>
+            <li>验证码按 30 秒刷新一次，如需同步多个设备，请保证系统时间准确。</li>
+            <li>本离线包含全部密钥明文，使用完毕后请及时删除或安全销毁。</li>
+            <li>如需更新数据，请返回系统重新生成最新离线包。</li>
+        </ul>
+    </section>
+    <section id="entryGrid" class="grid" aria-live="polite"></section>
+    <footer>
+        &copy; {{ generated_at|date:"Y" }} 离线导出 · 不再连接网络亦可使用。
+    </footer>
+</div>
+<script>
+(function(){
+  const RAW_ENTRIES = {{ entries_json|safe }};
+  const ENTRY_COUNT = {{ entry_count }};
+
+  const supportsCrypto = !!(window.crypto && crypto.subtle && crypto.subtle.importKey);
+  const unsupportedEl = document.getElementById('unsupported');
+  const grid = document.getElementById('entryGrid');
+
+  if (!supportsCrypto) {
+    if (unsupportedEl) {
+      unsupportedEl.style.display = 'block';
+    }
+    if (grid) {
+      grid.innerHTML = '<p>浏览器不支持必要的加密接口，无法生成验证码。</p>';
+    }
+    return;
+  }
+
+  const base32Map = {};
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.split('').forEach((ch, idx) => {
+    base32Map[ch] = idx;
+  });
+
+  function decodeBase32(str) {
+    const clean = (str || '').toUpperCase().replace(/=+$/, '');
+    const bytes = [];
+    let bits = 0;
+    let value = 0;
+    for (let i = 0; i < clean.length; i += 1) {
+      const char = clean[i];
+      if (!(char in base32Map)) {
+        continue;
+      }
+      value = (value << 5) | base32Map[char];
+      bits += 5;
+      if (bits >= 8) {
+        bytes.push((value >>> (bits - 8)) & 0xff);
+        bits -= 8;
+      }
+    }
+    return new Uint8Array(bytes);
+  }
+
+  async function calculateTOTP(secretBytes, digits, period, epochSeconds){
+    const counter = Math.floor(epochSeconds / period);
+    const counterBytes = new ArrayBuffer(8);
+    const view = new DataView(counterBytes);
+    const high = Math.floor(counter / 0x100000000);
+    const low = counter & 0xffffffff;
+    view.setUint32(0, high);
+    view.setUint32(4, low);
+
+    const key = await crypto.subtle.importKey(
+      'raw',
+      secretBytes,
+      { name: 'HMAC', hash: 'SHA-1' },
+      false,
+      ['sign']
+    );
+    const signature = await crypto.subtle.sign('HMAC', key, counterBytes);
+    const hmac = new Uint8Array(signature);
+    const offset = hmac[hmac.length - 1] & 0x0f;
+    const binary = ((hmac[offset] & 0x7f) << 24)
+      | ((hmac[offset + 1] & 0xff) << 16)
+      | ((hmac[offset + 2] & 0xff) << 8)
+      | (hmac[offset + 3] & 0xff);
+    const otp = String(binary % 10 ** digits).padStart(digits, '0');
+    const remaining = period - (epochSeconds % period);
+    return { otp, remaining };
+  }
+
+  function createCard(entry){
+    const card = document.createElement('article');
+    card.className = 'card';
+    card.innerHTML = `
+      <h2>${entry.name}</h2>
+      ${entry.group ? `<span class="badge">${entry.group}</span>` : ''}
+      <div class="code" data-role="code">000000</div>
+      <div class="meta">
+        <span data-role="countdown">准备中...</span>
+        <button class="btn-copy" type="button">复制</button>
+      </div>
+    `;
+    return card;
+  }
+
+  const rendered = [];
+  RAW_ENTRIES.forEach((entry) => {
+    const secretBytes = decodeBase32(entry.secret);
+    const card = createCard(entry);
+    card._data = {
+      entry,
+      secretBytes,
+      codeEl: card.querySelector('[data-role="code"]'),
+      countdownEl: card.querySelector('[data-role="countdown"]'),
+      copyBtn: card.querySelector('button'),
+    };
+    card._data.copyBtn.addEventListener('click', () => {
+      navigator.clipboard?.writeText(card._data.codeEl.textContent.trim())
+        .then(() => {
+          card._data.copyBtn.textContent = '已复制';
+          card._data.copyBtn.disabled = true;
+          setTimeout(() => {
+            card._data.copyBtn.textContent = '复制';
+            card._data.copyBtn.disabled = false;
+          }, 1500);
+        })
+        .catch(() => {
+          card._data.copyBtn.textContent = '复制失败';
+          setTimeout(() => {
+            card._data.copyBtn.textContent = '复制';
+          }, 1500);
+        });
+    });
+    rendered.push(card);
+  });
+
+  if (grid) {
+    if (rendered.length === 0) {
+      grid.innerHTML = '<p>没有可显示的密钥。</p>';
+    } else {
+      rendered.forEach((node) => grid.appendChild(node));
+    }
+  }
+
+  async function refreshAll(){
+    const epochSeconds = Math.floor(Date.now() / 1000);
+    await Promise.all(rendered.map(async (card) => {
+      const { entry, secretBytes, codeEl, countdownEl } = card._data;
+      try {
+        const { otp, remaining } = await calculateTOTP(secretBytes, entry.digits || 6, entry.period || 30, epochSeconds);
+        codeEl.textContent = otp;
+        countdownEl.textContent = `剩余 ${remaining} 秒`;
+      } catch (err) {
+        countdownEl.textContent = '生成失败';
+        console.error('Failed to generate TOTP', err);
+      }
+    }));
+  }
+
+  refreshAll();
+  setInterval(refreshAll, 1000);
+})();
+</script>
+</body>
+</html>

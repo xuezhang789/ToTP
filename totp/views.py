@@ -1,4 +1,5 @@
 import hashlib
+import json
 import secrets
 from datetime import timedelta
 from urllib.parse import quote
@@ -336,6 +337,52 @@ def export_entries(request):
     quoted = quote(filename)
 
     response = HttpResponse(content, content_type="text/plain; charset=utf-8")
+    response["Content-Disposition"] = (
+        f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
+    )
+    return response
+
+
+@login_required
+def export_offline_package(request):
+    """生成离线只读 HTML，便于无网络环境查看验证码。"""
+
+    queryset = (
+        TOTPEntry.objects.filter(user=request.user, is_deleted=False)
+        .select_related("group")
+        .order_by("name")
+    )
+
+    if not queryset.exists():
+        messages.info(request, "当前没有可用的密钥，无法生成离线包")
+        return redirect("totp:list")
+
+    entries = []
+    for entry in queryset:
+        secret = decrypt_str(entry.secret_encrypted)
+        entries.append(
+            {
+                "name": entry.name,
+                "secret": secret,
+                "group": entry.group.name if entry.group else "",
+                "period": 30,
+                "digits": 6,
+            }
+        )
+
+    generated_at = timezone.now()
+    filename = generated_at.strftime("totp-offline-%Y%m%d-%H%M%S.html")
+    quoted = quote(filename)
+
+    context = {
+        "generated_at": generated_at,
+        "owner": request.user,
+        "entries_json": json.dumps(entries, ensure_ascii=False),
+        "entry_count": len(entries),
+    }
+
+    response = render(request, "totp/offline_package.html", context)
+    response["Content-Type"] = "text/html; charset=utf-8"
     response["Content-Disposition"] = (
         f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
     )
