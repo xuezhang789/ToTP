@@ -134,6 +134,73 @@
 
 </div>
 
+<div class="modal fade" id="shareLinkModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">生成一次性访问链接</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <div id="shareLinkAlert" class="alert alert-danger d-none" role="alert"></div>
+                <div class="mb-3">
+                    <label class="form-label">当前密钥</label>
+                    <div class="form-control-plaintext fw-semibold" id="shareLinkEntryLabel">--</div>
+                </div>
+                <form id="shareLinkForm" class="needs-validation" novalidate>
+                    <input type="hidden" name="entry_id" id="shareLinkEntryId">
+                    <div class="row g-3">
+                        <div class="col-sm-6">
+                            <label class="form-label" for="shareLinkDuration">有效期</label>
+                            <select class="form-select" id="shareLinkDuration" name="duration">
+                                <option value="5">5 分钟</option>
+                                <option value="10" selected>10 分钟</option>
+                                <option value="30">30 分钟</option>
+                                <option value="60">60 分钟</option>
+                            </select>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="shareLinkMaxViews">可查看次数</label>
+                            <select class="form-select" id="shareLinkMaxViews" name="max_views">
+                                <option value="1">1 次</option>
+                                <option value="2">2 次</option>
+                                <option value="3" selected>3 次</option>
+                                <option value="4">4 次</option>
+                                <option value="5">5 次</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="alert alert-info mt-3 mb-0">
+                        <div class="small">链接为只读访问，查看后立刻计数并可随时失效。请仅共享给可信任的对象。</div>
+                    </div>
+                </form>
+                <div id="shareLinkResult" class="d-none mt-3">
+                    <div class="card border-success">
+                        <div class="card-body">
+                            <p class="text-success fw-semibold mb-2">
+                                链接已生成，请尽快发送给接收者。
+                            </p>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="shareLinkUrl" readonly>
+                                <button class="btn btn-outline-success" id="shareLinkCopyBtn" type="button">复制</button>
+                            </div>
+                            <ul class="list-unstyled small text-muted mt-3 mb-0" id="shareLinkSummary"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-primary" id="shareLinkSubmitBtn">
+                    <span class="spinner-border spinner-border-sm me-2 d-none" id="shareLinkSpinner" role="status" aria-hidden="true"></span>
+                    生成链接
+                </button>
+                <button type="button" class="btn btn-outline-danger d-none" id="shareLinkInvalidateBtn">立即失效</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% include 'totp/add_modal.html' %}
 {% include 'totp/import_modal.html' %}
 {% include 'totp/add_group_modal.html' %}
@@ -401,6 +468,211 @@
       }
     });
   }
+
+  const shareModalEl = document.getElementById('shareLinkModal');
+  const shareLinkEntryLabel = document.getElementById('shareLinkEntryLabel');
+  const shareLinkEntryId = document.getElementById('shareLinkEntryId');
+  const shareLinkDuration = document.getElementById('shareLinkDuration');
+  const shareLinkMaxViews = document.getElementById('shareLinkMaxViews');
+  const shareLinkResult = document.getElementById('shareLinkResult');
+  const shareLinkAlert = document.getElementById('shareLinkAlert');
+  const shareLinkUrl = document.getElementById('shareLinkUrl');
+  const shareLinkCopyBtn = document.getElementById('shareLinkCopyBtn');
+  const shareLinkSubmitBtn = document.getElementById('shareLinkSubmitBtn');
+  const shareLinkSpinner = document.getElementById('shareLinkSpinner');
+  const shareLinkSummary = document.getElementById('shareLinkSummary');
+  const shareLinkInvalidateBtn = document.getElementById('shareLinkInvalidateBtn');
+
+  function resetShareModal() {
+    if (shareLinkAlert) {
+      shareLinkAlert.classList.add('d-none');
+      shareLinkAlert.classList.remove('alert-success');
+      shareLinkAlert.classList.add('alert-danger');
+      shareLinkAlert.textContent = '';
+    }
+    shareLinkResult?.classList.add('d-none');
+    if (shareLinkUrl) {
+      shareLinkUrl.value = '';
+    }
+    shareLinkSummary?.replaceChildren();
+    if (shareLinkInvalidateBtn) {
+      shareLinkInvalidateBtn.classList.add('d-none');
+      shareLinkInvalidateBtn.dataset.linkId = '';
+      shareLinkInvalidateBtn.disabled = false;
+    }
+    if (shareLinkDuration) {
+      shareLinkDuration.value = '10';
+    }
+    if (shareLinkMaxViews) {
+      shareLinkMaxViews.value = '3';
+    }
+    if (shareLinkSpinner) {
+      shareLinkSpinner.classList.add('d-none');
+    }
+    if (shareLinkSubmitBtn) {
+      shareLinkSubmitBtn.disabled = false;
+    }
+  }
+
+  function setShareSubmitting(flag) {
+    if (!shareLinkSubmitBtn) {
+      return;
+    }
+    shareLinkSubmitBtn.disabled = flag;
+    if (shareLinkSpinner) {
+      shareLinkSpinner.classList.toggle('d-none', !flag);
+    }
+  }
+
+  function renderShareSummary(payload) {
+    if (!shareLinkSummary) {
+      return;
+    }
+    shareLinkSummary.replaceChildren();
+    if (!payload) {
+      return;
+    }
+    if (payload.expires_at) {
+      const expires = new Date(payload.expires_at);
+      const li = document.createElement('li');
+      li.textContent = `有效期至：${expires.toLocaleString()}`;
+      shareLinkSummary.appendChild(li);
+    }
+    if (typeof payload.max_views !== 'undefined') {
+      const remaining = payload.remaining_views ?? Math.max(0, payload.max_views - 1);
+      const li = document.createElement('li');
+      li.textContent = `最多查看 ${payload.max_views} 次，目前还可查看 ${remaining} 次。`;
+      shareLinkSummary.appendChild(li);
+    }
+  }
+
+  tbody.addEventListener('click', (event) => {
+    const trigger = event.target.closest('.share-link-btn');
+    if (!trigger || !shareModalEl || !shareLinkEntryId || !shareLinkEntryLabel) {
+      return;
+    }
+    const entryId = trigger.dataset.entryId;
+    const entryName = trigger.dataset.entryName || `#${entryId}`;
+    shareLinkEntryId.value = entryId;
+    shareLinkEntryLabel.textContent = entryName;
+    resetShareModal();
+    if (window.bootstrap && typeof window.bootstrap.Modal === 'function') {
+      window.bootstrap.Modal.getOrCreateInstance(shareModalEl).show();
+    }
+  });
+
+  shareModalEl?.addEventListener('hidden.bs.modal', () => {
+    if (shareLinkEntryId) {
+      shareLinkEntryId.value = '';
+    }
+    resetShareModal();
+  });
+
+  shareLinkSubmitBtn?.addEventListener('click', () => {
+    if (!shareLinkEntryId?.value) {
+      return;
+    }
+    shareLinkAlert?.classList.add('d-none');
+    setShareSubmitting(true);
+    const formData = new FormData();
+    formData.append('duration', shareLinkDuration?.value || '10');
+    formData.append('max_views', shareLinkMaxViews?.value || '3');
+
+    const createUrl = `{% url 'totp:one_time_create' 0 %}`.replace('/0/', `/${shareLinkEntryId.value}/`);
+
+    fetch(createUrl, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCsrfToken(),
+        'X-Requested-With': 'fetch',
+      },
+      body: formData,
+    })
+      .then(async (resp) => {
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) {
+          const message = data.message || '生成链接失败，请稍后重试。';
+          throw new Error(message);
+        }
+        if (shareLinkUrl) {
+          shareLinkUrl.value = data.url;
+        }
+        renderShareSummary(data);
+        shareLinkResult?.classList.remove('d-none');
+        if (shareLinkInvalidateBtn) {
+          shareLinkInvalidateBtn.classList.remove('d-none');
+          shareLinkInvalidateBtn.dataset.linkId = String(data.id);
+        }
+      })
+      .catch((err) => {
+        if (shareLinkAlert) {
+          shareLinkAlert.textContent = err.message;
+          shareLinkAlert.classList.remove('d-none');
+        }
+      })
+      .finally(() => setShareSubmitting(false));
+  });
+
+  shareLinkCopyBtn?.addEventListener('click', () => {
+    if (!shareLinkUrl?.value) {
+      return;
+    }
+    copyToClipboard(shareLinkUrl.value)
+      .then(() => {
+        shareLinkCopyBtn.classList.remove('btn-outline-success');
+        shareLinkCopyBtn.classList.add('btn-success');
+        shareLinkCopyBtn.textContent = '已复制';
+        setTimeout(() => {
+          shareLinkCopyBtn.classList.remove('btn-success');
+          shareLinkCopyBtn.classList.add('btn-outline-success');
+          shareLinkCopyBtn.textContent = '复制';
+        }, 1600);
+      })
+      .catch(() => {
+        if (shareLinkAlert) {
+          shareLinkAlert.textContent = '复制失败，请手动复制链接。';
+          shareLinkAlert.classList.remove('d-none');
+        }
+      });
+  });
+
+  shareLinkInvalidateBtn?.addEventListener('click', () => {
+    const linkId = shareLinkInvalidateBtn.dataset.linkId;
+    if (!linkId) {
+      return;
+    }
+    const invalidateUrl = `{% url 'totp:one_time_invalidate' 0 %}`.replace('/0/', `/${linkId}/`);
+    shareLinkInvalidateBtn.disabled = true;
+    fetch(invalidateUrl, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCsrfToken(),
+        'X-Requested-With': 'fetch',
+      },
+    })
+      .then((resp) => {
+        if (!resp.ok) {
+          throw new Error('未能立即失效，请稍后再试。');
+        }
+        if (shareLinkAlert) {
+          shareLinkAlert.classList.remove('alert-danger');
+          shareLinkAlert.classList.add('alert-success');
+          shareLinkAlert.textContent = '链接已失效。';
+          shareLinkAlert.classList.remove('d-none');
+        }
+        shareLinkInvalidateBtn.classList.add('d-none');
+        shareLinkInvalidateBtn.dataset.linkId = '';
+      })
+      .catch((err) => {
+        if (shareLinkAlert) {
+          shareLinkAlert.textContent = err.message;
+          shareLinkAlert.classList.remove('d-none');
+        }
+      })
+      .finally(() => {
+        shareLinkInvalidateBtn.disabled = false;
+      });
+  });
 
   const params = new URLSearchParams(window.location.search);
   const modal = params.get('modal');

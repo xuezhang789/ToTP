@@ -1,13 +1,27 @@
+import hashlib
+import secrets
+from datetime import timedelta
 from urllib.parse import quote
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, F, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
-from .models import Group, TOTPEntry
-from .utils import decrypt_str, encrypt_str, normalize_google_secret, parse_otpauth
+from django.views.decorators.http import require_POST
+
+from .models import Group, OneTimeLink, TOTPEntry
+from .utils import (
+    decrypt_str,
+    encrypt_str,
+    normalize_google_secret,
+    parse_otpauth,
+    totp_code_base32,
+)
 
 
 def dashboard(request):
@@ -353,3 +367,158 @@ def update_entry_group(request, pk: int):
             "group_name": group.name if group else "未分组",
         }
     )
+
+
+@login_required
+@require_POST
+def create_one_time_link(request, pk: int):
+    """为指定密钥生成一次性只读访问链接。"""
+
+    entry = get_object_or_404(TOTPEntry, pk=pk, user=request.user, is_deleted=False)
+
+    try:
+        duration_minutes = int(request.POST.get("duration") or 10)
+    except (TypeError, ValueError):
+        duration_minutes = 10
+    duration_minutes = max(1, min(duration_minutes, 60))
+
+    try:
+        max_views = int(request.POST.get("max_views") or 3)
+    except (TypeError, ValueError):
+        max_views = 3
+    max_views = max(1, min(max_views, 5))
+
+    now = timezone.now()
+    active_links = OneTimeLink.active.filter(entry=entry).count()
+    if active_links >= 5:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "link_limit_reached",
+                "message": "已有较多有效链接，请先失效旧链接后再试。",
+            },
+            status=400,
+        )
+
+    expires_at = now + timedelta(minutes=duration_minutes)
+
+    token = None
+    token_hash = None
+    for _ in range(6):
+        candidate = secrets.token_urlsafe(32)
+        candidate_hash = hashlib.sha256(candidate.encode()).hexdigest()
+        if not OneTimeLink.objects.filter(token_hash=candidate_hash).exists():
+            token = candidate
+            token_hash = candidate_hash
+            break
+    if not token:
+        return JsonResponse(
+            {"ok": False, "error": "token_generation_failed"}, status=500
+        )
+
+    link = OneTimeLink.objects.create(
+        entry=entry,
+        created_by=request.user,
+        token_hash=token_hash,
+        expires_at=expires_at,
+        max_views=max_views,
+    )
+
+    url = request.build_absolute_uri(reverse("totp:one_time_view", args=[token]))
+    return JsonResponse(
+        {
+            "ok": True,
+            "id": link.id,
+            "url": url,
+            "expires_at": expires_at.isoformat(),
+            "expires_at_timestamp": int(expires_at.timestamp()),
+            "max_views": link.max_views,
+            "remaining_views": link.max_views - link.view_count,
+        }
+    )
+
+
+@login_required
+@require_POST
+def invalidate_one_time_link(request, pk: int):
+    """立即失效指定的一次性访问链接。"""
+
+    link = get_object_or_404(OneTimeLink, pk=pk, created_by=request.user)
+    link.invalidate()
+    return JsonResponse({"ok": True})
+
+
+def one_time_view(request, token: str):
+    """展示一次性访问链接的验证码。"""
+
+    token = (token or "").strip()
+    if not token:
+        return _render_one_time_invalid(request, reason="not_found")
+
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    try:
+        with transaction.atomic():
+            link = (
+                OneTimeLink.objects.select_for_update()
+                .select_related("entry", "entry__user", "entry__group")
+                .get(token_hash=token_hash)
+            )
+
+            if not link.is_active:
+                reason = _resolve_link_inactive_reason(link)
+                return _render_one_time_invalid(request, reason=reason)
+
+            try:
+                link.mark_view(request)
+            except ValueError:
+                reason = _resolve_link_inactive_reason(link)
+                return _render_one_time_invalid(request, reason=reason)
+
+    except OneTimeLink.DoesNotExist:
+        return _render_one_time_invalid(request, reason="not_found")
+
+    entry = link.entry
+    secret = decrypt_str(entry.secret_encrypted)
+    code, remaining = totp_code_base32(secret, digits=6, period=30)
+
+    context = {
+        "link": link,
+        "entry": entry,
+        "code": code,
+        "remaining": remaining,
+        "owner": link.created_by,
+        "remaining_views": max(0, link.max_views - link.view_count),
+        "expires_at": link.expires_at,
+    }
+    return render(request, "totp/one_time_link.html", context)
+
+
+def _render_one_time_invalid(request, reason: str, status: int | None = None):
+    status_map = {
+        "not_found": 404,
+        "deleted": 410,
+        "expired": 410,
+        "used": 410,
+        "revoked": 410,
+    }
+    ctx = {"reason": reason}
+    return render(
+        request,
+        "totp/one_time_link.html",
+        ctx,
+        status=status or status_map.get(reason, 404),
+    )
+
+
+def _resolve_link_inactive_reason(link: OneTimeLink) -> str:
+    now = timezone.now()
+    if link.entry.is_deleted:
+        return "deleted"
+    if link.revoked_at is not None:
+        return "revoked"
+    if link.expires_at <= now:
+        return "expired"
+    if link.view_count >= link.max_views:
+        return "used"
+    return "revoked"

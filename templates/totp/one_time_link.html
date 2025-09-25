@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% block title %}一次性验证码查看{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+        {% if link %}
+        <div class="card shadow-sm border-0 rounded-4">
+            <div class="card-body p-4">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div>
+                        <div class="text-muted small">来自 {{ owner.username }}</div>
+                        <h1 class="h4 mb-0">{{ entry.name }}</h1>
+                        {% if entry.group %}
+                        <span class="badge rounded-pill text-bg-secondary mt-2">{{ entry.group.name }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="text-muted text-end small">
+                        <div>链接将于</div>
+                        <div>{{ expires_at|date:"Y-m-d H:i" }}</div>
+                        <div>自动失效</div>
+                    </div>
+                </div>
+                <div class="bg-light rounded-4 p-4 text-center mb-3">
+                    <div class="text-muted small">当前验证码</div>
+                    <div class="display-5 fw-bold" id="oneTimeCode">{{ code }}</div>
+                    <div class="text-muted" id="oneTimeCountdown">剩余 {{ remaining }} 秒过期</div>
+                    <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
+                        <button class="btn btn-primary" id="copyOneTimeCode" type="button">复制验证码</button>
+                        <button class="btn btn-outline-secondary" id="reloadLinkBtn" type="button">刷新此页面</button>
+                    </div>
+                </div>
+                <div class="small text-muted">
+                    <div>此页面为一次性访问，请尽快在目标服务中输入验证码。</div>
+                    <div>剩余可查看次数：{{ remaining_views }}；如需新的验证码，请联系分享者重新生成。</div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="card shadow-sm border-0 rounded-4 border-danger-subtle">
+            <div class="card-body p-4 text-center">
+                <div class="text-danger fs-1 mb-3"><i class="bi bi-exclamation-triangle"></i></div>
+                {% if reason == 'expired' %}
+                <h2 class="h4">链接已过期</h2>
+                <p class="text-muted">该一次性访问链接已超过有效期，请联系分享者重新生成。</p>
+                {% elif reason == 'used' %}
+                <h2 class="h4">链接已被使用</h2>
+                <p class="text-muted">可查看次数已用尽。若仍需验证码，请请求新的链接。</p>
+                {% elif reason == 'deleted' %}
+                <h2 class="h4">密钥不可用</h2>
+                <p class="text-muted">关联的密钥已被删除或移入回收站。</p>
+                {% elif reason == 'revoked' %}
+                <h2 class="h4">链接已被撤销</h2>
+                <p class="text-muted">分享者已手动失效此链接，请联系对方获取新的链接。</p>
+                {% else %}
+                <h2 class="h4">链接不可用</h2>
+                <p class="text-muted">无法找到对应的一次性访问链接，或已失效。</p>
+                {% endif %}
+                <a class="btn btn-primary mt-3" href="{% url 'dashboard' %}">返回首页</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if link %}
+<script>
+(() => {
+  const code = document.getElementById('oneTimeCode');
+  const countdownEl = document.getElementById('oneTimeCountdown');
+  const copyBtn = document.getElementById('copyOneTimeCode');
+  const reloadBtn = document.getElementById('reloadLinkBtn');
+  let remaining = Number({{ remaining|default:0 }});
+
+  function updateCountdown() {
+    remaining = Math.max(0, remaining - 1);
+    if (countdownEl) {
+      countdownEl.textContent = `剩余 ${remaining} 秒过期`;
+    }
+  }
+
+  setInterval(updateCountdown, 1000);
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    const temp = document.createElement('textarea');
+    temp.value = text;
+    temp.style.position = 'fixed';
+    temp.style.opacity = '0';
+    document.body.appendChild(temp);
+    temp.focus({ preventScroll: true });
+    temp.select();
+    try {
+      document.execCommand('copy');
+    } finally {
+      document.body.removeChild(temp);
+    }
+    return Promise.resolve();
+  }
+
+  copyBtn?.addEventListener('click', () => {
+    if (!code) {
+      return;
+    }
+    copyToClipboard(code.textContent.trim())
+      .then(() => {
+        copyBtn.classList.remove('btn-primary');
+        copyBtn.classList.add('btn-success');
+        copyBtn.textContent = '已复制';
+        setTimeout(() => {
+          copyBtn.classList.remove('btn-success');
+          copyBtn.classList.add('btn-primary');
+          copyBtn.textContent = '复制验证码';
+        }, 1500);
+      });
+  });
+
+  reloadBtn?.addEventListener('click', () => {
+    window.location.reload();
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

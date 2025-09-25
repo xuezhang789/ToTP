@@ -5,6 +5,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
+
 User = settings.AUTH_USER_MODEL
 
 class Group(models.Model):
@@ -104,3 +105,104 @@ class TOTPEntry(models.Model):
             return 0
         # 向上取整，避免出现“还有 0 天”但实际上还有几个小时的情况。
         return (remaining_seconds + 24 * 60 * 60 - 1) // (24 * 60 * 60)
+
+
+class ActiveOneTimeLinkManager(models.Manager):
+    """仅返回仍然有效的一次性访问链接。"""
+
+    def get_queryset(self):
+        now = timezone.now()
+        return (
+            super()
+            .get_queryset()
+            .filter(
+                expires_at__gt=now,
+                view_count__lt=models.F("max_views"),
+                entry__is_deleted=False,
+                revoked_at__isnull=True,
+            )
+        )
+
+
+class OneTimeLink(models.Model):
+    """供临时共享验证码使用的一次性访问链接。"""
+
+    entry = models.ForeignKey(
+        TOTPEntry, on_delete=models.CASCADE, related_name="one_time_links"
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="created_one_time_links"
+    )
+    token_hash = models.CharField(max_length=128, unique=True)
+    expires_at = models.DateTimeField(db_index=True)
+    max_views = models.PositiveSmallIntegerField(default=1)
+    view_count = models.PositiveSmallIntegerField(default=0)
+    first_viewed_at = models.DateTimeField(null=True, blank=True)
+    last_viewed_at = models.DateTimeField(null=True, blank=True)
+    last_view_ip = models.GenericIPAddressField(null=True, blank=True)
+    last_view_user_agent = models.CharField(max_length=256, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = models.Manager()
+    active = ActiveOneTimeLinkManager()
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["entry", "expires_at"]),
+            models.Index(fields=["created_by", "created_at"]),
+        ]
+
+    @property
+    def is_active(self) -> bool:
+        return (
+            self.expires_at > timezone.now()
+            and self.view_count < self.max_views
+            and not self.entry.is_deleted
+            and self.revoked_at is None
+        )
+
+    def mark_view(self, request=None):
+        now = timezone.now()
+        if (
+            self.view_count >= self.max_views
+            or self.expires_at <= now
+            or self.revoked_at is not None
+        ):
+            raise ValueError("link_expired")
+
+        self.view_count += 1
+        if self.first_viewed_at is None:
+            self.first_viewed_at = now
+        self.last_viewed_at = now
+        if request is not None:
+            self.last_view_ip = _get_client_ip(request)
+            ua = request.META.get("HTTP_USER_AGENT", "")
+            self.last_view_user_agent = ua[:255]
+        self.save(
+            update_fields=[
+                "view_count",
+                "first_viewed_at",
+                "last_viewed_at",
+                "last_view_ip",
+                "last_view_user_agent",
+                "updated_at",
+            ]
+        )
+
+    def invalidate(self):
+        """立即设置为失效。"""
+
+        now = timezone.now()
+        self.expires_at = now
+        self.revoked_at = now
+        self.save(update_fields=["expires_at", "revoked_at", "updated_at"])
+
+
+def _get_client_ip(request):
+    forward = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forward:
+        return forward.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR") or None

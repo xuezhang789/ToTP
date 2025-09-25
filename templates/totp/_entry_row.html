@@ -21,9 +21,16 @@
         <small class="text-muted remain">--s</small>
     </td>
     <td class="text-nowrap">
-        <a class="btn btn-sm btn-outline-danger" href="{% url 'totp:delete' e.id %}"
-           onclick="return confirm('确定删除？')" title="删除">
-            <i class="bi bi-trash"></i>
-        </a>
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-sm btn-outline-primary share-link-btn" type="button"
+                    data-entry-id="{{ e.id }}" data-entry-name="{{ e.name }}"
+                    title="生成临时访问链接">
+                <i class="bi bi-link-45deg"></i>
+            </button>
+            <a class="btn btn-sm btn-outline-danger" href="{% url 'totp:delete' e.id %}"
+               onclick="return confirm('确定删除？')" title="删除">
+                <i class="bi bi-trash"></i>
+            </a>
+        </div>
     </td>
 </tr>
