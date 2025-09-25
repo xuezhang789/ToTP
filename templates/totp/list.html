@@ -24,10 +24,10 @@
                 <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importModal"
                         type="button">批量导入
                 </button>
-                <a class="btn btn-outline-secondary" href="{% url 'totp:export' %}">
+                <a class="btn btn-outline-secondary" href="{% url 'totp:export' %}" id="exportPlainBtn">
                     导出密钥
                 </a>
-                <a class="btn btn-outline-success" href="{% url 'totp:export_offline' %}">
+                <a class="btn btn-outline-success" href="{% url 'totp:export_offline' %}" id="exportOfflineBtn">
                     离线包
                 </a>
                 <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#addGroupModal"
@@ -485,6 +485,23 @@
   const shareLinkSpinner = document.getElementById('shareLinkSpinner');
   const shareLinkSummary = document.getElementById('shareLinkSummary');
   const shareLinkInvalidateBtn = document.getElementById('shareLinkInvalidateBtn');
+
+  const exportPlainBtn = document.getElementById('exportPlainBtn');
+  const exportOfflineBtn = document.getElementById('exportOfflineBtn');
+
+  exportPlainBtn?.addEventListener('click', (event) => {
+    const ok = window.confirm('导出文件会包含所有密钥明文，请确认当前环境安全，是否继续？');
+    if (!ok) {
+      event.preventDefault();
+    }
+  });
+
+  exportOfflineBtn?.addEventListener('click', (event) => {
+    const ok = window.confirm('离线包会在本地保存全部密钥明文，使用完毕后请及时销毁文件。确认生成吗？');
+    if (!ok) {
+      event.preventDefault();
+    }
+  });
 
   function resetShareModal() {
     if (shareLinkAlert) {
