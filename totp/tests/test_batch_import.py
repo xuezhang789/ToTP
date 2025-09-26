@@ -1,3 +1,5 @@
+import json
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -13,24 +15,50 @@ class BatchImportTests(TestCase):
         )
         self.client.force_login(self.user)
 
+    def _preview_manual(self, text: str):
+        url = reverse("totp:batch_import_preview")
+        return self.client.post(
+            url,
+            {"mode": "manual", "manual_text": text},
+            follow=False,
+        )
+
+    def _apply_entries(self, entries):
+        url = reverse("totp:batch_import_apply")
+        return self.client.post(
+            url,
+            data=json.dumps({"entries": entries}),
+            content_type="application/json",
+            follow=False,
+        )
+
     def test_import_otpauth_uri(self):
         secret = "JBSWY3DPEHPK3PXP"
         uri = f"otpauth://totp/Example:alice?secret={secret}"
 
-        response = self.client.post(
-            reverse("totp:batch_import"),
-            {"bulk_text": uri},
-            follow=True,
-        )
+        preview = self._preview_manual(uri)
+        self.assertEqual(preview.status_code, 200)
+        payload = preview.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(len(payload["entries"]), 1)
 
-        self.assertEqual(response.status_code, 200)
+        entries = [
+            {
+                "name": item["name"],
+                "group": item["group"],
+                "secret": item["secret"],
+                "source": item["source"],
+            }
+            for item in payload["entries"]
+        ]
+
+        apply_resp = self._apply_entries(entries)
+        self.assertEqual(apply_resp.status_code, 200)
+        self.assertTrue(apply_resp.json()["ok"])
+
         entry = TOTPEntry.objects.get(user=self.user)
         self.assertEqual(entry.name, "Example:alice")
         self.assertEqual(decrypt_str(entry.secret_encrypted), secret)
-
-        messages = list(response.context["messages"])
-        self.assertTrue(messages)
-        self.assertIn("成功导入 1 条", str(messages[0]))
 
     def test_import_text_with_groups_and_invalid_lines(self):
         existing_secret = "JBSWY3DPEHPK3PXP"
@@ -49,27 +77,36 @@ class BatchImportTests(TestCase):
             ]
         )
 
-        response = self.client.post(
-            reverse("totp:batch_import"),
-            {"bulk_text": payload},
-            follow=True,
-        )
+        preview = self._preview_manual(payload)
+        self.assertEqual(preview.status_code, 200)
+        data = preview.json()
+        self.assertTrue(data["ok"])
+        warnings = data.get("warnings") or []
+        # 既提示重复条目，也提示无效密钥
+        self.assertTrue(any("重复" in text for text in warnings))
+        self.assertTrue(any("无效" in text for text in warnings))
 
-        self.assertEqual(response.status_code, 200)
+        entries = [
+            {
+                "name": item["name"],
+                "group": item["group"],
+                "secret": item["secret"],
+                "source": item["source"],
+            }
+            for item in data["entries"]
+        ]
 
-        entries = TOTPEntry.objects.filter(user=self.user)
-        self.assertEqual(entries.count(), 2)
-        self.assertTrue(entries.filter(name="Existing").exists())
-        new_entry = entries.get(name="New Entry")
+        apply_resp = self._apply_entries(entries)
+        self.assertEqual(apply_resp.status_code, 200)
+        self.assertTrue(apply_resp.json()["ok"])
+
+        entries_qs = TOTPEntry.objects.filter(user=self.user)
+        self.assertEqual(entries_qs.count(), 2)
+        self.assertTrue(entries_qs.filter(name="Existing").exists())
+        new_entry = entries_qs.get(name="New Entry")
         self.assertIsNotNone(new_entry.group)
         self.assertEqual(new_entry.group.name, "Team")
         self.assertEqual(decrypt_str(new_entry.secret_encrypted), "JBSWY3DPEHPK3PXQ")
 
         groups = Group.objects.filter(user=self.user, name="Team")
         self.assertEqual(groups.count(), 1)
-
-        messages = list(response.context["messages"])
-        self.assertTrue(messages)
-        text = str(messages[0])
-        self.assertIn("成功导入 1 条", text)
-        self.assertIn("1 条无效密钥", text)

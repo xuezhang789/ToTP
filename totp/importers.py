@@ -53,7 +53,7 @@ def parse_manual_text(text: str) -> ParseResult:
         else:
             parts = raw.split("|")
             if len(parts) < 2:
-                errors.append(f"第 {idx} 行格式无效：需要包含密钥和名称")
+                warnings.append(f"第 {idx} 行格式无效，已忽略该行")
                 continue
             secret = parts[0].strip()
             name = parts[1].strip()
@@ -202,12 +202,12 @@ def _append_entry(
     group = (group or "").strip()
 
     if not secret:
-        errors.append(f"第 {position} 项缺少密钥，已忽略")
+        warnings.append(f"第 {position} 项缺少密钥，已忽略")
         return
 
     normalized = normalize_google_secret(secret)
     if not normalized:
-        errors.append(f"第 {position} 项密钥无效，已忽略")
+        warnings.append(f"第 {position} 项密钥无效，已忽略")
         return
 
     if not name:

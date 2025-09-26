@@ -273,55 +273,6 @@ def restore_entry(request, pk: int):
     return redirect("totp:list")
 
 
-@login_required
-def batch_import(request):
-    """批量导入多个 TOTP 条目（文本粘贴方式）。"""
-
-    if request.method != "POST":
-        return redirect("totp:list")
-
-    text = (request.POST.get("bulk_text") or "").strip()
-    if not text:
-        messages.error(request, "内容为空")
-        return redirect("totp:list")
-
-    # 复用 importers 中的解析逻辑，避免与预览接口产生分歧
-    result = importers.parse_manual_text(text)
-    invalid_count = len(result.errors)
-
-    if not result.entries:
-        msg = "没有新的条目导入"
-        if invalid_count:
-            msg += f"（{invalid_count} 条无效密钥已忽略）"
-        messages.info(request, msg)
-        for warning in result.warnings:
-            messages.warning(request, warning)
-        for error in result.errors:
-            messages.warning(request, error)
-        return redirect("totp:list")
-
-    created, skipped = _apply_import_entries(request.user, result.entries)
-
-    if created:
-        message = f"成功导入 {created} 条"
-        if skipped:
-            message += f"，跳过 {skipped} 条重复"
-        if invalid_count:
-            message += f"（{invalid_count} 条无效密钥已忽略）"
-        messages.success(request, message)
-    else:
-        message = "没有新的条目导入"
-        if invalid_count:
-            message += f"（{invalid_count} 条无效密钥已忽略）"
-        messages.info(request, message)
-
-    for warning in result.warnings:
-        messages.warning(request, warning)
-    for error in result.errors:
-        messages.warning(request, error)
-
-    return redirect("totp:list")
-
 
 @login_required
 @require_POST

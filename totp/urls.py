@@ -12,7 +12,6 @@ urlpatterns = [
     path("delete/<int:pk>/", views.delete_entry, name="delete"),
     path("trash/", views.trash_view, name="trash"),
     path("restore/<int:pk>/", views.restore_entry, name="restore"),
-    path("batch-import/", views.batch_import, name="batch_import"),
     path("import/preview/", views.batch_import_preview, name="batch_import_preview"),
     path("import/apply/", views.batch_import_apply, name="batch_import_apply"),
     path("export/", views.export_entries, name="export"),
