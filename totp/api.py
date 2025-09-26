@@ -8,6 +8,7 @@ from .utils import decrypt_str, totp_code_base32
 def api_tokens(request):
     """返回所有 TOTP 条目的当前验证码。"""
     items = []
+    # 与前端倒计时保持一致：计算距离 30 秒周期结束的剩余秒数
     remaining = 30 - (int(timezone.now().timestamp()) % 30)
     for eid, secret_enc in TOTPEntry.objects.filter(user=request.user).values_list(
             "id", "secret_encrypted"

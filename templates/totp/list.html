@@ -218,6 +218,8 @@
   }
 
   const countdownEl = document.getElementById('countdown');
+  const importPreviewUrl = "{% url 'totp:batch_import_preview' %}";
+  const importApplyUrl = "{% url 'totp:batch_import_apply' %}";
   const state = new Map();
   let cycleRemaining = 30;
   let refreshTimer = null;
@@ -372,6 +374,283 @@
     return match ? decodeURIComponent(match[1]) : '';
   }
 
+  function setButtonLoading(button, loading, label) {
+    if (!button) {
+      return;
+    }
+    if (loading) {
+      button.disabled = true;
+      if (!button.dataset.originalLabel) {
+        button.dataset.originalLabel = button.innerHTML;
+      }
+      const text = label || button.dataset.originalLabel || '';
+      button.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>${text}`;
+    } else {
+      button.disabled = false;
+      if (button.dataset.originalLabel) {
+        button.innerHTML = button.dataset.originalLabel;
+        delete button.dataset.originalLabel;
+      }
+    }
+  }
+
+  const importModalEl = document.getElementById('importModal');
+  const importModeRadios = importModalEl ? importModalEl.querySelectorAll('input[name="importMode"]') : [];
+  const importManualPanel = document.getElementById('importManualPanel');
+  const importManualText = document.getElementById('importManualText');
+  const importFilePanel = document.getElementById('importFilePanel');
+  const importFileInput = document.getElementById('importFileInput');
+  const importPreviewBtn = document.getElementById('importPreviewBtn');
+  const importApplyBtn = document.getElementById('importApplyBtn');
+  const importErrorAlert = document.getElementById('importErrorAlert');
+  const importWarningAlert = document.getElementById('importWarningAlert');
+  const importWarningList = document.getElementById('importWarningList');
+  const importPreviewWrapper = document.getElementById('importPreviewWrapper');
+  const importPreviewBody = document.getElementById('importPreviewBody');
+  const importPreviewSummary = document.getElementById('importPreviewSummary');
+  let importPreviewPayload = null;
+
+  function currentImportMode() {
+    const active = Array.from(importModeRadios).find((radio) => radio.checked);
+    return active ? active.value : 'manual';
+  }
+
+  function hideImportFeedback() {
+    importErrorAlert?.classList.add('d-none');
+    if (importWarningAlert) {
+      importWarningAlert.classList.add('d-none');
+      importWarningList?.replaceChildren();
+    }
+  }
+
+  function setImportMode(mode) {
+    if (mode === 'file') {
+      importManualPanel?.classList.add('d-none');
+      importFilePanel?.classList.remove('d-none');
+    } else {
+      importManualPanel?.classList.remove('d-none');
+      importFilePanel?.classList.add('d-none');
+    }
+    hideImportFeedback();
+    importPreviewPayload = null;
+    if (importPreviewWrapper) {
+      importPreviewWrapper.classList.add('d-none');
+    }
+    if (importApplyBtn) {
+      importApplyBtn.classList.add('d-none');
+      importApplyBtn.disabled = true;
+    }
+    setButtonLoading(importPreviewBtn, false);
+  }
+
+  function resetImportModal() {
+    importPreviewPayload = null;
+    if (importManualText) {
+      importManualText.value = '';
+    }
+    if (importFileInput) {
+      importFileInput.value = '';
+    }
+    hideImportFeedback();
+    if (importPreviewWrapper) {
+      importPreviewWrapper.classList.add('d-none');
+    }
+    importPreviewBody?.replaceChildren();
+    if (importPreviewSummary) {
+      importPreviewSummary.textContent = '预览结果如下，请确认后导入：';
+    }
+    if (importApplyBtn) {
+      importApplyBtn.classList.add('d-none');
+      importApplyBtn.disabled = true;
+      delete importApplyBtn.dataset.originalLabel;
+      importApplyBtn.innerHTML = '确认导入';
+    }
+    setButtonLoading(importPreviewBtn, false);
+    if (importModeRadios.length) {
+      importModeRadios.forEach((radio) => {
+        radio.checked = radio.value === 'manual';
+      });
+      setImportMode('manual');
+    }
+  }
+
+  function showImportError(message) {
+    if (!importErrorAlert) {
+      return;
+    }
+    importErrorAlert.textContent = message;
+    importErrorAlert.classList.toggle('d-none', !message);
+  }
+
+  function showImportWarnings(warnings) {
+    if (!importWarningAlert || !importWarningList) {
+      return;
+    }
+    importWarningList.replaceChildren();
+    if (warnings && warnings.length) {
+      warnings.forEach((text) => {
+        const li = document.createElement('li');
+        li.textContent = text;
+        importWarningList.appendChild(li);
+      });
+      importWarningAlert.classList.remove('d-none');
+    } else {
+      importWarningAlert.classList.add('d-none');
+    }
+  }
+
+  function renderImportPreview(entries, summary) {
+    if (!importPreviewWrapper || !importPreviewBody) {
+      return;
+    }
+    importPreviewBody.replaceChildren();
+    entries.forEach((entry) => {
+      const tr = document.createElement('tr');
+
+      const nameTd = document.createElement('td');
+      nameTd.textContent = entry.name || '—';
+      tr.appendChild(nameTd);
+
+      const groupTd = document.createElement('td');
+      groupTd.textContent = entry.group || '—';
+      tr.appendChild(groupTd);
+
+      const sourceTd = document.createElement('td');
+      sourceTd.textContent = entry.source || '—';
+      tr.appendChild(sourceTd);
+
+      const statusTd = document.createElement('td');
+      statusTd.classList.add('text-nowrap');
+      const badge = document.createElement('span');
+      badge.className = entry.exists ? 'badge text-bg-secondary' : 'badge text-bg-success';
+      badge.textContent = entry.exists ? '已存在' : '新建';
+      statusTd.appendChild(badge);
+      tr.appendChild(statusTd);
+
+      const secretTd = document.createElement('td');
+      secretTd.classList.add('text-nowrap');
+      const codeEl = document.createElement('code');
+      codeEl.textContent = entry.secret_preview || '';
+      secretTd.appendChild(codeEl);
+      tr.appendChild(secretTd);
+
+      importPreviewBody.appendChild(tr);
+    });
+    if (importPreviewSummary && summary) {
+      importPreviewSummary.textContent = `共 ${summary.total} 条，预计新增 ${summary.new} 条，跳过 ${summary.existing} 条重复。`;
+    }
+    importPreviewWrapper.classList.remove('d-none');
+  }
+
+  if (importModeRadios.length) {
+    importModeRadios.forEach((radio) => {
+      radio.addEventListener('change', () => {
+        setImportMode(radio.value);
+      });
+    });
+    setImportMode(currentImportMode());
+  }
+
+  importPreviewBtn?.addEventListener('click', () => {
+    hideImportFeedback();
+    if (importPreviewWrapper) {
+      importPreviewWrapper.classList.add('d-none');
+    }
+    importPreviewPayload = null;
+    const mode = currentImportMode();
+    const formData = new FormData();
+    formData.append('mode', mode);
+
+    if (mode === 'file') {
+      const file = importFileInput?.files?.[0];
+      if (!file) {
+        showImportError('请选择要导入的文件');
+        return;
+      }
+      formData.append('file', file);
+    } else {
+      const value = importManualText?.value.trim() || '';
+      if (!value) {
+        showImportError('请粘贴待导入的内容');
+        return;
+      }
+      formData.append('manual_text', value);
+    }
+
+    setButtonLoading(importPreviewBtn, true, '解析中...');
+
+    fetch(importPreviewUrl, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCsrfToken(),
+      },
+      body: formData,
+      credentials: 'same-origin',
+    })
+      .then(async (resp) => {
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) {
+          const message = (data.errors && data.errors[0]) || data.error || '解析失败，请检查格式';
+          throw new Error(message);
+        }
+        importPreviewPayload = data.entries.map((entry) => ({
+          name: entry.name,
+          group: entry.group,
+          secret: entry.secret,
+          source: entry.source,
+        }));
+        renderImportPreview(data.entries, data.summary);
+        showImportWarnings(data.warnings || []);
+        if (importApplyBtn) {
+          importApplyBtn.classList.remove('d-none');
+          importApplyBtn.disabled = false;
+        }
+      })
+      .catch((err) => {
+        showImportError(err.message || '解析失败，请稍后再试');
+      })
+      .finally(() => {
+        setButtonLoading(importPreviewBtn, false);
+      });
+  });
+
+  importApplyBtn?.addEventListener('click', () => {
+    if (!importPreviewPayload || !importPreviewPayload.length) {
+      showImportError('请先完成预览');
+      return;
+    }
+    setButtonLoading(importApplyBtn, true, '导入中...');
+    fetch(importApplyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+      },
+      body: JSON.stringify({ entries: importPreviewPayload }),
+      credentials: 'same-origin',
+    })
+      .then(async (resp) => {
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) {
+          const message = data.error || '导入失败，请稍后再试';
+          throw new Error(message);
+        }
+        if (data.redirect) {
+          window.location.href = data.redirect;
+        } else {
+          window.location.reload();
+        }
+      })
+      .catch((err) => {
+        showImportError(err.message || '导入失败，请稍后再试');
+        setButtonLoading(importApplyBtn, false);
+      });
+  });
+
+  importModalEl?.addEventListener('hidden.bs.modal', () => {
+    resetImportModal();
+  });
+
   tbody.addEventListener('change', (event) => {
     const select = event.target.closest('.group-select');
     if (!select) {
@@ -471,6 +750,234 @@
       }
     });
   }
+
+  const addGroupModalEl = document.getElementById('addGroupModal');
+  const groupManageList = document.getElementById('groupManageList');
+  const groupManageAlert = document.getElementById('groupManageAlert');
+  const groupManageEmpty = document.getElementById('groupManageEmpty');
+
+  function clearGroupManageAlert() {
+    if (!groupManageAlert) {
+      return;
+    }
+    groupManageAlert.classList.add('d-none');
+    groupManageAlert.classList.remove('alert-success', 'alert-warning', 'alert-danger', 'alert-info');
+    groupManageAlert.textContent = '';
+  }
+
+  function showGroupManageAlert(kind, message) {
+    if (!groupManageAlert) {
+      return;
+    }
+    const level = kind === 'success' ? 'alert-success' : kind === 'warning' ? 'alert-warning' : 'alert-danger';
+    groupManageAlert.classList.remove('d-none', 'alert-success', 'alert-warning', 'alert-danger', 'alert-info');
+    groupManageAlert.classList.add(level);
+    groupManageAlert.textContent = message;
+  }
+
+  function refreshGroupManageEmptyState() {
+    if (!groupManageList || !groupManageEmpty) {
+      return;
+    }
+    const hasItems = Boolean(groupManageList.querySelector('[data-group-id]'));
+    groupManageEmpty.classList.toggle('d-none', hasItems);
+  }
+
+  function setGroupRowPending(row, pending, activeBtn, label) {
+    const input = row.querySelector('.group-name-input');
+    if (input) {
+      input.disabled = pending;
+    }
+    row.querySelectorAll('button').forEach((btn) => {
+      if (pending) {
+        btn.disabled = true;
+        if (btn === activeBtn) {
+          if (!btn.dataset.originalLabel) {
+            btn.dataset.originalLabel = btn.innerHTML;
+          }
+          const spinnerHtml = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>';
+          btn.innerHTML = `${spinnerHtml}${label || ''}`;
+        }
+      } else {
+        btn.disabled = false;
+        if (btn.dataset.originalLabel) {
+          btn.innerHTML = btn.dataset.originalLabel;
+          delete btn.dataset.originalLabel;
+        }
+      }
+    });
+  }
+
+  function updateGroupOptions(groupId, label) {
+    if (!groupId) {
+      return;
+    }
+    const value = String(groupId);
+    const filterSelect = document.getElementById('group');
+    const filterOption = filterSelect ? filterSelect.querySelector(`option[value="${value}"]`) : null;
+    if (filterOption) {
+      filterOption.textContent = label;
+    }
+    document.querySelectorAll('select.group-select').forEach((select) => {
+      const option = select.querySelector(`option[value="${value}"]`);
+      if (option) {
+        option.textContent = label;
+      }
+    });
+  }
+
+  function removeGroupOptions(groupId) {
+    if (!groupId) {
+      return;
+    }
+    const value = String(groupId);
+    const filterSelect = document.getElementById('group');
+    const filterOption = filterSelect ? filterSelect.querySelector(`option[value="${value}"]`) : null;
+    filterOption?.remove();
+    document.querySelectorAll('select.group-select').forEach((select) => {
+      const option = select.querySelector(`option[value="${value}"]`);
+      if (option) {
+        if (select.value === value) {
+          select.value = '';
+          select.dataset.current = '';
+        }
+        option.remove();
+      }
+    });
+  }
+
+  function handleGroupRename(row, trigger) {
+    const input = row.querySelector('.group-name-input');
+    const url = row.dataset.renameUrl;
+    if (!input || !url) {
+      return;
+    }
+    const newName = (input.value || '').trim();
+    if (!newName) {
+      showGroupManageAlert('error', '分组名称不能为空');
+      input.focus();
+      return;
+    }
+    clearGroupManageAlert();
+    setGroupRowPending(row, true, trigger, '保存中...');
+    const payload = new URLSearchParams();
+    payload.append('name', newName);
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-CSRFToken': getCsrfToken(),
+        'X-Requested-With': 'fetch',
+      },
+      body: payload,
+      credentials: 'same-origin',
+    })
+      .then(async (resp) => {
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) {
+          const message = data.message || '保存失败，请稍后再试';
+          throw new Error(message);
+        }
+        return data;
+      })
+      .then((data) => {
+        input.value = data.name;
+        updateGroupOptions(row.dataset.groupId, data.name);
+        showGroupManageAlert('success', '分组名称已更新');
+      })
+      .catch((err) => {
+        showGroupManageAlert('error', err.message || '保存失败，请稍后再试');
+      })
+      .finally(() => {
+        setGroupRowPending(row, false, trigger);
+      });
+  }
+
+  function handleGroupDelete(row, trigger) {
+    const url = row.dataset.deleteUrl;
+    const groupId = row.dataset.groupId;
+    if (!url || !groupId) {
+      return;
+    }
+    const count = Number(row.dataset.entryCount || '0');
+    const confirmed = window.confirm(
+      count > 0
+        ? `该分组下还有 ${count} 条密钥，删除后将移动到“未分组”。是否继续？`
+        : '确定删除该分组？'
+    );
+    if (!confirmed) {
+      return;
+    }
+    clearGroupManageAlert();
+    setGroupRowPending(row, true, trigger, '删除中...');
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCsrfToken(),
+        'X-Requested-With': 'fetch',
+      },
+      credentials: 'same-origin',
+    })
+      .then(async (resp) => {
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) {
+          const message = data.message || '删除失败，请稍后再试';
+          throw new Error(message);
+        }
+        return data;
+      })
+      .then((data) => {
+        removeGroupOptions(groupId);
+        row.remove();
+        refreshGroupManageEmptyState();
+        const released = Number.isFinite(Number(data.released_entries)) ? Number(data.released_entries) : 0;
+        showGroupManageAlert(
+          'success',
+          released > 0
+            ? `已删除分组，${released} 条密钥已移动到“未分组”`
+            : '已删除分组'
+        );
+      })
+      .catch((err) => {
+        showGroupManageAlert('error', err.message || '删除失败，请稍后再试');
+      })
+      .finally(() => {
+        setGroupRowPending(row, false, trigger);
+      });
+  }
+
+  groupManageList?.addEventListener('click', (event) => {
+    const row = event.target.closest('[data-group-id]');
+    if (!row) {
+      return;
+    }
+    if (event.target.closest('.group-save-btn')) {
+      handleGroupRename(row, event.target.closest('button'));
+    } else if (event.target.closest('.group-delete-btn')) {
+      handleGroupDelete(row, event.target.closest('button'));
+    }
+  });
+
+  groupManageList?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+    const input = event.target.closest('.group-name-input');
+    if (!input) {
+      return;
+    }
+    event.preventDefault();
+    const row = input.closest('[data-group-id]');
+    if (row) {
+      handleGroupRename(row, row.querySelector('.group-save-btn'));
+    }
+  });
+
+  addGroupModalEl?.addEventListener('hidden.bs.modal', () => {
+    clearGroupManageAlert();
+  });
+
+  refreshGroupManageEmptyState();
 
   const shareModalEl = document.getElementById('shareLinkModal');
   const shareLinkEntryLabel = document.getElementById('shareLinkEntryLabel');

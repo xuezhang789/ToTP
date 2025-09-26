@@ -15,11 +15,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import (
-    Group,
-    OneTimeLink,
-    TOTPEntry,
-)
+from . import importers
+from .models import Group, OneTimeLink, TOTPEntry
 from .utils import (
     decrypt_str,
     encrypt_str,
@@ -91,7 +88,11 @@ def list_view(request):
     paginator = Paginator(entry_qs, 5)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
-    groups = Group.objects.filter(user=request.user).order_by("name")
+    groups = (
+        Group.objects.filter(user=request.user)
+        .annotate(entry_count=Count("entries", filter=Q(entries__is_deleted=False)))
+        .order_by("name")
+    )
     return render(
         request,
         "totp/list.html",
@@ -158,6 +159,63 @@ def add_group(request):
 
 
 @login_required
+@require_POST
+def rename_group(request, pk: int):
+    """更新分组名称。"""
+
+    group = get_object_or_404(Group, pk=pk, user=request.user)
+    new_name = (request.POST.get("name") or "").strip()
+    if not new_name:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "empty_name",
+                "message": "分组名称不能为空",
+            },
+            status=400,
+        )
+
+    exists = (
+        Group.objects.filter(user=request.user, name=new_name)
+        .exclude(pk=group.pk)
+        .exists()
+    )
+    if exists:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "duplicate_name",
+                "message": "分组名称已存在",
+            },
+            status=400,
+        )
+
+    group.name = new_name
+    group.save(update_fields=["name", "updated_at"])
+
+    return JsonResponse({"ok": True, "id": group.pk, "name": group.name})
+
+
+@login_required
+@require_POST
+def delete_group(request, pk: int):
+    """删除指定分组并将关联条目标记为未分组。"""
+
+    group = get_object_or_404(Group, pk=pk, user=request.user)
+    entry_count = (
+        TOTPEntry.objects.filter(user=request.user, group=group, is_deleted=False)
+        .count()
+    )
+    group.delete()
+
+    return JsonResponse({
+        "ok": True,
+        "id": pk,
+        "released_entries": entry_count,
+    })
+
+
+@login_required
 def delete_entry(request, pk: int):
     """删除指定的 TOTP 条目。"""
     e = get_object_or_404(TOTPEntry, pk=pk, user=request.user)
@@ -217,101 +275,243 @@ def restore_entry(request, pk: int):
 
 @login_required
 def batch_import(request):
-    """批量导入多个 TOTP 条目。"""
+    """批量导入多个 TOTP 条目（文本粘贴方式）。"""
+
     if request.method != "POST":
         return redirect("totp:list")
+
     text = (request.POST.get("bulk_text") or "").strip()
     if not text:
         messages.error(request, "内容为空")
         return redirect("totp:list")
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    parsed = []
-    group_names = set()
-    invalid_count = 0
-    for s in lines:
-        name = secret = ""
-        group_name = ""
-        if s.lower().startswith("otpauth://"):
-            label, secret = parse_otpauth(s)
-            name = (label or "").strip()
-        else:
-            parts = s.split("|")
-            if len(parts) < 2:
-                invalid_count += 1
-                continue
-            secret = parts[0].strip()
-            name = parts[1].strip()
-            if len(parts) >= 3:
-                group_name = parts[2].strip()
 
-        secret = normalize_google_secret(secret)
-        if not name or not secret:
-            invalid_count += 1
-            continue
+    # 复用 importers 中的解析逻辑，避免与预览接口产生分歧
+    result = importers.parse_manual_text(text)
+    invalid_count = len(result.errors)
 
-        if group_name:
-            group_names.add(group_name)
-        parsed.append((name, secret, group_name))
-
-    if not parsed:
+    if not result.entries:
         msg = "没有新的条目导入"
         if invalid_count:
             msg += f"（{invalid_count} 条无效密钥已忽略）"
         messages.info(request, msg)
+        for warning in result.warnings:
+            messages.warning(request, warning)
+        for error in result.errors:
+            messages.warning(request, error)
         return redirect("totp:list")
 
-    # 预取已存在的分组并一次性创建缺失的分组
+    created, skipped = _apply_import_entries(request.user, result.entries)
+
+    if created:
+        message = f"成功导入 {created} 条"
+        if skipped:
+            message += f"，跳过 {skipped} 条重复"
+        if invalid_count:
+            message += f"（{invalid_count} 条无效密钥已忽略）"
+        messages.success(request, message)
+    else:
+        message = "没有新的条目导入"
+        if invalid_count:
+            message += f"（{invalid_count} 条无效密钥已忽略）"
+        messages.info(request, message)
+
+    for warning in result.warnings:
+        messages.warning(request, warning)
+    for error in result.errors:
+        messages.warning(request, error)
+
+    return redirect("totp:list")
+
+
+@login_required
+@require_POST
+def batch_import_preview(request):
+    """上传文件或文本后，返回解析结果供前端预览。"""
+
+    mode = (request.POST.get("mode") or "manual").strip()
+    manual_text = (request.POST.get("manual_text") or "").strip() if mode == "manual" else ""
+    uploaded = request.FILES.get("file") if mode == "file" else None
+
+    result = importers.parse_import_payload(
+        manual_text=manual_text,
+        uploaded_file=uploaded,
+    )
+
+    if result.errors:
+        return JsonResponse({"ok": False, "errors": result.errors}, status=400)
+    if not result.entries:
+        return JsonResponse({"ok": False, "errors": ["没有可导入的条目"]}, status=400)
+
+    names = [entry.name for entry in result.entries]
+    # 预先查询名称，避免在循环中重复命中数据库
+    existing_names = set(
+        TOTPEntry.objects.filter(user=request.user, name__in=names)
+        .values_list("name", flat=True)
+    )
+
+    entries_payload = []
+    duplicates = 0
+    for entry in result.entries:
+        exists = entry.name in existing_names
+        if exists:
+            duplicates += 1
+        entries_payload.append(
+            {
+                "name": entry.name,
+                "group": entry.group,
+                "secret": entry.secret,
+                "source": entry.source,
+                "exists": exists,
+                "secret_preview": _secret_preview(entry.secret),
+            }
+        )
+
+    warnings = list(result.warnings)
+    if duplicates:
+        warnings.append(f"发现 {duplicates} 条与现有名称重复的条目，导入时将跳过")
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "entries": entries_payload,
+            "warnings": warnings,
+            "summary": {
+                "total": len(entries_payload),
+                "new": len(entries_payload) - duplicates,
+                "existing": duplicates,
+            },
+        }
+    )
+
+
+@login_required
+@require_POST
+def batch_import_apply(request):
+    """在预览确认后批量写入条目。"""
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "请求格式无效"}, status=400)
+
+    raw_entries = payload.get("entries") or []
+    if not isinstance(raw_entries, list) or not raw_entries:
+        return JsonResponse({"ok": False, "error": "缺少有效的导入数据"}, status=400)
+
+    entries: list[importers.ParsedEntry] = []
+    errors: list[str] = []
+    seen: set[str] = set()
+    for idx, item in enumerate(raw_entries, 1):
+        if not isinstance(item, dict):
+            continue
+        name = (item.get("name") or "").strip()
+        secret = (item.get("secret") or "").strip()
+        group = (item.get("group") or "").strip()
+        if not name or name in seen:
+            continue
+        normalized = normalize_google_secret(secret)
+        if not normalized:
+            errors.append(f"第 {idx} 条数据无效，已跳过")
+            continue
+        entries.append(
+            importers.ParsedEntry(
+                name=name[:importers.MAX_NAME_LEN],
+                secret=normalized,
+                group=group[:importers.MAX_GROUP_LEN],
+                source=item.get("source") or "预览导入",
+            )
+        )
+        seen.add(name)
+
+    if not entries:
+        if errors:
+            return JsonResponse({"ok": False, "error": errors[0]}, status=400)
+        return JsonResponse({"ok": False, "error": "没有可导入的条目"}, status=400)
+
+    created, skipped = _apply_import_entries(request.user, entries)
+
+    if created:
+        message = f"成功导入 {created} 条"
+        if skipped:
+            message += f"，跳过 {skipped} 条重复"
+        if errors:
+            message += f"（{len(errors)} 条无效密钥已忽略）"
+        messages.success(request, message)
+    else:
+        message = "没有新的条目导入"
+        if errors:
+            message += f"（{len(errors)} 条无效密钥已忽略）"
+        messages.info(request, message)
+
+    for err in errors:
+        messages.warning(request, err)
+
+    return JsonResponse({"ok": True, "redirect": reverse("totp:list")})
+
+
+def _apply_import_entries(user, entries):
+    """将解析后的条目写入数据库，返回 (新增数量, 跳过数量)。"""
+
+    created = 0
+    skipped = 0
+    if not entries:
+        return created, skipped
+
+    # 一次性查出需要的分组，缺失的分组批量创建
+    group_names = sorted({entry.group for entry in entries if entry.group})
     groups = {
         g.name: g
-        for g in Group.objects.filter(user=request.user, name__in=group_names)
+        for g in Group.objects.filter(user=user, name__in=group_names)
     }
     missing = [
-        Group(user=request.user, name=n) for n in group_names if n not in groups
+        Group(user=user, name=name) for name in group_names if name not in groups
     ]
     if missing:
         Group.objects.bulk_create(missing)
         groups.update(
             {
                 g.name: g
-                for g in Group.objects.filter(
-                user=request.user, name__in=group_names
-            )
+                for g in Group.objects.filter(user=user, name__in=group_names)
             }
         )
 
-    # 一次性查询现有条目名称，避免重复
-    names = [name for name, _, _ in parsed]
     existing_names = set(
-        TOTPEntry.objects.filter(user=request.user, name__in=names).values_list(
-            "name", flat=True
-        )
+        TOTPEntry.objects.filter(user=user, name__in=[entry.name for entry in entries])
+        .values_list("name", flat=True)
     )
+
     to_create = []
-    for name, secret, group_name in parsed:
-        if name in existing_names:
+    for entry in entries:
+        if entry.name in existing_names:
+            skipped += 1
             continue
-        group = groups.get(group_name) if group_name else None
+        group = groups.get(entry.group) if entry.group else None
         to_create.append(
             TOTPEntry(
-                user=request.user,
-                name=name,
+                user=user,
+                name=entry.name,
                 group=group,
-                secret_encrypted=encrypt_str(secret),
+                secret_encrypted=encrypt_str(entry.secret),
             )
         )
+        existing_names.add(entry.name)  # 防止本次导入中出现重复名称
 
     if to_create:
         TOTPEntry.objects.bulk_create(to_create)
-        msg = f"成功导入 {len(to_create)} 条"
-        if invalid_count:
-            msg += f"（{invalid_count} 条无效密钥已忽略）"
-        messages.success(request, msg)
-    else:
-        msg = "没有新的条目导入"
-        if invalid_count:
-            msg += f"（{invalid_count} 条无效密钥已忽略）"
-        messages.info(request, msg)
-    return redirect("totp:list")
+        created = len(to_create)
+
+    return created, skipped
+
+
+def _secret_preview(secret: str) -> str:
+    """隐藏中间字符，仅展示密钥的头尾片段。"""
+
+    if not secret:
+        return ""
+    if len(secret) <= 8:
+        return secret
+    return f"{secret[:4]}...{secret[-4:]}"
+
 
 
 @login_required

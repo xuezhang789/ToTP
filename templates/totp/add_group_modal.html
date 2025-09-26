@@ -8,9 +8,43 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-2">
+                    <div class="mb-3">
                         <label class="form-label">名称</label>
-                        <input name="name" class="form-control" placeholder="如：工作" required>
+                        <input name="name" class="form-control" placeholder="如：工作" required maxlength="40">
+                        <div class="form-text">名称将限制在 40 个字符以内。</div>
+                    </div>
+
+                    <div class="border-top pt-3 mt-3">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+                            <h6 class="mb-0">管理已有分组</h6>
+                            <small class="text-muted">可直接修改名称或删除分组</small>
+                        </div>
+                        <div id="groupManageAlert" class="alert alert-danger d-none small py-2 px-3" role="alert"></div>
+                        <div class="list-group" id="groupManageList">
+                            <div id="groupManageEmpty" class="list-group-item text-muted small {% if groups %}d-none{% endif %}">
+                                暂无分组
+                            </div>
+                            {% for g in groups %}
+                            <div class="list-group-item d-flex align-items-center flex-wrap gap-2"
+                                 data-group-id="{{ g.id }}"
+                                 data-entry-count="{{ g.entry_count|default:0 }}"
+                                 data-rename-url="{% url 'totp:rename_group' pk=g.id %}"
+                                 data-delete-url="{% url 'totp:delete_group' pk=g.id %}">
+                                <div class="flex-grow-1 min-width-0">
+                                    <input type="text" class="form-control form-control-sm group-name-input" value="{{ g.name }}"
+                                           maxlength="40" aria-label="分组名称">
+                                </div>
+                                <div class="text-muted small text-nowrap">
+                                    {{ g.entry_count|default:0 }} 条
+                                </div>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary group-save-btn">保存</button>
+                                    <button type="button" class="btn btn-outline-danger group-delete-btn">删除</button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="form-text mt-2">删除后，分组内的密钥会移动到「未分组」。</div>
                     </div>
                 </div>
                 <div class="modal-footer">

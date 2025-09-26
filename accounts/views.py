@@ -1,14 +1,17 @@
-import json, re
-from django.shortcuts import render, redirect
+import json
+import re
+
+from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate, login, logout, get_user_model
+from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.conf import settings
-from django.utils.http import url_has_allowed_host_and_scheme
 
-from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
+from google.oauth2 import id_token
 
 User = get_user_model()
 
@@ -49,6 +52,8 @@ def _next_url(request, fallback="/"):
 
 
 def _password_strength_errors(password: str, username: str = ""):
+    """根据复杂度规则校验密码，返回需要提示的错误列表。"""
+
     errors = []
     pwd = password or ""
 
@@ -140,6 +145,7 @@ def google_onetap(request):
     if not cred:
         return _json({"ok": False, "error": "missing_credential"}, 400)
     try:
+        # 使用 Google 提供的 SDK 验证前端返回的身份凭证
         idinfo = id_token.verify_oauth2_token(
             cred, grequests.Request(), settings.GOOGLE_CLIENT_ID
         )
@@ -182,9 +188,6 @@ def _username_from_email(email: str) -> str:
         if cand not in existing:
             return cand
     return base  # fallback
-
-
-from django.http import JsonResponse
 
 
 def _json(obj, status=200):

@@ -12,7 +12,7 @@ def _fernet():
 
     global _FERNET
     if _FERNET is None:
-        # 直接使用 SECRET_KEY 的哈希作为对称加密密钥
+        # 通过 SECRET_KEY 计算出一个稳定的派生密钥，避免在配置变更后无法解密旧数据
         digest = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
         key = base64.urlsafe_b64encode(digest[:32])
         _FERNET = Fernet(key)
@@ -53,6 +53,7 @@ def normalize_google_secret(secret: str) -> str:
     if len(s) < 16 or any(c not in _B32_ALPHABET for c in s):
         return ""
     try:
+        # Base32 要求长度为 8 的倍数，不足时补齐填充后检测其合法性
         base64.b32decode(s + "=" * ((8 - len(s) % 8) % 8), casefold=True)
     except Exception:
         return ""
