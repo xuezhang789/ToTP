@@ -5,6 +5,7 @@ from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
@@ -36,9 +37,15 @@ COMMON_WEAK_PASSWORDS = {
 
 
 def _next_url(request, fallback="/"):
-    """获取登录后应跳转的 URL。"""
+    """获取登录后应跳转的安全 URL。"""
     nxt = request.GET.get("next") or request.POST.get("next") or fallback
-    return nxt
+    if url_has_allowed_host_and_scheme(
+        nxt,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return nxt
+    return fallback
 
 
 def _password_strength_errors(password: str, username: str = ""):

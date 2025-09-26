@@ -6,6 +6,7 @@ from urllib.parse import quote
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, F, Q
@@ -15,7 +16,14 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import Group, OneTimeLink, TOTPEntry
+from .models import (
+    BackupArchive,
+    BackupArchiveError,
+    BackupSchedule,
+    Group,
+    OneTimeLink,
+    TOTPEntry,
+)
 from .utils import (
     decrypt_str,
     encrypt_str,
@@ -387,6 +395,186 @@ def export_offline_package(request):
         f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
     )
     return response
+
+
+@login_required
+def backup_dashboard(request):
+    """展示备份控制台。"""
+
+    schedule = (
+        BackupSchedule.objects.filter(user=request.user)
+        .order_by("pk")
+        .first()
+    )
+    archives = (
+        BackupArchive.objects.filter(user=request.user)
+        .select_related("schedule")
+        .order_by("-created_at")
+    )
+    return render(
+        request,
+        "totp/backup_dashboard.html",
+        {"schedule": schedule, "archives": archives},
+    )
+
+
+@login_required
+@require_POST
+def backup_create(request):
+    """使用用户提供的密码创建加密备份。"""
+
+    password = (request.POST.get("password") or "").strip()
+    name = (request.POST.get("name") or "").strip()
+    if len(password) < 6:
+        messages.error(request, "备份密码至少需要 6 个字符")
+        return redirect("totp:backup_dashboard")
+    try:
+        archive = BackupArchive.create_manual(request.user, name, password)
+    except BackupArchiveError as exc:
+        if str(exc) == "empty":
+            messages.info(request, "当前没有可备份的密钥")
+        elif str(exc) == "password_required":
+            messages.error(request, "备份密码不能为空")
+        else:
+            messages.error(request, "生成备份失败，请稍后再试")
+        return redirect("totp:backup_dashboard")
+
+    messages.success(request, f"备份已生成，共 {archive.entry_count} 条记录")
+    return redirect("totp:backup_dashboard")
+
+
+@login_required
+@require_POST
+def backup_download(request, pk: int):
+    """下载指定备份的解密内容。"""
+
+    archive = get_object_or_404(BackupArchive, pk=pk, user=request.user)
+    password = (request.POST.get("password") or "").strip()
+    try:
+        payload = archive.decrypt_payload(
+            password=password if archive.encryption == BackupArchive.ENCRYPTION_USER else None
+        )
+    except BackupArchiveError:
+        messages.error(request, "解密失败，请检查密码")
+        return redirect("totp:backup_dashboard")
+
+    content = json.dumps(payload, ensure_ascii=False, indent=2)
+    filename = archive.created_at.strftime("totp-backup-%Y%m%d-%H%M%S.json")
+    quoted = quote(filename)
+    response = HttpResponse(
+        content,
+        content_type="application/json; charset=utf-8",
+    )
+    response["Content-Disposition"] = (
+        f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
+    )
+    return response
+
+
+@login_required
+@require_POST
+def backup_restore(request, pk: int):
+    """从备份中恢复 TOTP 条目。"""
+
+    archive = get_object_or_404(BackupArchive, pk=pk, user=request.user)
+    mode = (request.POST.get("mode") or "replace").strip().lower()
+    password = (request.POST.get("password") or "").strip()
+    if mode not in {"replace", "append"}:
+        messages.error(request, "恢复模式无效")
+        return redirect("totp:backup_dashboard")
+    try:
+        created = archive.restore_entries(
+            user=request.user,
+            mode=mode,
+            password=password if archive.encryption == BackupArchive.ENCRYPTION_USER else None,
+        )
+    except BackupArchiveError:
+        messages.error(request, "解密失败，请检查密码")
+        return redirect("totp:backup_dashboard")
+    except ValidationError:
+        messages.error(request, "恢复模式无效")
+        return redirect("totp:backup_dashboard")
+
+    if created:
+        messages.success(request, f"已恢复 {created} 条密钥")
+    else:
+        messages.info(request, "备份未包含可恢复的条目")
+    return redirect("totp:backup_dashboard")
+
+
+@login_required
+@require_POST
+def backup_schedule_update(request):
+    """更新或创建自动备份计划。"""
+
+    name = (request.POST.get("name") or "自动备份").strip() or "自动备份"
+    try:
+        frequency_hours = int(request.POST.get("frequency_hours") or 24)
+    except (TypeError, ValueError):
+        frequency_hours = 24
+    frequency_hours = min(max(frequency_hours, 6), 24 * 30)
+    try:
+        keep_last = int(request.POST.get("keep_last") or 5)
+    except (TypeError, ValueError):
+        keep_last = 5
+    keep_last = min(max(keep_last, 1), 20)
+
+    schedule = (
+        BackupSchedule.objects.filter(user=request.user)
+        .order_by("pk")
+        .first()
+    )
+    reset_next = bool(request.POST.get("reset_next_run"))
+    next_run = timezone.now() + timedelta(hours=frequency_hours)
+
+    if schedule is None:
+        schedule = BackupSchedule.objects.create(
+            user=request.user,
+            name=name,
+            frequency_hours=frequency_hours,
+            keep_last=keep_last,
+            next_run_at=next_run,
+        )
+        messages.success(request, "自动备份计划已创建")
+        return redirect("totp:backup_dashboard")
+
+    schedule.name = name
+    schedule.frequency_hours = frequency_hours
+    schedule.keep_last = keep_last
+    schedule.is_active = True
+    if reset_next or schedule.next_run_at is None:
+        schedule.next_run_at = next_run
+    schedule.save(
+        update_fields=[
+            "name",
+            "frequency_hours",
+            "keep_last",
+            "is_active",
+            "next_run_at",
+            "updated_at",
+        ]
+    )
+    messages.success(request, "自动备份计划已更新")
+    return redirect("totp:backup_dashboard")
+
+
+@login_required
+@require_POST
+def backup_schedule_disable(request):
+    """暂停当前用户的自动备份计划。"""
+
+    schedule = (
+        BackupSchedule.objects.filter(user=request.user, is_active=True)
+        .order_by("pk")
+        .first()
+    )
+    if schedule is None:
+        messages.info(request, "当前没有运行中的计划")
+    else:
+        schedule.is_active = False
+        schedule.save(update_fields=["is_active", "updated_at"])
+        messages.success(request, "计划已暂停")
+    return redirect("totp:backup_dashboard")
 
 
 @login_required
