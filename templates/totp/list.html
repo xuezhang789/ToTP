@@ -28,7 +28,7 @@
                     导出密钥
                 </a>
                 <a class="btn btn-outline-success" href="{% url 'totp:export_offline' %}" id="exportOfflineBtn">
-                    离线包
+                    离线导出
                 </a>
                 <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#addGroupModal"
                         type="button">添加分组
@@ -220,15 +220,18 @@
   const countdownEl = document.getElementById('countdown');
   const importPreviewUrl = "{% url 'totp:batch_import_preview' %}";
   const importApplyUrl = "{% url 'totp:batch_import_apply' %}";
-  const STORAGE_KEYS = {
-    tokens: 'totp.cachedTokens',
-    importQueue: 'totp.pendingImports'
-  };
-  let syncingImportQueue = false;
+
   const state = new Map();
   let cycleRemaining = 30;
   let refreshTimer = null;
   let pendingRequest = null;
+
+  const form = document.getElementById('searchForm');
+  const qInput = document.getElementById('q');
+  const groupSelect = document.getElementById('group');
+  const clearBtn = document.getElementById('clearBtn');
+  const searchBtn = document.getElementById('searchBtn');
+  const spinner = document.getElementById('searchSpinner');
 
   function initRows() {
     state.clear();
@@ -276,55 +279,6 @@
     }
   }
 
-  function loadJson(key, fallback = null) {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
-    } catch (err) {
-      console.warn('读取本地缓存失败', err);
-      return fallback;
-    }
-  }
-
-  function saveJson(key, value) {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch (err) {
-      console.warn('写入本地缓存失败', err);
-    }
-  }
-
-  // 将最新的验证码数据缓存到本地，便于离线时展示
-  function saveTokens(payload) {
-    if (!payload) {
-      return;
-    }
-    saveJson(STORAGE_KEYS.tokens, {
-      timestamp: Date.now(),
-      remaining: payload.remaining,
-      items: payload.items || [],
-    });
-  }
-
-  function useCachedTokens() {
-    const cached = loadJson(STORAGE_KEYS.tokens);
-    if (!cached || !cached.items || !cached.items.length) {
-      return false;
-    }
-    setCountdown(Number(cached.remaining ?? 30));
-    const items = new Map((cached.items || []).map((item) => [Number(item.id), item]));
-    state.forEach((row, id) => {
-      const payload = items.get(id);
-      if (!payload) {
-        return;
-      }
-      const period = Number(payload.period) || row.period;
-      row.period = period;
-      renderRow(row, payload.code, cycleRemaining, period);
-    });
-    return true;
-  }
-
   async function refreshTokens() {
     if (pendingRequest) {
       return pendingRequest;
@@ -352,13 +306,9 @@
           row.period = period;
           renderRow(row, payload.code, cycleRemaining, period);
         });
-        saveTokens(data);
       })
       .catch((err) => {
         console.error('Refresh tokens failed:', err);
-        if (!useCachedTokens()) {
-          console.warn('暂无可用的验证码缓存');
-        }
       })
       .finally(() => {
         pendingRequest = null;
@@ -427,79 +377,11 @@
       });
   });
 
+  bootstrapTicker();
+
   function getCsrfToken() {
     const match = document.cookie.match(/csrftoken=([^;]+)/);
     return match ? decodeURIComponent(match[1]) : '';
-  }
-
-  function loadImportQueue() {
-    return loadJson(STORAGE_KEYS.importQueue, []);
-  }
-
-  function saveImportQueue(queue) {
-    saveJson(STORAGE_KEYS.importQueue, queue);
-  }
-
-  // 在离线状态下暂存导入任务，待网络恢复后自动同步
-  function enqueueImportPayload(entries) {
-    const queue = loadImportQueue();
-    const payload = Array.isArray(entries) ? entries.map((item) => ({
-      name: item.name,
-      group: item.group || '',
-      secret: item.secret,
-      source: item.source || '离线导入',
-    })) : [] ;
-    if (!payload.length) {
-      return;
-    }
-    queue.push({ entries: payload, createdAt: Date.now() });
-    saveImportQueue(queue);
-  }
-
-  // 恢复联网后主动冲刷导入队列，确保操作最终写入服务器
-  function processPendingImports() {
-    if (syncingImportQueue || !navigator.onLine) {
-      return;
-    }
-    const queue = loadImportQueue();
-    if (!queue.length) {
-      return;
-    }
-    syncingImportQueue = true;
-    let shouldContinue = false;
-
-    const next = queue[0];
-    fetch(importApplyUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': getCsrfToken(),
-      },
-      body: JSON.stringify({ entries: next.entries }),
-      credentials: 'same-origin',
-    })
-      .then(async (resp) => {
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok || !data.ok) {
-          throw new Error(data.error || '同步失败');
-        }
-        const updatedQueue = loadImportQueue();
-        updatedQueue.shift();
-        saveImportQueue(updatedQueue);
-        shouldContinue = updatedQueue.length > 0;
-        if (!updatedQueue.length && data.redirect) {
-          window.location.href = data.redirect;
-        }
-      })
-      .catch((err) => {
-        console.warn('离线导入同步失败', err);
-      })
-      .finally(() => {
-        syncingImportQueue = false;
-        if (shouldContinue) {
-          processPendingImports();
-        }
-      });
   }
 
   function setButtonLoading(button, loading, label) {
@@ -545,9 +427,9 @@
 
   function hideImportFeedback() {
     importErrorAlert?.classList.add('d-none');
-    if (importWarningAlert) {
+    if (importWarningAlert && importWarningList) {
       importWarningAlert.classList.add('d-none');
-      importWarningList?.replaceChildren();
+      importWarningList.replaceChildren();
     }
   }
 
@@ -561,9 +443,7 @@
     }
     hideImportFeedback();
     importPreviewPayload = null;
-    if (importPreviewWrapper) {
-      importPreviewWrapper.classList.add('d-none');
-    }
+    importPreviewWrapper?.classList.add('d-none');
     if (importApplyBtn) {
       importApplyBtn.classList.add('d-none');
       importApplyBtn.disabled = true;
@@ -580,9 +460,7 @@
       importFileInput.value = '';
     }
     hideImportFeedback();
-    if (importPreviewWrapper) {
-      importPreviewWrapper.classList.add('d-none');
-    }
+    importPreviewWrapper?.classList.add('d-none');
     importPreviewBody?.replaceChildren();
     if (importPreviewSummary) {
       importPreviewSummary.textContent = '预览结果如下，请确认后导入：';
@@ -634,34 +512,16 @@
     importPreviewBody.replaceChildren();
     entries.forEach((entry) => {
       const tr = document.createElement('tr');
-
-      const nameTd = document.createElement('td');
-      nameTd.textContent = entry.name || '—';
-      tr.appendChild(nameTd);
-
-      const groupTd = document.createElement('td');
-      groupTd.textContent = entry.group || '—';
-      tr.appendChild(groupTd);
-
-      const sourceTd = document.createElement('td');
-      sourceTd.textContent = entry.source || '—';
-      tr.appendChild(sourceTd);
-
-      const statusTd = document.createElement('td');
-      statusTd.classList.add('text-nowrap');
-      const badge = document.createElement('span');
-      badge.className = entry.exists ? 'badge text-bg-secondary' : 'badge text-bg-success';
-      badge.textContent = entry.exists ? '已存在' : '新建';
-      statusTd.appendChild(badge);
-      tr.appendChild(statusTd);
-
-      const secretTd = document.createElement('td');
-      secretTd.classList.add('text-nowrap');
-      const codeEl = document.createElement('code');
-      codeEl.textContent = entry.secret_preview || '';
-      secretTd.appendChild(codeEl);
-      tr.appendChild(secretTd);
-
+      const status = entry.exists
+        ? '<span class="badge text-bg-secondary">已存在</span>'
+        : '<span class="badge text-bg-success">新建</span>';
+      tr.innerHTML = `
+        <td>${entry.name || '—'}</td>
+        <td>${entry.group || '—'}</td>
+        <td>${entry.source || '—'}</td>
+        <td>${status}</td>
+        <td><code>${entry.secret_preview || ''}</code></td>
+      `;
       importPreviewBody.appendChild(tr);
     });
     if (importPreviewSummary && summary) {
@@ -672,18 +532,14 @@
 
   if (importModeRadios.length) {
     importModeRadios.forEach((radio) => {
-      radio.addEventListener('change', () => {
-        setImportMode(radio.value);
-      });
+      radio.addEventListener('change', () => setImportMode(radio.value));
     });
     setImportMode(currentImportMode());
   }
 
   importPreviewBtn?.addEventListener('click', () => {
     hideImportFeedback();
-    if (importPreviewWrapper) {
-      importPreviewWrapper.classList.add('d-none');
-    }
+    importPreviewWrapper?.classList.add('d-none');
     importPreviewPayload = null;
     const mode = currentImportMode();
     const formData = new FormData();
@@ -770,24 +626,13 @@
         }
       })
       .catch((err) => {
-        if (!navigator.onLine) {
-          enqueueImportPayload(importPreviewPayload);
-          showImportError('当前处于离线状态，导入内容将在恢复网络后自动同步。');
-        } else {
-          showImportError(err.message || '导入失败，请稍后再试');
-        }
+        showImportError(err.message || '导入失败，请稍后再试');
         setButtonLoading(importApplyBtn, false);
       });
   });
 
   importModalEl?.addEventListener('hidden.bs.modal', () => {
     resetImportModal();
-  });
-
-  processPendingImports();
-  window.addEventListener('online', () => {
-    processPendingImports();
-    refreshTokens();
   });
 
   tbody.addEventListener('change', (event) => {
@@ -835,15 +680,6 @@
         select.disabled = false;
       });
   });
-
-  bootstrapTicker();
-
-  const form = document.getElementById('searchForm');
-  const qInput = document.getElementById('q');
-  const groupSelect = document.getElementById('group');
-  const clearBtn = document.getElementById('clearBtn');
-  const searchBtn = document.getElementById('searchBtn');
-  const spinner = document.getElementById('searchSpinner');
 
   function updateClearButton() {
     const hasValue = (qInput && qInput.value.trim()) || (groupSelect && groupSelect.value);
@@ -1143,7 +979,7 @@
   });
 
   exportOfflineBtn?.addEventListener('click', (event) => {
-    const ok = window.confirm('离线包会在本地保存全部密钥明文，使用完毕后请及时销毁文件。确认生成吗？');
+    const ok = window.confirm('导出离线包会在本地保存全部密钥明文，使用完毕后请及时销毁文件。确认生成吗？');
     if (!ok) {
       event.preventDefault();
     }
