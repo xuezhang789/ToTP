@@ -454,7 +454,7 @@
     RAW_ENTRIES.splice(0, RAW_ENTRIES.length);
     rendered.forEach(wipeCard);
     if (grid) {
-      grid.innerHTML = '<div class="notice" style="color:#ef4444;background:rgba(254,226,226,0.9);border-color:rgba(248,113,113,0.5);">已手动销毁离线数据。如需再次查看，请回到系统重新生成备份。</div>';
+      grid.innerHTML = '<div class="notice" style="color:#ef4444;background:rgba(254,226,226,0.9);border-color:rgba(248,113,113,0.5);">已手动销毁离线数据。如需再次查看，请回到系统重新生成离线包。</div>';
     }
     destroyBtn.disabled = true;
     destroyBtn.textContent = '已销毁';
