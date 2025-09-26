@@ -55,5 +55,16 @@ python manage.py runserver 0.0.0.0:8000
 
    xuezhang789@gmail.com
 
+## 桌面壳（可选）
+
+若需要在桌面系统中以独立窗口运行，可使用仓库内的 `desktop-shell`：
+
+```bash
+cd desktop-shell
+npm install
+npm start
+```
+
+默认会尝试连接本地开发服务器 (`http://127.0.0.1:8000/`)，如需指向线上环境，可在启动前设置 `TOTP_DESKTOP_START_URL` 环境变量。
 
 

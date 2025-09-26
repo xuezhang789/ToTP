@@ -4,6 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0d6efd">
     <title>{% block title %}2FA在线工具,TOTP管理平台,动态验证码助手{% endblock %}</title>
     <meta name="keywords" content="2FA,2fa,2fa在线工具,2FA Auth,2FA live,2FA Code,双重验证工具,2FA在线工具"/>
     <meta name="description" content="免费的TOTP管理平台,动态验证码助手OTP管理平台,2FA在线工具"/>
@@ -11,6 +12,7 @@
     <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="manifest" href="{% url 'pwa_manifest' %}">
 
     <style>
         body {
@@ -52,6 +54,16 @@
 <script src="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
 <!-- ZXing Library -->
 <script src="https://cdn.bootcdn.net/ajax/libs/zxing/0.20.0/zxing.min.js"></script>
+<script>
+  // 在支持的浏览器中注册 Service Worker，提供 PWA 与离线能力
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('{% url "service_worker" %}').catch((err) => {
+        console.warn('Service Worker 注册失败', err);
+      });
+    });
+  }
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

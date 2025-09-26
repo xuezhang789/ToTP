@@ -220,6 +220,11 @@
   const countdownEl = document.getElementById('countdown');
   const importPreviewUrl = "{% url 'totp:batch_import_preview' %}";
   const importApplyUrl = "{% url 'totp:batch_import_apply' %}";
+  const STORAGE_KEYS = {
+    tokens: 'totp.cachedTokens',
+    importQueue: 'totp.pendingImports'
+  };
+  let syncingImportQueue = false;
   const state = new Map();
   let cycleRemaining = 30;
   let refreshTimer = null;
@@ -271,6 +276,55 @@
     }
   }
 
+  function loadJson(key, fallback = null) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (err) {
+      console.warn('读取本地缓存失败', err);
+      return fallback;
+    }
+  }
+
+  function saveJson(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (err) {
+      console.warn('写入本地缓存失败', err);
+    }
+  }
+
+  // 将最新的验证码数据缓存到本地，便于离线时展示
+  function saveTokens(payload) {
+    if (!payload) {
+      return;
+    }
+    saveJson(STORAGE_KEYS.tokens, {
+      timestamp: Date.now(),
+      remaining: payload.remaining,
+      items: payload.items || [],
+    });
+  }
+
+  function useCachedTokens() {
+    const cached = loadJson(STORAGE_KEYS.tokens);
+    if (!cached || !cached.items || !cached.items.length) {
+      return false;
+    }
+    setCountdown(Number(cached.remaining ?? 30));
+    const items = new Map((cached.items || []).map((item) => [Number(item.id), item]));
+    state.forEach((row, id) => {
+      const payload = items.get(id);
+      if (!payload) {
+        return;
+      }
+      const period = Number(payload.period) || row.period;
+      row.period = period;
+      renderRow(row, payload.code, cycleRemaining, period);
+    });
+    return true;
+  }
+
   async function refreshTokens() {
     if (pendingRequest) {
       return pendingRequest;
@@ -298,9 +352,13 @@
           row.period = period;
           renderRow(row, payload.code, cycleRemaining, period);
         });
+        saveTokens(data);
       })
       .catch((err) => {
         console.error('Refresh tokens failed:', err);
+        if (!useCachedTokens()) {
+          console.warn('暂无可用的验证码缓存');
+        }
       })
       .finally(() => {
         pendingRequest = null;
@@ -372,6 +430,76 @@
   function getCsrfToken() {
     const match = document.cookie.match(/csrftoken=([^;]+)/);
     return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  function loadImportQueue() {
+    return loadJson(STORAGE_KEYS.importQueue, []);
+  }
+
+  function saveImportQueue(queue) {
+    saveJson(STORAGE_KEYS.importQueue, queue);
+  }
+
+  // 在离线状态下暂存导入任务，待网络恢复后自动同步
+  function enqueueImportPayload(entries) {
+    const queue = loadImportQueue();
+    const payload = Array.isArray(entries) ? entries.map((item) => ({
+      name: item.name,
+      group: item.group || '',
+      secret: item.secret,
+      source: item.source || '离线导入',
+    })) : [] ;
+    if (!payload.length) {
+      return;
+    }
+    queue.push({ entries: payload, createdAt: Date.now() });
+    saveImportQueue(queue);
+  }
+
+  // 恢复联网后主动冲刷导入队列，确保操作最终写入服务器
+  function processPendingImports() {
+    if (syncingImportQueue || !navigator.onLine) {
+      return;
+    }
+    const queue = loadImportQueue();
+    if (!queue.length) {
+      return;
+    }
+    syncingImportQueue = true;
+    let shouldContinue = false;
+
+    const next = queue[0];
+    fetch(importApplyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+      },
+      body: JSON.stringify({ entries: next.entries }),
+      credentials: 'same-origin',
+    })
+      .then(async (resp) => {
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) {
+          throw new Error(data.error || '同步失败');
+        }
+        const updatedQueue = loadImportQueue();
+        updatedQueue.shift();
+        saveImportQueue(updatedQueue);
+        shouldContinue = updatedQueue.length > 0;
+        if (!updatedQueue.length && data.redirect) {
+          window.location.href = data.redirect;
+        }
+      })
+      .catch((err) => {
+        console.warn('离线导入同步失败', err);
+      })
+      .finally(() => {
+        syncingImportQueue = false;
+        if (shouldContinue) {
+          processPendingImports();
+        }
+      });
   }
 
   function setButtonLoading(button, loading, label) {
@@ -642,13 +770,24 @@
         }
       })
       .catch((err) => {
-        showImportError(err.message || '导入失败，请稍后再试');
+        if (!navigator.onLine) {
+          enqueueImportPayload(importPreviewPayload);
+          showImportError('当前处于离线状态，导入内容将在恢复网络后自动同步。');
+        } else {
+          showImportError(err.message || '导入失败，请稍后再试');
+        }
         setButtonLoading(importApplyBtn, false);
       });
   });
 
   importModalEl?.addEventListener('hidden.bs.modal', () => {
     resetImportModal();
+  });
+
+  processPendingImports();
+  window.addEventListener('online', () => {
+    processPendingImports();
+    refreshTokens();
   });
 
   tbody.addEventListener('change', (event) => {

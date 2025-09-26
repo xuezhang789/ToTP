@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}离线模式{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-center" style="min-height:60vh;">
+    <div class="text-center p-4 p-md-5 bg-white rounded-4 shadow-sm border-0" style="max-width:420px;">
+        <div class="display-4 text-primary mb-3"><i class="bi bi-wifi-off"></i></div>
+        <h1 class="h4 mb-2">当前处于离线状态</h1>
+        <p class="text-muted">已缓存的页面依旧可浏览，待网络恢复后系统会自动同步最新验证码和操作。</p>
+        <button class="btn btn-primary mt-2" onclick="window.location.reload();">
+            <i class="bi bi-arrow-clockwise me-2"></i>重新尝试
+        </button>
+    </div>
+</div>
+{% endblock %}

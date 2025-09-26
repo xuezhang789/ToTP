@@ -13,6 +13,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
 from . import importers
@@ -64,6 +65,50 @@ def dashboard(request):
         "totp/dashboard.html",
         {"stats": stats, "recent_entries": recent_entries},
     )
+
+
+@never_cache
+def pwa_manifest(_request):
+    """返回 PWA manifest 配置。"""
+
+    return JsonResponse(
+        {
+            "name": "ToTP 管理平台",
+            "short_name": "ToTP",
+            "start_url": "/",
+            "display": "standalone",
+            "theme_color": "#0d6efd",
+            "background_color": "#0d6efd",
+            "lang": "zh-CN",
+            "scope": "/",
+            "icons": [],
+        }
+    )
+
+
+@never_cache
+def service_worker(request):
+    """返回站点 Service Worker 脚本。"""
+
+    response = render(
+        request,
+        "pwa/service_worker.js",
+        {
+            "offline_url": reverse("pwa_offline"),
+            "list_url": reverse("totp:list"),
+            "dashboard_url": reverse("dashboard"),
+        },
+        content_type="application/javascript",
+    )
+    response["Service-Worker-Allowed"] = "/"
+    return response
+
+
+@never_cache
+def pwa_offline(request):
+    """离线占位页，供 Service Worker 回退展示。"""
+
+    return render(request, "pwa/offline.html", status=200)
 
 
 @login_required
