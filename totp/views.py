@@ -87,7 +87,7 @@ def list_view(request):
     elif group_id:
         entry_qs = entry_qs.filter(group_id=group_id)
 
-    paginator = Paginator(entry_qs, 5)
+    paginator = Paginator(entry_qs, 10)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
     groups = (
@@ -117,6 +117,7 @@ def add_entry(request):
         secret = (request.POST.get("secret") or "").strip()
 
         if secret.lower().startswith("otpauth://"):
+            # 兼容扫描二维码导出的 otpauth URL，自动解析名称与密钥
             label, s = parse_otpauth(secret)
             if not name and label:
                 name = label
@@ -134,6 +135,7 @@ def add_entry(request):
                 group = None
 
         if TOTPEntry.objects.filter(user=request.user, name=name).exists():
+            # 针对同一用户维持名称唯一，避免后续展示或分享时产生混淆
             messages.error(request, "同一用户下名称需唯一")
             return redirect("totp:list")
 
@@ -298,6 +300,7 @@ def batch_import_preview(request):
     names = [entry.name for entry in result.entries]
     # 预先查询名称，避免在循环中重复命中数据库
     existing_names = set(
+        # 一次获取当前用户的所有同名条目，后续循环内只需字典判断
         TOTPEntry.objects.filter(user=request.user, name__in=names)
         .values_list("name", flat=True)
     )
@@ -355,6 +358,7 @@ def batch_import_apply(request):
     errors: list[str] = []
     seen: set[str] = set()
     for idx, item in enumerate(raw_entries, 1):
+        # 逐条校验名称、分组和密钥，保证落库前格式正确
         if not isinstance(item, dict):
             continue
         name = (item.get("name") or "").strip()
@@ -367,6 +371,7 @@ def batch_import_apply(request):
             errors.append(f"第 {idx} 条数据无效，已跳过")
             continue
         entries.append(
+            # 标准化后的数据统一封装成 ParsedEntry，便于后续批量处理
             importers.ParsedEntry(
                 name=name[:importers.MAX_NAME_LEN],
                 secret=normalized,
@@ -412,6 +417,7 @@ def _apply_import_entries(user, entries):
 
     # 一次性查出需要的分组，缺失的分组批量创建
     group_names = sorted({entry.group for entry in entries if entry.group})
+    # 预拉取已有分组，缺失的分组统一创建，避免逐条查询
     groups = {
         g.name: g
         for g in Group.objects.filter(user=user, name__in=group_names)
@@ -429,6 +435,7 @@ def _apply_import_entries(user, entries):
         )
 
     existing_names = set(
+        # 先查出当前数据库中已有的名称，导入时直接过滤重复
         TOTPEntry.objects.filter(user=user, name__in=[entry.name for entry in entries])
         .values_list("name", flat=True)
     )
@@ -440,6 +447,7 @@ def _apply_import_entries(user, entries):
             continue
         group = groups.get(entry.group) if entry.group else None
         to_create.append(
+            # 使用 bulk_create 批量写入以提升导入性能
             TOTPEntry(
                 user=user,
                 name=entry.name,
@@ -593,6 +601,7 @@ def rename_entry(request, pk: int):
         )
 
     exists = (
+        # 排除当前条目自身后检查重名，确保名称唯一
         TOTPEntry.objects.filter(user=request.user, name=new_name, is_deleted=False)
         .exclude(pk=entry.pk)
         .exists()
@@ -649,6 +658,7 @@ def create_one_time_link(request, pk: int):
     token = None
     token_hash = None
     for _ in range(6):
+        # 最多重试 6 次生成随机 token，以避免哈希碰撞
         candidate = secrets.token_urlsafe(32)
         candidate_hash = hashlib.sha256(candidate.encode()).hexdigest()
         if not OneTimeLink.objects.filter(token_hash=candidate_hash).exists():
@@ -671,6 +681,7 @@ def create_one_time_link(request, pk: int):
     path = reverse("totp:one_time_view", args=[token])
     origin = request.headers.get("Origin")
     if not origin:
+        # 如果缺少 Origin 头（例如旧浏览器），使用请求 scheme + host 拼装访问前缀
         origin = f"{request.scheme}://{request.get_host()}"
     url = f"{origin}{path}"
     return JsonResponse(
@@ -714,6 +725,7 @@ def external_totp(request):
         digits_int = int(digits)
     except (TypeError, ValueError):
         digits_int = 6
+    # 限制验证码长度在合理范围内，避免异常参数导致计算失败
     digits_int = min(max(digits_int, 4), 8)
 
     period = request.GET.get("period") or "30"
@@ -721,6 +733,7 @@ def external_totp(request):
         period_int = int(period)
     except (TypeError, ValueError):
         period_int = 30
+    # 周期最短 15 秒，最长 120 秒，保持兼容常见 TOTP 设置
     period_int = min(max(period_int, 15), 120)
 
     timestamp = int(timezone.now().timestamp())
@@ -772,6 +785,7 @@ def one_time_view(request, token: str):
 
     try:
         with transaction.atomic():
+            # select_for_update 保证同一链接在并发访问时顺序处理，避免剩余次数被同时扣减
             link = (
                 OneTimeLink.objects.select_for_update()
                 .select_related("entry", "entry__user", "entry__group")
@@ -783,6 +797,7 @@ def one_time_view(request, token: str):
                 return _render_one_time_invalid(request, reason=reason)
 
             try:
+                # mark_view 内部更新查看次数，如果超过上限会抛出异常
                 link.mark_view(request)
             except ValueError:
                 reason = _resolve_link_inactive_reason(link)
@@ -842,6 +857,7 @@ def _external_totp_response(request, *, ok: bool, message: str | None = None, **
     if not wants_json:
         accept = request.headers.get("Accept", "")
         if "application/json" in accept and "text/html" not in accept:
+            # 尊重客户端 Accept 头部，如果明确只接受 JSON 则直接返回 JSON 响应
             wants_json = True
 
     payload = {"ok": ok}
