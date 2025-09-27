@@ -8,12 +8,19 @@ from .utils import decrypt_str, totp_code_base32
 def api_tokens(request):
     """返回所有 TOTP 条目的当前验证码。"""
     items = []
+    period = 30
     # 与前端倒计时保持一致：计算距离 30 秒周期结束的剩余秒数
-    remaining = 30 - (int(timezone.now().timestamp()) % 30)
-    for eid, secret_enc in TOTPEntry.objects.filter(user=request.user).values_list(
-            "id", "secret_encrypted"
-    ):
-        secret = decrypt_str(secret_enc)
-        code, _ = totp_code_base32(secret, digits=6, period=30)
-        items.append({"id": eid, "code": code, "period": 30})
+    timestamp = int(timezone.now().timestamp())
+    remaining = period - (timestamp % period)
+
+    queryset = (
+        TOTPEntry.objects.filter(user=request.user)
+        .only("id", "secret_encrypted")
+    )
+
+    for entry in queryset.iterator(chunk_size=200):
+        secret = decrypt_str(entry.secret_encrypted)
+        code, _ = totp_code_base32(secret, digits=6, period=period, timestamp=timestamp)
+        items.append({"id": entry.id, "code": code, "period": period})
+
     return JsonResponse({"remaining": remaining, "items": items})

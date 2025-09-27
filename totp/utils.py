@@ -60,11 +60,23 @@ def normalize_google_secret(secret: str) -> str:
     return s
 
 
-def totp_code_base32(secret_b32: str, digits: int = 6, period: int = 30):
-    """根据 Base32 密钥计算当前 TOTP 码及剩余时间。"""
+def totp_code_base32(
+    secret_b32: str,
+    digits: int = 6,
+    period: int = 30,
+    timestamp: int | float | None = None,
+):
+    """根据 Base32 密钥计算当前 TOTP 码及剩余时间。
+
+    可选的 ``timestamp`` 参数允许复用同一时间点，用于批量计算时减少重复的
+    ``time.time()`` 调用并保持返回值在一个周期内一致。
+    """
     s = _b32_clean(secret_b32)
     key = base64.b32decode(s + "=" * ((8 - len(s) % 8) % 8), casefold=True)
-    t = int(time.time())
+    if timestamp is None:
+        t = int(time.time())
+    else:
+        t = int(timestamp)
     counter = t // period
     msg = struct.pack(">Q", counter)
     h = hmac.new(key, msg, hashlib.sha1).digest()

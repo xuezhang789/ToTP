@@ -1,5 +1,6 @@
 import json
 import re
+import secrets
 
 from django.conf import settings
 from django.contrib import messages
@@ -172,22 +173,43 @@ def google_onetap(request):
 
 def _username_from_email(email: str) -> str:
     """根据邮箱生成唯一的用户名。"""
+
     base = re.sub(r"[^a-zA-Z0-9_.-]", "", (email.split("@")[0] or "user"))
     base = base[:24] or "user"
 
-    # Retrieve all usernames starting with the base prefix once
-    existing = set(
-        User.objects.filter(username__startswith=base).values_list("username", flat=True)
-    )
-    if base not in existing:
+    queryset = User.objects.filter(username__startswith=base).only("username")
+    if not queryset.filter(username=base).exists():
         return base
 
-    # Find the first free suffix
-    for i in range(1, 10000):
+    max_suffix = 0
+    for username in (
+        queryset.exclude(username=base)
+        .values_list("username", flat=True)
+        .iterator(chunk_size=256)
+    ):
+        suffix = username[len(base):]
+        if suffix.isdigit():
+            value = int(suffix)
+            if value > max_suffix:
+                max_suffix = value
+
+    candidate_suffix = max_suffix + 1
+    candidate = f"{base}{candidate_suffix}"
+    if not User.objects.filter(username=candidate).exists():
+        return candidate
+
+    # 极端情况下存在间隙或高并发冲突，回退到逐步探查，
+    # 但因为通常仅需极少次数，整体开销仍远小于一次性加载全部用户名。
+    for i in range(candidate_suffix + 1, candidate_suffix + 10000):
         cand = f"{base}{i}"
-        if cand not in existing:
+        if not User.objects.filter(username=cand).exists():
             return cand
-    return base  # fallback
+
+    while True:
+        rand_suffix = secrets.token_hex(2)
+        cand = f"{base}{rand_suffix}"
+        if not User.objects.filter(username=cand).exists():
+            return cand
 
 
 def _json(obj, status=200):
