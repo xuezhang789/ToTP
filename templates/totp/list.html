@@ -204,6 +204,36 @@
     </div>
 </div>
 
+<div class="modal fade" id="renameModal" tabindex="-1" aria-labelledby="renameModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="renameModalLabel">修改密钥名称</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <div id="renameAlert" class="alert alert-danger d-none" role="alert"></div>
+                <form id="renameForm" class="needs-validation" novalidate>
+                    <input type="hidden" id="renameEntryId" name="entry_id">
+                    <div class="mb-3">
+                        <label class="form-label" for="renameNameInput">新的显示名称</label>
+                        <input type="text" class="form-control" id="renameNameInput" name="name" maxlength="64" required
+                               placeholder="请输入不超过 64 个字符的名称">
+                        <div class="form-text">名称将在列表和分享链接等位置同步更新。</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="renameSubmitBtn">
+                    <span class="spinner-border spinner-border-sm d-none me-2" id="renameSpinner" role="status" aria-hidden="true"></span>
+                    保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% include 'totp/add_modal.html' %}
 {% include 'totp/import_modal.html' %}
 {% include 'totp/add_group_modal.html' %}
@@ -232,6 +262,16 @@
   const clearBtn = document.getElementById('clearBtn');
   const searchBtn = document.getElementById('searchBtn');
   const spinner = document.getElementById('searchSpinner');
+  const renameModalEl = document.getElementById('renameModal');
+  const renameForm = document.getElementById('renameForm');
+  const renameEntryIdInput = document.getElementById('renameEntryId');
+  const renameNameInput = document.getElementById('renameNameInput');
+  const renameAlert = document.getElementById('renameAlert');
+  const renameSubmitBtn = document.getElementById('renameSubmitBtn');
+  const renameSpinner = document.getElementById('renameSpinner');
+  let renameModalInstance = null;
+  let renameTargetRow = null;
+  let renameSubmitUrl = '';
 
   function initRows() {
     state.clear();
@@ -277,6 +317,37 @@
       const pct = Math.min(100, Math.max(0, Math.round(((safePeriod - remain) / safePeriod) * 100)));
       row.progressEl.style.width = `${pct}%`;
     }
+  }
+
+  function setRenameLoading(flag) {
+    if (!renameSubmitBtn) {
+      return;
+    }
+    renameSubmitBtn.disabled = flag;
+    if (renameSpinner) {
+      renameSpinner.classList.toggle('d-none', !flag);
+    }
+  }
+
+  function resetRenameModal() {
+    renameTargetRow = null;
+    renameSubmitUrl = '';
+    if (renameForm) {
+      renameForm.reset();
+    }
+    if (renameAlert) {
+      renameAlert.classList.add('d-none');
+      renameAlert.textContent = '';
+    }
+    setRenameLoading(false);
+  }
+
+  function showRenameError(message) {
+    if (!renameAlert) {
+      return;
+    }
+    renameAlert.textContent = message;
+    renameAlert.classList.remove('d-none');
   }
 
   async function refreshTokens() {
@@ -377,7 +448,136 @@
       });
   });
 
+  tbody.addEventListener('click', (event) => {
+    const trigger = event.target.closest('.rename-btn');
+    if (!trigger || !renameModalEl) {
+      return;
+    }
+    event.preventDefault();
+    const tr = trigger.closest('tr[data-rename-url]');
+    if (!tr) {
+      return;
+    }
+    const url = tr.dataset.renameUrl || '';
+    if (!url) {
+      return;
+    }
+    renameTargetRow = tr;
+    renameSubmitUrl = url;
+    if (renameEntryIdInput) {
+      renameEntryIdInput.value = tr.dataset.id || '';
+    }
+    const currentName = trigger.dataset.entryName
+      || tr.querySelector('.entry-name')?.textContent?.trim()
+      || '';
+    if (renameNameInput) {
+      renameNameInput.value = currentName;
+    }
+    if (renameAlert) {
+      renameAlert.classList.add('d-none');
+      renameAlert.textContent = '';
+    }
+    setRenameLoading(false);
+    renameModalInstance =
+      window.bootstrap && typeof window.bootstrap.Modal === 'function'
+        ? window.bootstrap.Modal.getOrCreateInstance(renameModalEl)
+        : null;
+    if (renameModalInstance) {
+      renameModalInstance.show();
+    }
+  });
+
   bootstrapTicker();
+
+  renameForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    renameSubmitBtn?.click();
+  });
+
+  renameNameInput?.addEventListener('input', () => {
+    if (renameAlert) {
+      renameAlert.classList.add('d-none');
+      renameAlert.textContent = '';
+    }
+  });
+
+  renameSubmitBtn?.addEventListener('click', () => {
+    if (!renameTargetRow || !renameSubmitUrl || !renameNameInput) {
+      return;
+    }
+    const value = renameNameInput.value.trim();
+    if (!value) {
+      showRenameError('名称不能为空');
+      renameNameInput.focus({ preventScroll: true });
+      return;
+    }
+
+    if (renameAlert) {
+      renameAlert.classList.add('d-none');
+      renameAlert.textContent = '';
+    }
+    setRenameLoading(true);
+
+    const formData = new FormData();
+    formData.append('name', value);
+
+    fetch(renameSubmitUrl, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCsrfToken(),
+        'X-Requested-With': 'fetch',
+      },
+      body: formData,
+      credentials: 'same-origin',
+    })
+      .then(async (resp) => {
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok || !data.ok) {
+          const message = data.message || '保存失败，请稍后再试';
+          throw new Error(message);
+        }
+        return data;
+      })
+      .then((data) => {
+        const newName = data.name || value;
+        const nameEl = renameTargetRow?.querySelector('.entry-name');
+        if (nameEl) {
+          nameEl.textContent = newName;
+          nameEl.title = newName;
+        }
+        const renameBtn = renameTargetRow?.querySelector('.rename-btn');
+        if (renameBtn) {
+          renameBtn.dataset.entryName = newName;
+          renameBtn.setAttribute('aria-label', `重命名 ${newName}`);
+        }
+        const shareBtn = renameTargetRow?.querySelector('.share-link-btn');
+        if (shareBtn) {
+          shareBtn.dataset.entryName = newName;
+        }
+        if (renameModalInstance) {
+          renameModalInstance.hide();
+        } else {
+          resetRenameModal();
+        }
+      })
+      .catch((err) => {
+        showRenameError(err.message || '保存失败，请稍后再试');
+        renameNameInput.focus({ preventScroll: true });
+        renameNameInput.select();
+      })
+      .finally(() => {
+        setRenameLoading(false);
+      });
+  });
+
+  renameModalEl?.addEventListener('shown.bs.modal', () => {
+    renameNameInput?.focus({ preventScroll: true });
+    renameNameInput?.select();
+  });
+
+  renameModalEl?.addEventListener('hidden.bs.modal', () => {
+    resetRenameModal();
+  });
 
   function getCsrfToken() {
     const match = document.cookie.match(/csrftoken=([^;]+)/);

@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from . import importers
 from .models import Group, OneTimeLink, TOTPEntry
@@ -575,6 +575,46 @@ def update_entry_group(request, pk: int):
 
 @login_required
 @require_POST
+def rename_entry(request, pk: int):
+    """修改指定 TOTP 条目的名称。"""
+
+    entry = get_object_or_404(
+        TOTPEntry, pk=pk, user=request.user, is_deleted=False
+    )
+    new_name = (request.POST.get("name") or "").strip()
+    if not new_name:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "empty_name",
+                "message": "名称不能为空",
+            },
+            status=400,
+        )
+
+    exists = (
+        TOTPEntry.objects.filter(user=request.user, name=new_name, is_deleted=False)
+        .exclude(pk=entry.pk)
+        .exists()
+    )
+    if exists:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "duplicate_name",
+                "message": "名称已存在，请使用其他名称",
+            },
+            status=400,
+        )
+
+    entry.name = new_name
+    entry.save(update_fields=["name", "updated_at"])
+
+    return JsonResponse({"ok": True, "name": entry.name})
+
+
+@login_required
+@require_POST
 def create_one_time_link(request, pk: int):
     """为指定密钥生成一次性只读访问链接。"""
 
@@ -656,6 +696,71 @@ def invalidate_one_time_link(request, pk: int):
     return JsonResponse({"ok": True})
 
 
+@never_cache
+@require_GET
+def external_totp(request):
+    """根据链接参数返回动态验证码，供未登录场景使用。"""
+
+    secret_raw = (request.GET.get("secret") or "").strip()
+    if not secret_raw:
+        return _external_totp_response(request, ok=False, message="缺少 secret 参数")
+
+    secret = normalize_google_secret(secret_raw)
+    if not secret:
+        return _external_totp_response(request, ok=False, message="密钥格式无效")
+
+    digits = request.GET.get("digits") or "6"
+    try:
+        digits_int = int(digits)
+    except (TypeError, ValueError):
+        digits_int = 6
+    digits_int = min(max(digits_int, 4), 8)
+
+    period = request.GET.get("period") or "30"
+    try:
+        period_int = int(period)
+    except (TypeError, ValueError):
+        period_int = 30
+    period_int = min(max(period_int, 15), 120)
+
+    timestamp = int(timezone.now().timestamp())
+    code, remaining = totp_code_base32(
+        secret,
+        digits=digits_int,
+        period=period_int,
+        timestamp=timestamp,
+    )
+
+    payload = {
+        "ok": True,
+        "code": code,
+        "remaining": remaining,
+        "period": period_int,
+        "digits": digits_int,
+        "timestamp": timestamp,
+        "secret_preview": _secret_preview(secret),
+    }
+
+    return _external_totp_response(request, **payload)
+
+
+@never_cache
+@require_GET
+def external_totp_tool(request):
+    """展示一个外部验证码生成工具页面。"""
+
+    digits = (request.GET.get("digits") or "6").strip()
+    period = (request.GET.get("period") or "30").strip()
+    context = {
+        "prefill_secret": (request.GET.get("secret") or "").strip(),
+        "prefill_digits": digits,
+        "prefill_period": period,
+        "digits_choices": ["4", "5", "6", "7", "8"],
+        "period_choices": ["15", "20", "30", "45", "60", "90", "120"],
+    }
+    return render(request, "totp/external_tool.html", context)
+
+
 def one_time_view(request, token: str):
     """展示一次性访问链接的验证码。"""
 
@@ -730,3 +835,51 @@ def _resolve_link_inactive_reason(link: OneTimeLink) -> str:
     if link.view_count >= link.max_views:
         return "used"
     return "revoked"
+
+
+def _external_totp_response(request, *, ok: bool, message: str | None = None, **extra):
+    wants_json = request.GET.get("format") == "json"
+    if not wants_json:
+        accept = request.headers.get("Accept", "")
+        if "application/json" in accept and "text/html" not in accept:
+            wants_json = True
+
+    payload = {"ok": ok}
+    if message:
+        payload["message"] = message
+    payload.update(extra)
+
+    status = 200 if ok else 400
+    if wants_json:
+        return JsonResponse(payload, status=status)
+
+    params = request.GET.copy()
+    params["format"] = "json"
+    json_url = request.build_absolute_uri(
+        "?" + params.urlencode()
+    ) if params else request.build_absolute_uri("?format=json")
+
+    if request.GET:
+        refresh_url = request.build_absolute_uri("?" + request.GET.urlencode())
+    else:
+        refresh_url = request.build_absolute_uri()
+
+    context = {
+        "ok": ok,
+        "message": message,
+        "code": payload.get("code"),
+        "remaining": payload.get("remaining"),
+        "period": payload.get("period"),
+        "digits": payload.get("digits"),
+        "timestamp": payload.get("timestamp"),
+        "secret_preview": payload.get("secret_preview"),
+        "refresh_url": refresh_url,
+        "json_url": json_url,
+    }
+    response_status = status if not ok else 200
+    return render(
+        request,
+        "totp/external_totp.html",
+        context,
+        status=response_status,
+    )

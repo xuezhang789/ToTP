@@ -8,6 +8,7 @@ urlpatterns = [
     path("group/add/", views.add_group, name="add_group"),
     path("group/<int:pk>/rename/", views.rename_group, name="rename_group"),
     path("group/<int:pk>/delete/", views.delete_group, name="delete_group"),
+    path("rename/<int:pk>/", views.rename_entry, name="rename_entry"),
     path("update-group/<int:pk>/", views.update_entry_group, name="update_group"),
     path("delete/<int:pk>/", views.delete_entry, name="delete"),
     path("trash/", views.trash_view, name="trash"),
@@ -27,5 +28,7 @@ urlpatterns = [
         name="one_time_invalidate",
     ),
     path("link/<str:token>/", views.one_time_view, name="one_time_view"),
+    path("external/tool/", views.external_totp_tool, name="external_totp_tool"),
+    path("external/otp/", views.external_totp, name="external_totp"),
     path("api/tokens/", api.api_tokens, name="api_tokens"),
 ]

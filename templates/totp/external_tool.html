@@ -1,0 +1,230 @@
+{% extends 'base.html' %}
+{% block title %}在线动态验证码生成器{% endblock %}
+
+{% block content %}
+<section class="py-5 py-lg-6 bg-gradient" style="background: radial-gradient(circle at top, #eef2ff 0, #e2e8f0 45%, #f8fafc 100%);">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-12 col-lg-10 col-xl-8">
+        <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+          <div class="row g-0">
+            <div class="col-12 col-md-5 bg-primary text-white d-flex flex-column justify-content-center p-4 p-lg-5">
+              <div>
+                <h1 class="h3 fw-semibold mb-3">即时生成动态验证码</h1>
+                <p class="text-white-50 mb-4">输入 Base32 格式的密钥，即可实时计算 TOTP 验证码。支持 4-8 位数字、自定义周期,更多功能请登录使用。</p>
+                <ul class="list-unstyled small text-white-75 mb-0">
+                  <li class="mb-2"><i class="bi bi-lightning-charge-fill me-2"></i>无需登录，随时可用</li>
+                  <li class="mb-2"><i class="bi bi-shield-lock-fill me-2"></i>本地计算，无敏感数据持久化</li>
+                  <li><i class="bi bi-phone me-2"></i>自适应界面，手机上也能顺畅使用</li>
+                </ul>
+              </div>
+            </div>
+            <div class="col-12 col-md-7 bg-white">
+              <div class="p-4 p-lg-5">
+                <form id="totp-form" class="needs-validation" novalidate data-endpoint="{% url 'totp:external_totp' %}">
+                  <div class="mb-3">
+                    <label for="secret-input" class="form-label fw-semibold">TOTP 密钥（Base32）</label>
+                    <textarea id="secret-input" name="secret" class="form-control" rows="3" placeholder="例如：JBSWY3DPEHPK3PXP"
+                              required>{{ prefill_secret }}</textarea>
+                    <div class="invalid-feedback">请输入有效的 Base32 密钥。</div>
+                  </div>
+                  <div class="row g-3 mb-3">
+                    <div class="col-6">
+                      <label for="digits-input" class="form-label fw-semibold">验证码位数</label>
+                      <select id="digits-input" name="digits" class="form-select">
+                        {% for val in digits_choices %}
+                        <option value="{{ val }}" {% if prefill_digits == val %}selected{% endif %}>{{ val }} 位</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="col-6">
+                      <label for="period-input" class="form-label fw-semibold">周期（秒）</label>
+                      <select id="period-input" name="period" class="form-select">
+                        {% for val in period_choices %}
+                        <option value="{{ val }}" {% if prefill_period == val %}selected{% endif %}>每 {{ val }} 秒</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                  </div>
+                  <div class="d-grid d-md-block">
+                    <button class="btn btn-primary px-4" type="submit">生成验证码</button>
+                    <a class="btn btn-link text-decoration-none mt-3 mt-md-0 ms-md-3" href="{% url 'dashboard' %}">
+                      返回首页
+                    </a>
+                  </div>
+                </form>
+
+                <div id="result-card" class="mt-4 d-none">
+                  <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                      <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                        <div>
+                          <p class="text-muted mb-1 small">当前验证码</p>
+                          <p id="otp-code" class="display-4 fw-bold mb-0">000000</p>
+                        </div>
+                        <div class="text-end">
+                          <p class="text-muted mb-1 small">剩余时间</p>
+                          <p id="otp-remaining" class="h4 fw-semibold text-primary mb-0">-- 秒</p>
+                        </div>
+                      </div>
+                      <div class="d-flex flex-wrap align-items-center gap-3 mt-3">
+                        <span class="badge rounded-pill bg-secondary-subtle text-secondary" id="otp-period">周期 30 秒</span>
+                        <span class="badge rounded-pill bg-secondary-subtle text-secondary" id="otp-digits">6 位</span>
+                        <span class="badge rounded-pill bg-secondary-subtle text-secondary" id="otp-preview">密钥 ****</span>
+                      </div>
+                      <div class="d-flex flex-wrap gap-2 mt-3">
+                        <button id="copy-btn" class="btn btn-outline-secondary btn-sm" type="button">
+                          <i class="bi bi-clipboard"></i> 复制验证码
+                        </button>
+                        <button id="refresh-btn" class="btn btn-outline-primary btn-sm" type="button">
+                          <i class="bi bi-arrow-clockwise"></i> 立即刷新
+                        </button>
+                      </div>
+                      <p id="generated-at" class="text-muted small mt-3 mb-0">生成时间：--</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="form-alert" class="alert alert-danger mt-4 d-none" role="alert"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<script>
+(function () {
+  const form = document.getElementById('totp-form');
+  const secretInput = document.getElementById('secret-input');
+  const digitsInput = document.getElementById('digits-input');
+  const periodInput = document.getElementById('period-input');
+  const alertBox = document.getElementById('form-alert');
+  const resultCard = document.getElementById('result-card');
+  const codeEl = document.getElementById('otp-code');
+  const remainEl = document.getElementById('otp-remaining');
+  const periodEl = document.getElementById('otp-period');
+  const digitsEl = document.getElementById('otp-digits');
+  const previewEl = document.getElementById('otp-preview');
+  const generatedAtEl = document.getElementById('generated-at');
+  const copyBtn = document.getElementById('copy-btn');
+  const refreshBtn = document.getElementById('refresh-btn');
+  const endpoint = form?.dataset.endpoint;
+
+  let countdown = null;
+  let timer = null;
+
+  function resetTimer(value) {
+    if (timer) {
+      clearInterval(timer);
+    }
+    countdown = value;
+    if (!Number.isFinite(countdown)) {
+      remainEl.textContent = '-- 秒';
+      return;
+    }
+    timer = setInterval(() => {
+      countdown = Math.max(countdown - 1, 0);
+      remainEl.textContent = `${countdown} 秒`;
+      if (countdown <= 0) {
+        refreshCode();
+      }
+    }, 1000);
+  }
+
+  function showError(msg) {
+    if (!alertBox) return;
+    alertBox.textContent = msg || '请求失败，请稍后再试。';
+    alertBox.classList.remove('d-none');
+  }
+
+  function hideError() {
+    if (!alertBox) return;
+    alertBox.classList.add('d-none');
+  }
+
+  function renderPayload(payload) {
+    if (!payload?.ok) {
+      showError(payload?.message || '密钥无效');
+      return;
+    }
+    hideError();
+    resultCard.classList.remove('d-none');
+    codeEl.textContent = payload.code;
+    remainEl.textContent = `${payload.remaining} 秒`;
+    periodEl.textContent = `周期 ${payload.period} 秒`;
+    digitsEl.textContent = `${payload.digits} 位`;
+    previewEl.textContent = payload.secret_preview ? `密钥 ${payload.secret_preview}` : '密钥 ****';
+    const ts = new Date(payload.timestamp * 1000);
+    generatedAtEl.textContent = `生成时间：${ts.toLocaleString()}`;
+    resetTimer(payload.remaining);
+  }
+
+  function buildParams() {
+    const params = new URLSearchParams();
+    params.set('secret', secretInput.value.trim());
+    params.set('digits', digitsInput.value);
+    params.set('period', periodInput.value);
+    params.set('format', 'json');
+    return params;
+  }
+
+  function refreshCode() {
+    if (!endpoint) return;
+    const params = buildParams();
+    refreshBtn?.setAttribute('disabled', 'disabled');
+    fetch(`${endpoint}?${params.toString()}`, {
+      headers: {
+        'Accept': 'application/json'
+      }
+    })
+      .then((resp) => resp.json())
+      .then(renderPayload)
+      .catch(() => showError())
+      .finally(() => refreshBtn?.removeAttribute('disabled'));
+  }
+
+  form?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!form.checkValidity()) {
+      form.classList.add('was-validated');
+      return;
+    }
+    hideError();
+    refreshCode();
+  });
+
+  copyBtn?.addEventListener('click', () => {
+    navigator.clipboard.writeText(codeEl.textContent.trim()).then(() => {
+      copyBtn.classList.remove('btn-outline-secondary');
+      copyBtn.classList.add('btn-success');
+      copyBtn.innerHTML = '<i class="bi bi-check2"></i> 已复制';
+      setTimeout(() => {
+        copyBtn.classList.remove('btn-success');
+        copyBtn.classList.add('btn-outline-secondary');
+        copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> 复制验证码';
+      }, 1600);
+    }).catch(() => showError('复制失败，请手动复制。'));
+  });
+
+  refreshBtn?.addEventListener('click', () => {
+    refreshCode();
+  });
+
+  window.addEventListener('beforeunload', () => {
+    if (timer) {
+      clearInterval(timer);
+    }
+  });
+
+  if (secretInput?.value.trim()) {
+    refreshCode();
+  }
+})();
+</script>
+{% endblock %}
