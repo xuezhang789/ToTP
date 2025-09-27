@@ -10,8 +10,7 @@
 - **密钥管理**：`totp` 应用支持按分组保存密钥、软删除与回收站、批量导入（1Password / Bitwarden / Authy / 手动）和导出。
 - **安全存储**：使用项目 `SECRET_KEY` 派生的 Fernet 密钥对 TOTP 秘钥进行对称加密，数据库泄露也无法直接获取明文。
 - **验证码生成**：服务器端实时计算验证码与剩余时间，支持离线包生成与一次性分享链接。
-- **REST API**：`/api/tokens/` 接口返回当前用户全部条目的验证码和剩余周期，便于外部脚本或桌面壳调用。
-- **桌面客户端**：附带 Electron 壳（`desktop-shell/`）可将 Web 应用封装为桌面程序。
+- **REST API**：`/api/tokens/` 接口返回当前用户全部条目的验证码和剩余周期，便于外部脚本或
 
 项目使用 Django 4.2、SQLite（默认）、`cryptography` 和 `google-auth` 等依赖，可根据需要切换到其它数据库或登录方案。
 
@@ -22,7 +21,6 @@
 ### 1. 准备环境
 
 - Python 3.10+
-- Node.js（仅在使用桌面壳时需要）
 - 推荐 macOS / Linux，Windows 同样适用
 
 ```bash
@@ -118,17 +116,6 @@ curl -H "Cookie: sessionid=..." https://your-domain/api/tokens/
 
 ---
 
-## 桌面壳（可选）
-
-```bash
-cd desktop-shell
-npm install
-npm start
-```
-
-默认会连接本地运行的服务器 `http://127.0.0.1:8000/`。若要指向线上环境，启动前设置 `TOTP_DESKTOP_START_URL` 环境变量。
-
----
 
 ## 支持与反馈
 
