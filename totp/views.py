@@ -628,7 +628,11 @@ def create_one_time_link(request, pk: int):
         max_views=max_views,
     )
 
-    url = request.build_absolute_uri(reverse("totp:one_time_view", args=[token]))
+    path = reverse("totp:one_time_view", args=[token])
+    origin = request.headers.get("Origin")
+    if not origin:
+        origin = f"{request.scheme}://{request.get_host()}"
+    url = f"{origin}{path}"
     return JsonResponse(
         {
             "ok": True,
