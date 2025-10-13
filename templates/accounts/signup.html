@@ -3,26 +3,6 @@
 {% block head %}
 <meta name="google-signin-client_id" content="{{ GOOGLE_CLIENT_ID }}">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
-<style>
-    .password-strength-bar { height: 6px; border-radius: 999px; }
-    .password-assistant button { white-space: nowrap; }
-    .password-tips li { position: relative; padding-left: 1.25rem; }
-    .password-tips li::before {
-        content: "\2713";
-        position: absolute;
-        left: 0;
-        top: 0;
-        color: var(--bs-success);
-    }
-    .password-tips li.is-warning::before {
-        content: "\26A0";
-        color: var(--bs-warning);
-    }
-    .password-tips li.is-error::before {
-        content: "\2717";
-        color: var(--bs-danger);
-    }
-</style>
 {% endblock %}
 {% block content %}
 <div class="row justify-content-center">
