@@ -525,6 +525,7 @@ def export_offline_package(request):
     entries = []
     for entry in queryset:
         secret = decrypt_str(entry.secret_encrypted)
+        issuer = entry.group.name if entry.group else request.user.username
         entries.append(
             {
                 "name": entry.name,
@@ -532,6 +533,7 @@ def export_offline_package(request):
                 "group": entry.group.name if entry.group else "",
                 "period": 30,
                 "digits": 6,
+                "issuer": issuer,
             }
         )
 
