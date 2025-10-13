@@ -3,125 +3,142 @@
 {% block head %}
 {{ block.super }}
 <style>
-  .one-time-wrap {
-    background: radial-gradient(circle at top left, rgba(125, 216, 255, .25), transparent 45%),
-                radial-gradient(circle at bottom right, rgba(142, 97, 255, .2), transparent 40%);
-    min-height: calc(100vh - 140px);
+  .one-time-hero {
+    background: radial-gradient(circle at top, #eef2ff 0, #e2e8f0 45%, #f8fafc 100%);
+    min-height: calc(100vh - 120px);
   }
 
-  .one-time-card {
-    border-radius: 1.5rem;
-    overflow: hidden;
-  }
-
-  .one-time-ribbon {
-    background: linear-gradient(135deg, rgba(73, 151, 255, .95), rgba(142, 97, 255, .9));
-    color: #fff;
-  }
-
-  .one-time-ribbon .badge {
-    background: rgba(255, 255, 255, .25);
-  }
-
-  .one-time-meta {
-    gap: 1rem;
-  }
-
-  .one-time-code-box {
-    background: rgba(248, 249, 252, .85);
-    border: 1px solid rgba(73, 151, 255, .08);
-  }
-
-  .one-time-tip-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
+  .one-time-chip {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    gap: .4rem;
+    padding: .3rem .75rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .22);
+    color: rgba(255, 255, 255, .9);
+    font-size: .75rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
   }
 
   .one-time-code {
-    font-size: clamp(2.5rem, 4vw, 3rem);
-    letter-spacing: .3rem;
+    font-size: clamp(3rem, 6vw, 3.6rem);
+    letter-spacing: .35rem;
+    font-variant-numeric: tabular-nums;
+    color: #1b2553;
   }
 
-  .tracking-wide {
-    letter-spacing: .2rem;
+  .one-time-meta {
+    color: rgba(255, 255, 255, .82);
   }
 
-  .one-time-invalid {
+  .one-time-meta .lead {
+    color: rgba(255, 255, 255, .9);
+  }
+
+  .one-time-progress {
+    height: 6px;
+    background-color: #e6ebf6;
+    border-radius: 999px;
+  }
+
+  .one-time-progress .progress-bar {
+    background: linear-gradient(90deg, #0d6efd 0%, #4c76ff 100%);
+  }
+
+  .one-time-detail {
+    border: 1px solid #e7ebf5;
+    border-radius: 16px;
+    padding: 1rem 1.25rem;
+    background: #f9fbff;
+  }
+
+  .one-time-detail p {
+    margin-bottom: 0;
+    color: #6c778f;
+  }
+
+  .one-time-invalid-card {
     border-radius: 1.5rem;
-    border: none;
+    border: 1px solid #e3e8f4;
+    background: #fff;
+    box-shadow: 0 28px 48px -40px rgba(18, 32, 73, .4);
   }
 
   @media (max-width: 576px) {
     .one-time-code {
-      letter-spacing: .2rem;
+      letter-spacing: .24rem;
     }
   }
 </style>
 {% endblock %}
 {% block content %}
-<section class="one-time-wrap py-5 py-lg-5">
+<section class="one-time-hero py-5 py-lg-6">
     <div class="container">
         <div class="row justify-content-center">
-            <div class="col-12 col-lg-8 col-xl-7">
+            <div class="col-12 col-lg-9 col-xl-8">
                 {% if link %}
-                <div class="card shadow-lg one-time-card border-0">
-                    <div class="one-time-ribbon p-4 p-lg-5">
-                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center one-time-meta">
+                <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+                    <div class="row g-0">
+                        <div class="col-12 col-md-5 bg-primary text-white d-flex flex-column justify-content-between p-4 p-lg-5">
                             <div>
-                                <div class="d-inline-flex align-items-center gap-2 small text-white-50 mb-2">
-                                    <span class="one-time-tip-icon bg-white bg-opacity-25"><i class="bi bi-shield-check"></i></span>
-                                    <span>由 {{ owner.username }} 安全分享</span>
-                                </div>
-                                <h1 class="h3 fw-semibold mb-1">{{ entry.name }}</h1>
+                                <span class="one-time-chip mb-3"><i class="bi bi-shield-lock-fill"></i> 一次性验证码</span>
+                                <h1 class="h3 fw-semibold mb-2">{{ entry.name }}</h1>
                                 {% if entry.group %}
-                                <span class="badge rounded-pill">分组：{{ entry.group.name }}</span>
+                                <p class="one-time-meta small mb-4">所属分组：{{ entry.group.name }}</p>
                                 {% endif %}
+                                <p class="one-time-meta mb-2"><i class="bi bi-person-circle me-2"></i>由 {{ owner.username }} 安全分享</p>
+                                <p class="one-time-meta mb-2"><i class="bi bi-clock-history me-2"></i>有效至 {{ expires_at|date:"Y-m-d H:i" }}</p>
+                                <p class="one-time-meta mb-0"><i class="bi bi-eye-fill me-2"></i>剩余查看次数 <strong class="text-white">{{ remaining_views }}</strong></p>
                             </div>
-                            <div class="text-white text-md-end">
-                                <div class="fw-semibold text-white-75">截至 {{ expires_at|date:"Y-m-d H:i" }}</div>
-                                <div class="text-white-50 small">链接到期后将自动失效</div>
-                                <div class="mt-3">
-                                    <span class="badge rounded-pill bg-white text-primary fs-6 px-3 py-2 shadow-sm">
-                                        <i class="bi bi-eye-fill me-2"></i>剩余可查看次数：<strong>{{ remaining_views }}</strong>
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-body p-4 p-lg-5">
-                        <div class="one-time-code-box rounded-4 px-4 py-5 text-center shadow-sm">
-                            <div class="text-uppercase text-muted small tracking-wide mb-2">当前验证码</div>
-                            <div class="one-time-code fw-bold" id="oneTimeCode">{{ code }}</div>
-                            <div class="text-muted" id="oneTimeCountdown">剩余 {{ remaining }} 秒过期</div>
-                            <div class="d-flex justify-content-center flex-wrap gap-3 mt-4">
-                                <button class="btn btn-primary px-4" id="copyOneTimeCode" type="button">
-                                    <i class="bi bi-clipboard-check me-2"></i>复制验证码
-                                </button>
-                                <button class="btn btn-outline-secondary px-4" id="reloadLinkBtn" type="button">
-                                    <i class="bi bi-arrow-clockwise me-2"></i>刷新此页面
-                                </button>
+                            <div class="mt-4 mt-md-5">
+                                <p class="text-white-75 small mb-2">使用建议</p>
+                                <ul class="list-unstyled small text-white-50 mb-0">
+                                    <li class="mb-2"><i class="bi bi-arrow-repeat me-2"></i>刷新或重新打开页面会消耗查看次数</li>
+                                    <li class="mb-2"><i class="bi bi-speedometer2 me-2"></i>验证码每 30 秒变化一次，请及时使用</li>
+                                    <li><i class="bi bi-exclamation-triangle me-2"></i>仅在信任的环境下输入，防止泄露</li>
+                                </ul>
                             </div>
                         </div>
-                        <div class="row g-3 mt-4">
-                            <div class="col-md-6">
-                                <div class="d-flex gap-3 p-3 rounded-3 bg-light border border-light-subtle h-100">
-                                    <span class="one-time-tip-icon bg-primary-subtle text-primary"><i class="bi bi-stopwatch"></i></span>
-                                    <div class="small text-muted">
-                                        <div class="fw-semibold text-body">请立即使用</div>
-                                        <p class="mb-0">验证码会随时间变化，请在倒计时结束前完成验证。</p>
+                        <div class="col-12 col-md-7 bg-white">
+                            <div class="p-4 p-lg-5">
+                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                                    <div>
+                                        <p class="text-muted mb-1 small">当前验证码</p>
+                                        <div class="one-time-code fw-bold" id="oneTimeCode">{{ code }}</div>
+                                    </div>
+                                    <div class="text-md-end">
+                                        <p class="text-muted mb-1 small">剩余时间</p>
+                                        <div class="h4 fw-semibold text-primary mb-0" id="oneTimeCountdown">剩余 {{ remaining }} 秒过期</div>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="d-flex gap-3 p-3 rounded-3 bg-light border border-light-subtle h-100">
-                                    <span class="one-time-tip-icon bg-warning-subtle text-warning"><i class="bi bi-eye"></i></span>
-                                    <div class="small text-muted">
-                                        <div class="fw-semibold text-body">安全提醒</div>
-                                        <p class="mb-0">此链接仅供一次性查看，请勿转发或在不可信环境留下页面。</p>
+                                <div class="progress one-time-progress mt-3" role="progressbar" aria-valuemin="0" aria-valuemax="30">
+                                    <div class="progress-bar" id="oneTimeProgress" style="width:0%" aria-valuenow="0"></div>
+                                </div>
+                                <div class="alert alert-info mt-4 mb-0 small d-flex align-items-start gap-2">
+                                    <i class="bi bi-info-circle-fill text-primary"></i>
+                                    <div>验证码刷新后将重新计算倒计时。复制后请尽快在目标服务完成验证。</div>
+                                </div>
+                                <div class="d-flex flex-wrap gap-2 mt-4">
+                                    <button class="btn btn-primary flex-grow-1" id="copyOneTimeCode" type="button">
+                                        <i class="bi bi-clipboard-check me-2"></i>复制验证码
+                                    </button>
+                                    <button class="btn btn-outline-primary flex-grow-1" id="reloadLinkBtn" type="button">
+                                        <i class="bi bi-arrow-repeat me-2"></i>刷新页面
+                                    </button>
+                                </div>
+                                <div class="row g-3 mt-4">
+                                    <div class="col-12 col-sm-6">
+                                        <div class="one-time-detail h-100">
+                                            <div class="fw-semibold text-body mb-1">到期提醒</div>
+                                            <p>到期后该链接即刻失效，无法再次查看验证码。</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 col-sm-6">
+                                        <div class="one-time-detail h-100">
+                                            <div class="fw-semibold text-body mb-1">查看限制</div>
+                                            <p>当前剩余 <strong class="text-body">{{ remaining_views }}</strong> 次，可随时向分享者申请新的链接。</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -129,8 +146,8 @@
                     </div>
                 </div>
                 {% else %}
-                <div class="card shadow-lg one-time-invalid text-center p-4 p-lg-5">
-                    <div class="text-danger display-4 mb-3"><i class="bi bi-exclamation-triangle"></i></div>
+                <div class="one-time-invalid-card text-center p-5">
+                    <div class="display-4 text-warning mb-3"><i class="bi bi-exclamation-triangle"></i></div>
                     {% if reason == 'expired' %}
                     <h2 class="h4 mb-2">链接已过期</h2>
                     <p class="text-muted">该一次性访问链接已超过有效期，请联系分享者重新生成。</p>
@@ -147,7 +164,7 @@
                     <h2 class="h4 mb-2">链接不可用</h2>
                     <p class="text-muted">无法找到对应的一次性访问链接，或已失效。</p>
                     {% endif %}
-                    <a class="btn btn-primary mt-3" href="{% url 'dashboard' %}">
+                    <a class="btn btn-primary mt-4 px-4" href="{% url 'dashboard' %}">
                         <i class="bi bi-house-door-fill me-2"></i>返回首页
                     </a>
                 </div>
@@ -166,11 +183,22 @@
   const countdownEl = document.getElementById('oneTimeCountdown');
   const copyBtn = document.getElementById('copyOneTimeCode');
   const reloadBtn = document.getElementById('reloadLinkBtn');
+  const progressBar = document.getElementById('oneTimeProgress');
   let remaining = Number({{ remaining|default:0 }});
+  const total = 30;
 
   function renderCountdown() {
+    const safeRemaining = Math.max(0, remaining);
+    const consumed = Math.max(0, Math.min(total, total - safeRemaining));
+    const width = total > 0 ? (consumed / total) * 100 : 0;
+
     if (countdownEl) {
-      countdownEl.textContent = `剩余 ${remaining} 秒过期`;
+      countdownEl.textContent = `剩余 ${safeRemaining} 秒过期`;
+    }
+
+    if (progressBar) {
+      progressBar.style.width = `${width}%`;
+      progressBar.setAttribute('aria-valuenow', String(consumed));
     }
   }
 
