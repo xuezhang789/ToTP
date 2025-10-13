@@ -56,7 +56,7 @@ DATABASES = {
 }
 
 LANGUAGE_CODE = "zh-hans"
-TIME_ZONE = "Asia/Ho_Chi_Minh"
+TIME_ZONE = "Asia/Shanghai"
 USE_I18N = True
 USE_TZ = True
 
