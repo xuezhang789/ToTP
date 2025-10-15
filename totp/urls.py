@@ -18,6 +18,11 @@ urlpatterns = [
     path("export/", views.export_entries, name="export"),
     path("export/offline/", views.export_offline_package, name="export_offline"),
     path(
+        "share/one-time/audit/",
+        views.one_time_link_audit,
+        name="one_time_audit",
+    ),
+    path(
         "share/one-time/<int:pk>/create/",
         views.create_one_time_link,
         name="one_time_create",

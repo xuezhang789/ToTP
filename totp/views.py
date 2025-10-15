@@ -625,6 +625,62 @@ def rename_entry(request, pk: int):
 
 
 @login_required
+def one_time_link_audit(request):
+    """展示当前用户创建的一次性访问链接审计信息。"""
+
+    queryset = (
+        OneTimeLink.objects.filter(created_by=request.user)
+        .select_related("entry", "entry__group")
+        .order_by("-created_at")
+    )
+
+    paginator = Paginator(queryset, 20)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    status_labels = {
+        "active": "可用",
+        "expired": "已过期",
+        "used": "已用尽",
+        "revoked": "已撤销",
+        "deleted": "关联密钥已删除",
+    }
+    badge_classes = {
+        "active": "success",
+        "expired": "secondary",
+        "used": "warning",
+        "revoked": "danger",
+        "deleted": "danger",
+    }
+
+    records = []
+    for link in page_obj.object_list:
+        status_key = "active" if link.is_active else _resolve_link_inactive_reason(link)
+        records.append(
+            {
+                "link": link,
+                "status_key": status_key,
+                "status_label": status_labels.get(status_key, "未知状态"),
+                "badge_class": badge_classes.get(status_key, "secondary"),
+                "remaining_views": max(0, link.max_views - link.view_count),
+            }
+    )
+
+    active_count = OneTimeLink.active.filter(created_by=request.user).count()
+
+    return render(
+        request,
+        "totp/one_time_links.html",
+        {
+            "records": records,
+            "page_obj": page_obj,
+            "total_count": paginator.count,
+            "active_count": active_count,
+        },
+    )
+
+
+@login_required
 @require_POST
 def create_one_time_link(request, pk: int):
     """为指定密钥生成一次性只读访问链接。"""
