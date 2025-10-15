@@ -4,6 +4,23 @@ app_name = "totp"
 # TOTP 功能相关路由
 urlpatterns = [
     path("list/", views.list_view, name="list"),
+    path("teams/", views.teams_overview, name="teams"),
+    path("teams/create/", views.team_create, name="team_create"),
+    path(
+        "teams/<int:team_id>/members/add/",
+        views.team_add_member,
+        name="team_add_member",
+    ),
+    path(
+        "teams/<int:team_id>/members/<int:member_id>/role/",
+        views.team_update_member_role,
+        name="team_member_role",
+    ),
+    path(
+        "teams/<int:team_id>/members/<int:member_id>/remove/",
+        views.team_remove_member,
+        name="team_remove_member",
+    ),
     path("add/", views.add_entry, name="add"),
     path("group/add/", views.add_group, name="add_group"),
     path("group/<int:pk>/rename/", views.rename_group, name="rename_group"),

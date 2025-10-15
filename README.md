@@ -7,7 +7,7 @@
 ## 项目概览
 
 - **账户体系**：`accounts` 应用提供邮箱/密码注册登录、注销以及 Google One Tap 登录。
-- **密钥管理**：`totp` 应用支持按分组保存密钥、软删除与回收站、批量导入（1Password / Bitwarden / Authy / 手动）和导出。
+- **密钥管理**：`totp` 应用支持按分组保存密钥、软删除与回收站、批量导入（1Password / Bitwarden / Authy / 手动）和导出，现已支持团队共享空间，成员可按角色协同管理条目。
 - **安全存储**：使用项目 `SECRET_KEY` 派生的 Fernet 密钥对 TOTP 秘钥进行对称加密，数据库泄露也无法直接获取明文。
 - **验证码生成**：服务器端实时计算验证码与剩余时间，支持离线包生成与一次性分享链接。
 - **REST API**：`/api/tokens/` 接口返回当前用户全部条目的验证码和剩余周期，便于外部脚本或
@@ -120,4 +120,3 @@ curl -H "Cookie: sessionid=..." https://your-domain/api/tokens/
 ## 支持与反馈
 
 如有问题、漏洞或功能建议，欢迎通过 Issue/PR 或邮件（`xuezhang789@gmail.com`）联系维护者。
-

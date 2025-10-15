@@ -13,10 +13,7 @@ def api_tokens(request):
     timestamp = int(timezone.now().timestamp())
     remaining = period - (timestamp % period)
 
-    queryset = (
-        TOTPEntry.objects.filter(user=request.user)
-        .only("id", "secret_encrypted")
-    )
+    queryset = TOTPEntry.objects.for_user(request.user).only("id", "secret_encrypted")
 
     for entry in queryset.iterator(chunk_size=200):
         secret = decrypt_str(entry.secret_encrypted)

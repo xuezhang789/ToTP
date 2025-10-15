@@ -5,12 +5,13 @@ from datetime import timedelta
 from urllib.parse import quote
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, F, Q
-from django.http import HttpResponse, JsonResponse
+from django.db.models import Count, F, Q, Prefetch
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -18,7 +19,9 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from . import importers
-from .models import Group, OneTimeLink, TOTPEntry
+from .models import Group, OneTimeLink, Team, TeamMembership, TOTPEntry
+
+UserModel = get_user_model()
 from .utils import (
     decrypt_str,
     encrypt_str,
@@ -31,25 +34,90 @@ from .utils import (
 EXTERNAL_TOTP_RATE_LIMIT = 20
 EXTERNAL_TOTP_RATE_WINDOW_SECONDS = 60
 
+TEAM_MANAGER_ROLES = (
+    TeamMembership.Role.OWNER,
+    TeamMembership.Role.ADMIN,
+)
+
+
+def _team_memberships_for_user(user):
+    return list(
+        TeamMembership.objects.filter(user=user)
+        .select_related("team")
+        .order_by("team__name")
+    )
+
+
+def _get_team_membership(user, team_id, *, require_manage=False):
+    membership = (
+        TeamMembership.objects.select_related("team")
+        .filter(team_id=team_id, user=user)
+        .first()
+    )
+    if membership is None:
+        raise Http404("Team not found")
+    if require_manage and membership.role not in TEAM_MANAGER_ROLES:
+        raise Http404("Team not found")
+    return membership
+
+
+def _get_entry_for_user(user, pk, *, include_deleted=False, require_manage=False):
+    """获取当前用户可访问的条目，必要时校验管理权限。"""
+
+    manager = TOTPEntry.all_objects if include_deleted else TOTPEntry.objects
+    try:
+        entry = manager.select_related("team", "user").get(pk=pk)
+    except TOTPEntry.DoesNotExist as exc:
+        raise Http404("Entry not found") from exc
+
+    if not entry.user_can_view(user):
+        raise Http404("Entry not found")
+    if require_manage and not entry.user_can_manage(user):
+        raise Http404("Entry not found")
+    return entry
+
 
 def dashboard(request):
     """展示仪表盘，可匿名访问。"""
 
     stats = {}
     recent_entries = []
+    memberships = []
     if request.user.is_authenticated:
+        memberships = _team_memberships_for_user(request.user)
         # 登录用户访问仪表盘时也清理一次回收站，保证数据实时。
         TOTPEntry.purge_expired_trash(user=request.user)
-        entries = TOTPEntry.objects.filter(user=request.user)
-        # 尽量减少查询次数地聚合统计信息
-        agg = entries.aggregate(
-            total_entries=Count("id"),
-            today_added=Count("id", filter=Q(created_at__date=timezone.localdate())),
+        accessible_entries = (
+            TOTPEntry.objects.for_user(request.user)
+            .select_related("team", "group")
+            .distinct()
+        )
+        today = timezone.localdate()
+        agg = accessible_entries.aggregate(
+            total_entries=Count("id", distinct=True),
+            personal_entries=Count(
+                "id",
+                filter=Q(team__isnull=True),
+                distinct=True,
+            ),
+            shared_entries=Count(
+                "id",
+                filter=Q(team__isnull=False),
+                distinct=True,
+            ),
+            today_added_personal=Count(
+                "id",
+                filter=Q(team__isnull=True, created_at__date=today),
+                distinct=True,
+            ),
         )
         stats = {
-            "total_entries": agg["total_entries"],
+            "total_entries": agg["total_entries"] or 0,
+            "personal_entries": agg["personal_entries"] or 0,
+            "shared_entries": agg["shared_entries"] or 0,
             "group_count": Group.objects.filter(user=request.user).count(),
-            "today_added": agg["today_added"],
+            "team_count": len(memberships),
+            "today_added": agg["today_added_personal"] or 0,
         }
 
         cycle_total = 30
@@ -58,17 +126,23 @@ def dashboard(request):
         stats["current_cycle_remaining"] = cycle_total - (int(now.timestamp()) % cycle_total)
 
         recent_entries = list(
-            entries.order_by("-created_at").values(
+            accessible_entries.order_by("-created_at")
+            .values(
                 "name",
                 "created_at",
                 group_name=F("group__name"),
+                team_name=F("team__name"),
             )[:5]
         )
 
     return render(
         request,
         "totp/dashboard.html",
-        {"stats": stats, "recent_entries": recent_entries},
+        {
+            "stats": stats,
+            "recent_entries": recent_entries,
+            "team_memberships": memberships,
+        },
     )
 
 
@@ -78,28 +152,69 @@ def list_view(request):
     """列出用户的所有 TOTP 条目。"""
     # 在展示列表前先顺带清理一下过期的回收站数据，保证统计准确。
     TOTPEntry.purge_expired_trash(user=request.user)
+
+    memberships = _team_memberships_for_user(request.user)
+
     q = (request.GET.get("q") or "").strip()
     group_id = (request.GET.get("group") or "").strip()
-    entry_qs = (
-        TOTPEntry.objects.filter(user=request.user)
-        .select_related("group")
-        .order_by("-created_at")
-    )
+    space = (request.GET.get("space") or "personal").strip()
+    selected_team = None
+    selected_membership = None
+
+    if space.startswith("team:"):
+        try:
+            team_id = int(space.split(":", 1)[1])
+        except (ValueError, IndexError):
+            raise Http404("Team not found")
+        selected_membership = _get_team_membership(
+            request.user, team_id, require_manage=False
+        )
+        selected_team = selected_membership.team
+        entry_qs = (
+            TOTPEntry.objects.filter(team=selected_team)
+            .select_related("team")
+            .order_by("-created_at")
+        )
+        groups = []
+    else:
+        space = "personal"
+        entry_qs = (
+            TOTPEntry.objects.filter(user=request.user, team__isnull=True)
+            .select_related("group")
+            .order_by("-created_at")
+        )
+        if group_id == "0":
+            entry_qs = entry_qs.filter(group__isnull=True)
+        elif group_id:
+            entry_qs = entry_qs.filter(group_id=group_id)
+        groups = (
+            Group.objects.filter(user=request.user)
+            .annotate(
+                entry_count=Count(
+                    "entries",
+                    filter=Q(entries__is_deleted=False, entries__team__isnull=True),
+                )
+            )
+            .order_by("name")
+        )
+
     if q:
-        entry_qs = entry_qs.filter(Q(name__icontains=q))
-    if group_id == "0":
-        entry_qs = entry_qs.filter(group__isnull=True)
-    elif group_id:
-        entry_qs = entry_qs.filter(group_id=group_id)
+        entry_qs = entry_qs.filter(name__icontains=q)
+
+    entry_qs = entry_qs.select_related("group", "team").prefetch_related(
+        Prefetch(
+            "team__memberships",
+            queryset=TeamMembership.objects.filter(user=request.user),
+        )
+    )
 
     paginator = Paginator(entry_qs, 10)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
-    groups = (
-        Group.objects.filter(user=request.user)
-        .annotate(entry_count=Count("entries", filter=Q(entries__is_deleted=False)))
-        .order_by("name")
-    )
+    for entry in page_obj.object_list:
+        entry.can_manage = entry.user_can_manage(request.user)
+        entry.current_membership = entry.membership_for(request.user)
+
     return render(
         request,
         "totp/list.html",
@@ -109,8 +224,201 @@ def list_view(request):
             "q": q,
             "groups": groups,
             "group_id": group_id,
+            "team_memberships": memberships,
+            "selected_space": space,
+            "selected_team": selected_team,
+            "selected_membership": selected_membership,
         },
     )
+
+
+@login_required
+def teams_overview(request):
+    """展示团队列表及成员信息。"""
+
+    teams = (
+        Team.objects.filter(memberships__user=request.user)
+        .prefetch_related(
+            Prefetch(
+                "memberships",
+                queryset=TeamMembership.objects.select_related("user").order_by(
+                    "role", "user__username"
+                ),
+            )
+        )
+        .order_by("name")
+        .distinct()
+    )
+    membership_map = {team.id: team.get_membership(request.user) for team in teams}
+    role_labels = dict(TeamMembership.Role.choices)
+    available_roles = [
+        (TeamMembership.Role.MEMBER, role_labels[TeamMembership.Role.MEMBER]),
+        (TeamMembership.Role.ADMIN, role_labels[TeamMembership.Role.ADMIN]),
+    ]
+    team_blocks = [
+        {"team": team, "membership": membership_map.get(team.id)}
+        for team in teams
+    ]
+    return render(
+        request,
+        "totp/teams.html",
+        {
+            "team_blocks": team_blocks,
+            "teams": teams,
+            "membership_map": membership_map,
+            "role_labels": role_labels,
+            "available_roles": available_roles,
+        },
+    )
+
+
+@login_required
+@require_POST
+def team_create(request):
+    """创建新的团队空间。"""
+
+    name = (request.POST.get("name") or "").strip()
+    if not name:
+        messages.error(request, "团队名称不能为空")
+        return redirect("totp:teams")
+
+    if Team.objects.filter(owner=request.user, name=name).exists():
+        messages.error(request, "已存在同名团队，请更换名称")
+        return redirect("totp:teams")
+
+    with transaction.atomic():
+        team = Team.objects.create(owner=request.user, name=name)
+        TeamMembership.objects.create(
+            team=team,
+            user=request.user,
+            role=TeamMembership.Role.OWNER,
+        )
+
+    messages.success(request, "团队已创建")
+    return redirect("totp:teams")
+
+
+@login_required
+@require_POST
+def team_add_member(request, team_id: int):
+    """向团队添加成员或更新成员角色。"""
+
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    identifier = (request.POST.get("identifier") or "").strip()
+    if not identifier:
+        messages.error(request, "请输入要邀请的用户名或邮箱")
+        return redirect("totp:teams")
+
+    target_user = (
+        UserModel.objects.filter(username__iexact=identifier).first()
+        or UserModel.objects.filter(email__iexact=identifier).first()
+    )
+    if not target_user:
+        messages.error(request, "未找到对应的用户")
+        return redirect("totp:teams")
+
+    desired_role = request.POST.get("role") or TeamMembership.Role.MEMBER
+    if desired_role not in dict(TeamMembership.Role.choices):
+        desired_role = TeamMembership.Role.MEMBER
+
+    if membership.role != TeamMembership.Role.OWNER:
+        # 管理员仅可邀请普通成员
+        desired_role = TeamMembership.Role.MEMBER
+
+    team = membership.team
+
+    member, created = TeamMembership.objects.get_or_create(
+        team=team,
+        user=target_user,
+        defaults={"role": desired_role},
+    )
+
+    if created:
+        messages.success(request, f"{target_user} 已加入团队")
+    else:
+        if member.role == TeamMembership.Role.OWNER:
+            messages.info(request, f"{target_user} 已是该团队的拥有者")
+        else:
+            if member.role == desired_role:
+                messages.info(request, f"{target_user} 已在团队中")
+            else:
+                if membership.role != TeamMembership.Role.OWNER:
+                    messages.error(request, "只有拥有者可以调整成员角色")
+                else:
+                    member.role = desired_role
+                    member.save(update_fields=["role"])
+                    messages.success(
+                        request,
+                        f"{target_user} 角色已更新为 {member.get_role_display()}",
+                    )
+    return redirect("totp:teams")
+
+
+@login_required
+@require_POST
+def team_update_member_role(request, team_id: int, member_id: int):
+    """更新团队成员角色（仅拥有者）。"""
+
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    if membership.role != TeamMembership.Role.OWNER:
+        messages.error(request, "只有团队拥有者可以调整角色")
+        return redirect("totp:teams")
+
+    target = get_object_or_404(
+        TeamMembership.objects.select_related("user"),
+        pk=member_id,
+        team=membership.team,
+    )
+    if target.role == TeamMembership.Role.OWNER:
+        messages.error(request, "无法修改拥有者的角色")
+        return redirect("totp:teams")
+
+    new_role = request.POST.get("role") or TeamMembership.Role.MEMBER
+    if new_role not in dict(TeamMembership.Role.choices):
+        new_role = TeamMembership.Role.MEMBER
+    if new_role == TeamMembership.Role.OWNER:
+        messages.error(request, "暂不支持直接委任新的拥有者")
+        return redirect("totp:teams")
+
+    if target.role == new_role:
+        messages.info(request, "角色未发生变化")
+        return redirect("totp:teams")
+
+    target.role = new_role
+    target.save(update_fields=["role"])
+    messages.success(request, f"{target.user} 的角色已更新")
+    return redirect("totp:teams")
+
+
+@login_required
+@require_POST
+def team_remove_member(request, team_id: int, member_id: int):
+    """移除团队成员或主动退出团队。"""
+
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    target = get_object_or_404(
+        TeamMembership.objects.select_related("user"),
+        pk=member_id,
+        team=membership.team,
+    )
+
+    if target.role == TeamMembership.Role.OWNER:
+        messages.error(request, "无法移除团队拥有者")
+        return redirect("totp:teams")
+
+    if target.user_id == request.user.id:
+        # 允许管理员或成员退出团队
+        target.delete()
+        messages.success(request, "已退出团队")
+        return redirect("totp:teams")
+
+    if membership.role != TeamMembership.Role.OWNER and target.role != TeamMembership.Role.MEMBER:
+        messages.error(request, "管理员只能移除普通成员")
+        return redirect("totp:teams")
+
+    target.delete()
+    messages.success(request, f"{target.user} 已被移出团队")
+    return redirect("totp:teams")
 
 
 @login_required
@@ -119,6 +427,7 @@ def add_entry(request):
     if request.method == "POST":
         name = (request.POST.get("name") or "").strip()
         group_id = request.POST.get("group_id") or ""
+        team_id = (request.POST.get("team_id") or "").strip()
         secret = (request.POST.get("secret") or "").strip()
 
         if secret.lower().startswith("otpauth://"):
@@ -132,21 +441,43 @@ def add_entry(request):
             messages.error(request, "名称和密钥必填且需符合要求")
             return redirect("totp:list")
 
+        team = None
         group = None
+        if team_id:
+            membership = _get_team_membership(
+                request.user, team_id, require_manage=True
+            )
+            team = membership.team
         if group_id:
             try:
                 group = Group.objects.get(pk=int(group_id), user=request.user)
             except (Group.DoesNotExist, ValueError, TypeError):
                 group = None
+        if team is not None:
+            group = None  # 团队空间下不复用个人分组
 
-        if TOTPEntry.objects.filter(user=request.user, name=name).exists():
+        if team is None:
+            duplicate_qs = TOTPEntry.objects.filter(
+                user=request.user, team__isnull=True, name=name
+            )
+        else:
+            duplicate_qs = TOTPEntry.objects.filter(team=team, name=name)
+        if duplicate_qs.exists():
             # 针对同一用户维持名称唯一，避免后续展示或分享时产生混淆
-            messages.error(request, "同一用户下名称需唯一")
+            messages.error(request, "相同空间内名称需唯一")
             return redirect("totp:list")
 
         enc = encrypt_str(secret)
-        TOTPEntry.objects.create(user=request.user, name=name, group=group, secret_encrypted=enc)
+        entry = TOTPEntry.objects.create(
+            user=request.user,
+            team=team,
+            name=name,
+            group=group,
+            secret_encrypted=enc,
+        )
         messages.success(request, "已添加")
+        if entry.team_id:
+            return redirect(f"{reverse('totp:list')}?space=team:{entry.team_id}")
         return redirect("totp:list")
     return redirect("totp:list")
 
@@ -227,12 +558,14 @@ def delete_group(request, pk: int):
 @login_required
 def delete_entry(request, pk: int):
     """删除指定的 TOTP 条目。"""
-    e = get_object_or_404(TOTPEntry, pk=pk, user=request.user)
+    e = _get_entry_for_user(request.user, pk, require_manage=True)
     # 改为软删除：仅做标记并记录删除时间，数据进入回收站。
     e.is_deleted = True
     e.deleted_at = timezone.now()
     e.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
     messages.success(request, "已移入回收站，可在 30 天内恢复")
+    if e.team_id:
+        return redirect(f"{reverse('totp:list')}?space=team:{e.team_id}")
     return redirect("totp:list")
 
 
@@ -244,13 +577,29 @@ def trash_view(request):
     TOTPEntry.purge_expired_trash(user=request.user)
 
     entry_qs = (
-        TOTPEntry.all_objects.filter(user=request.user, is_deleted=True)
-        .select_related("group")
+        TOTPEntry.all_objects.filter(is_deleted=True)
+        .filter(
+            Q(user=request.user)
+            | Q(
+                team__memberships__user=request.user,
+                team__memberships__role__in=TEAM_MANAGER_ROLES,
+            )
+        )
+        .select_related("group", "team")
+        .prefetch_related(
+            Prefetch(
+                "team__memberships",
+                queryset=TeamMembership.objects.filter(user=request.user),
+            )
+        )
         .order_by("-deleted_at")
+        .distinct()
     )
     paginator = Paginator(entry_qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
+    for entry in page_obj.object_list:
+        entry.can_manage = entry.user_can_manage(request.user)
     return render(
         request,
         "totp/trash.html",
@@ -274,38 +623,49 @@ def trash_bulk_action(request):
         messages.info(request, "请先选择至少一条记录")
         return redirect("totp:trash")
 
-    entries = list(
-        TOTPEntry.all_objects.filter(
-            user=request.user,
-            pk__in=selected_ids,
-            is_deleted=True,
-        )
-    )
+    entries = []
+    for entry_id in selected_ids:
+        try:
+            entry = _get_entry_for_user(
+                request.user,
+                entry_id,
+                include_deleted=True,
+                require_manage=True,
+            )
+        except Http404:
+            continue
+        if entry.is_deleted:
+            entries.append(entry)
 
     if not entries:
         messages.info(request, "所选记录不存在或已处理")
         return redirect("totp:trash")
 
     if action == "restore":
-        names = [entry.name for entry in entries]
-        active_names = set(
-            TOTPEntry.objects.filter(
-                user=request.user,
-                is_deleted=False,
-                name__in=names,
-            ).values_list("name", flat=True)
-        )
         restored = 0
         conflicts = []
         for entry in entries:
-            if entry.name in active_names:
+            if entry.is_team_entry:
+                duplicate_exists = TOTPEntry.objects.filter(
+                    team=entry.team,
+                    name=entry.name,
+                    is_deleted=False,
+                ).exclude(pk=entry.pk).exists()
+            else:
+                duplicate_exists = TOTPEntry.objects.filter(
+                    user=request.user,
+                    team__isnull=True,
+                    name=entry.name,
+                    is_deleted=False,
+                ).exclude(pk=entry.pk).exists()
+
+            if duplicate_exists:
                 conflicts.append(entry.name)
                 continue
             entry.is_deleted = False
             entry.deleted_at = None
             entry.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
             restored += 1
-            active_names.add(entry.name)
 
         if restored:
             messages.success(request, f"已恢复 {restored} 条密钥")
@@ -320,9 +680,7 @@ def trash_bulk_action(request):
 
     if action == "delete":
         count = len(entries)
-        TOTPEntry.all_objects.filter(
-            user=request.user, pk__in=[entry.pk for entry in entries]
-        ).delete()
+        TOTPEntry.all_objects.filter(pk__in=[entry.pk for entry in entries]).delete()
         messages.success(request, f"已永久删除 {count} 条密钥")
         return redirect("totp:trash")
 
@@ -338,12 +696,28 @@ def restore_entry(request, pk: int):
         messages.error(request, "请求方式不正确")
         return redirect("totp:trash")
 
-    entry = get_object_or_404(
-        TOTPEntry.all_objects, pk=pk, user=request.user, is_deleted=True
+    entry = _get_entry_for_user(
+        request.user, pk, include_deleted=True, require_manage=True
     )
+    if not entry.is_deleted:
+        messages.info(request, "该条目已在列表中")
+        if entry.team_id:
+            return redirect(f"{reverse('totp:list')}?space=team:{entry.team_id}")
+        return redirect("totp:list")
 
     # 如果已有同名有效密钥，恢复会因唯一性约束失败，这里提前做校验并给出提示。
-    if TOTPEntry.objects.filter(user=request.user, name=entry.name).exists():
+    if entry.is_team_entry:
+        duplicate_exists = TOTPEntry.objects.filter(
+            team=entry.team, name=entry.name, is_deleted=False
+        ).exclude(pk=entry.pk).exists()
+    else:
+        duplicate_exists = TOTPEntry.objects.filter(
+            user=request.user,
+            team__isnull=True,
+            name=entry.name,
+            is_deleted=False,
+        ).exclude(pk=entry.pk).exists()
+    if duplicate_exists:
         messages.error(request, "已存在同名密钥，无法恢复，请先修改现有密钥的名称")
         return redirect("totp:trash")
 
@@ -351,6 +725,8 @@ def restore_entry(request, pk: int):
     entry.deleted_at = None
     entry.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
     messages.success(request, "密钥已成功恢复")
+    if entry.team_id:
+        return redirect(f"{reverse('totp:list')}?space=team:{entry.team_id}")
     return redirect("totp:list")
 
 
@@ -378,8 +754,12 @@ def batch_import_preview(request):
     # 预先查询名称，避免在循环中重复命中数据库
     existing_names = set(
         # 一次获取当前用户的所有同名条目，后续循环内只需字典判断
-        TOTPEntry.objects.filter(user=request.user, name__in=names)
-        .values_list("name", flat=True)
+        TOTPEntry.objects.filter(
+            user=request.user,
+            team__isnull=True,
+            name__in=names,
+            is_deleted=False,
+        ).values_list("name", flat=True)
     )
 
     entries_payload = []
@@ -513,8 +893,12 @@ def _apply_import_entries(user, entries):
 
     existing_names = set(
         # 先查出当前数据库中已有的名称，导入时直接过滤重复
-        TOTPEntry.objects.filter(user=user, name__in=[entry.name for entry in entries])
-        .values_list("name", flat=True)
+        TOTPEntry.objects.filter(
+            user=user,
+            team__isnull=True,
+            name__in=[entry.name for entry in entries],
+            is_deleted=False,
+        ).values_list("name", flat=True)
     )
 
     to_create = []
@@ -556,11 +940,11 @@ def _secret_preview(secret: str) -> str:
 def export_entries(request):
     """导出当前用户的全部密钥，以文本形式下载。"""
 
-    queryset = (
-        TOTPEntry.objects.filter(user=request.user)
-        .select_related("group")
-        .order_by("name")
-    )
+    queryset = TOTPEntry.objects.filter(
+        user=request.user,
+        team__isnull=True,
+        is_deleted=False,
+    ).select_related("group").order_by("name")
 
     if not queryset.exists():
         messages.info(request, "当前没有可以导出的密钥")
@@ -590,7 +974,11 @@ def export_offline_package(request):
     """生成离线只读 HTML，便于无网络环境查看验证码。"""
 
     queryset = (
-        TOTPEntry.objects.filter(user=request.user, is_deleted=False)
+        TOTPEntry.objects.filter(
+            user=request.user,
+            team__isnull=True,
+            is_deleted=False,
+        )
         .select_related("group")
         .order_by("name")
     )
@@ -640,7 +1028,12 @@ def update_entry_group(request, pk: int):
     if request.method != "POST":
         return JsonResponse({"error": "method_not_allowed"}, status=405)
 
-    entry = get_object_or_404(TOTPEntry, pk=pk, user=request.user)
+    entry = _get_entry_for_user(request.user, pk, require_manage=True)
+    if entry.is_team_entry:
+        return JsonResponse(
+            {"error": "team_entry_not_supported", "message": "团队条目不支持个人分组"},
+            status=400,
+        )
     group_id = (request.POST.get("group_id") or "").strip()
     group = None
     if group_id:
@@ -665,9 +1058,12 @@ def update_entry_group(request, pk: int):
 def rename_entry(request, pk: int):
     """修改指定 TOTP 条目的名称。"""
 
-    entry = get_object_or_404(
-        TOTPEntry, pk=pk, user=request.user, is_deleted=False
-    )
+    entry = _get_entry_for_user(request.user, pk, require_manage=True)
+    if entry.is_deleted:
+        return JsonResponse(
+            {"ok": False, "error": "deleted", "message": "条目已被删除"},
+            status=400,
+        )
     new_name = (request.POST.get("name") or "").strip()
     if not new_name:
         return JsonResponse(
@@ -679,12 +1075,27 @@ def rename_entry(request, pk: int):
             status=400,
         )
 
-    exists = (
-        # 排除当前条目自身后检查重名，确保名称唯一
-        TOTPEntry.objects.filter(user=request.user, name=new_name, is_deleted=False)
-        .exclude(pk=entry.pk)
-        .exists()
-    )
+    if entry.is_team_entry:
+        exists = (
+            TOTPEntry.objects.filter(
+                team=entry.team,
+                name=new_name,
+                is_deleted=False,
+            )
+            .exclude(pk=entry.pk)
+            .exists()
+        )
+    else:
+        exists = (
+            TOTPEntry.objects.filter(
+                user=request.user,
+                team__isnull=True,
+                name=new_name,
+                is_deleted=False,
+            )
+            .exclude(pk=entry.pk)
+            .exists()
+        )
     if exists:
         return JsonResponse(
             {
@@ -762,7 +1173,12 @@ def one_time_link_audit(request):
 def create_one_time_link(request, pk: int):
     """为指定密钥生成一次性只读访问链接。"""
 
-    entry = get_object_or_404(TOTPEntry, pk=pk, user=request.user, is_deleted=False)
+    entry = _get_entry_for_user(request.user, pk, require_manage=True)
+    if entry.is_deleted:
+        return JsonResponse(
+            {"ok": False, "error": "deleted", "message": "条目已删除"},
+            status=400,
+        )
 
     try:
         duration_minutes = int(request.POST.get("duration") or 10)

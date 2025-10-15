@@ -48,8 +48,21 @@
                     <td>
                         <input class="form-check-input trash-checkbox" type="checkbox" name="selected" value="{{ e.id }}" aria-label="选择 {{ e.name }}">
                     </td>
-                    <td>{{ e.name }}</td>
-                    <td>{{ e.group.name|default:'未分组' }}</td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            {% if e.team %}
+                            <span class="badge rounded-pill bg-light text-muted fw-semibold">{{ e.team.name }}</span>
+                            {% endif %}
+                            <span class="fw-semibold">{{ e.name }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        {% if e.team %}
+                        <span class="badge rounded-pill bg-secondary-subtle text-secondary">团队共享</span>
+                        {% else %}
+                        {{ e.group.name|default:'未分组' }}
+                        {% endif %}
+                    </td>
                     <td>{{ e.deleted_at|date:'Y-m-d H:i' }}</td>
                     <td>
                         {% if e.recycle_remaining_days is not None %}

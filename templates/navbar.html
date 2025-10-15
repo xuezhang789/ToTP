@@ -16,6 +16,10 @@
                     <a class="nav-link px-3 {% if current == 'list' %}active{% endif %}"
                        href="{% url 'totp:list' %}">我的密钥</a>
                 </li>
+                <li class="nav-item me-2">
+                    <a class="nav-link px-3 {% if current == 'teams' %}active{% endif %}"
+                       href="{% url 'totp:teams' %}">团队空间</a>
+                </li>
                 <li class="nav-item">
                     <a class="nav-link px-3 {% if current == 'trash' %}active{% endif %}"
                        href="{% url 'totp:trash' %}">回收站</a>

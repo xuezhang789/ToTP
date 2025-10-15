@@ -9,10 +9,79 @@
 <div class="mb-3">
     <div class="row g-2 align-items-center">
         <div class="col-12 col-md-auto order-1">
-            <div class="d-flex flex-wrap gap-2">
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <form id="spaceFilterForm" class="d-flex align-items-center gap-2" method="get"
+                      action="{% url 'totp:list' %}" aria-label="空间筛选">
+                    <input type="hidden" id="spaceFilterInput" name="space" value="{{ selected_space }}">
+                    {% with current_label=selected_team.name|default:'个人空间' %}
+                    <div class="dropdown space-switch">
+                        <button class="btn btn-sm dropdown-toggle space-switch-toggle" type="button"
+                                id="spaceSwitchToggle" data-bs-toggle="dropdown" data-bs-auto-close="true"
+                                aria-expanded="false">
+                            <span class="space-switch-indicator" aria-hidden="true"></span>
+                            <span class="space-switch-label">{{ current_label }}</span>
+                        </button>
+                        <ul class="dropdown-menu space-switch-menu shadow" aria-labelledby="spaceSwitchToggle">
+                            <li>
+                                <button type="button"
+                                        class="dropdown-item d-flex align-items-center justify-content-between space-option {% if selected_space == 'personal' %}active{% endif %}"
+                                        data-value="personal">
+                                    <span class="fw-semibold">个人空间</span>
+                                    {% if selected_space == 'personal' %}
+                                    <span class="text-primary fw-semibold" aria-hidden="true">✓</span>
+                                    {% endif %}
+                                </button>
+                            </li>
+                            {% for m in team_memberships %}
+                                {% with team_id_str=m.team_id|stringformat:'s' %}
+                                {% with space_value='team:'|add:team_id_str %}
+                                <li>
+                                    <button type="button"
+                                            class="dropdown-item d-flex align-items-center justify-content-between space-option {% if selected_space == space_value %}active{% endif %}"
+                                            data-value="{{ space_value }}">
+                                        <span class="fw-semibold">{{ m.team.name }}</span>
+                                        {% if selected_space == space_value %}
+                                        <span class="text-primary fw-semibold" aria-hidden="true">✓</span>
+                                        {% endif %}
+                                    </button>
+                                </li>
+                                {% endwith %}
+                                {% endwith %}
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endwith %}
+                    <noscript>
+                        <label class="form-label mb-0 small text-muted" for="spaceSelect">空间</label>
+                        <select id="spaceSelect" class="form-select form-select-sm w-auto" name="space">
+                            <option value="personal" {% if selected_space == 'personal' %}selected{% endif %}>个人空间</option>
+                            {% for m in team_memberships %}
+                                {% with team_id_str=m.team_id|stringformat:'s' %}
+                                {% with space_value='team:'|add:team_id_str %}
+                                <option value="{{ space_value }}" {% if selected_space == space_value %}selected{% endif %}>
+                                    {{ m.team.name }}
+                                </option>
+                                {% endwith %}
+                                {% endwith %}
+                            {% endfor %}
+                        </select>
+                        <button class="btn btn-primary btn-sm" type="submit">切换</button>
+                    </noscript>
+                </form>
+                {% if selected_space == 'personal' %}
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal" type="button">
                     添加密钥
                 </button>
+                {% elif selected_membership and selected_membership.can_manage_entries %}
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal" type="button">
+                    添加密钥
+                </button>
+                {% else %}
+                <button class="btn btn-primary disabled" type="button" disabled title="仅团队管理员可添加">
+                    添加密钥
+                </button>
+                {% endif %}
+                {% if selected_space == 'personal' %}
                 <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importModal"
                         type="button">批量导入
                 </button>
@@ -22,26 +91,24 @@
                 <a class="btn btn-outline-success" href="{% url 'totp:export_offline' %}" id="exportOfflineBtn">
                     离线导出
                 </a>
-                <a class="btn btn-outline-secondary" href="{% url 'totp:one_time_audit' %}">
-                    链接审计
-                </a>
                 <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#addGroupModal"
                         type="button">添加分组
                 </button>
+                {% else %}
+                <a class="btn btn-outline-secondary" href="{% url 'totp:teams' %}">团队管理</a>
+                <input type="hidden" name="group" value="">
+                {% endif %}
+                <a class="btn btn-outline-secondary" href="{% url 'totp:one_time_audit' %}">
+                    链接审计
+                </a>
                 <a class="btn btn-outline-danger" href="{% url 'totp:trash' %}">回收站</a>
             </div>
         </div>
         <div class="col-12 col-md order-2 order-md-2">
-            <form id="searchForm" class="d-flex justify-content-md-end" method="get" role="search"
+            <form id="searchForm" class="d-flex flex-wrap justify-content-md-end gap-2 align-items-center" method="get" role="search"
                   aria-label="按名称搜索">
+                <input type="hidden" name="space" value="{{ selected_space }}">
                 <div class="input-group flex-nowrap w-100 w-md-auto search-group ms-md-auto">
-                    <select id="group" name="group" class="form-select">
-                        <option value="">全部分组</option>
-                        <option value="0" {% if group_id == '0' %}selected{% endif %}>未分组</option>
-                        {% for g in groups %}
-                        <option value="{{ g.id }}" {% if group_id|default:'' == g.id|stringformat:'s' %}selected{% endif %}>{{ g.name }}</option>
-                        {% endfor %}
-                    </select>
                     <span class="input-group-text bg-transparent">
                         <svg width="18" height="18" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" fill="none" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                     </span>
@@ -55,7 +122,9 @@
                             class="spinner-border spinner-border-sm me-1 d-none" id="searchSpinner" role="status"
                             aria-hidden="true"></span>搜索
                     </button>
-                    {% if q or group_id %}<a class="btn btn-outline-secondary" href="{% url 'totp:list' %}">重置</a>{% endif %}
+                    {% if q %}
+                    <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}?space={{ selected_space|urlencode }}">重置</a>
+                    {% endif %}
                 </div>
             </form>
         </div>
@@ -64,7 +133,20 @@
 
 <div class="card app-table-card">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <strong class="text-uppercase small text-muted">我的密钥</strong>
+        <div class="d-flex align-items-center gap-2">
+            <strong class="text-uppercase small text-muted">
+                {% if selected_team %}
+                    {{ selected_team.name }} · 团队密钥
+                {% else %}
+                    我的密钥
+                {% endif %}
+            </strong>
+            {% if selected_team and selected_membership %}
+            <span class="badge rounded-pill bg-light text-muted fw-semibold">
+                {{ selected_membership.get_role_display }}
+            </span>
+            {% endif %}
+        </div>
         <div class="small text-muted">下次刷新倒计时：<span class="fw-semibold text-dark" id="countdown">--</span>s</div>
     </div>
     <div class="table-responsive">
@@ -237,6 +319,22 @@
 {% block scripts %}
 <script>
 (function () {
+  const spaceForm = document.getElementById('spaceFilterForm');
+  const spaceInput = document.getElementById('spaceFilterInput');
+  const spaceOptions = document.querySelectorAll('.space-option');
+  if (spaceForm && spaceInput && spaceOptions.length) {
+    spaceOptions.forEach((option) => {
+      option.addEventListener('click', () => {
+        const { value } = option.dataset;
+        if (!value || value === spaceInput.value) {
+          return;
+        }
+        spaceInput.value = value;
+        spaceForm.submit();
+      });
+    });
+  }
+
   const tbody = document.getElementById('tbody');
   if (!tbody) {
     return;

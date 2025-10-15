@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+{% block title %}团队空间 - TOTP管理平台{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap align-items-center justify-content-between mb-4">
+    <div class="mb-3 mb-md-0">
+        <h1 class="app-section-title mb-1">团队空间</h1>
+        <p class="text-muted small mb-0">创建共享空间，与成员共同管理关键密钥。</p>
+    </div>
+    <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#createTeamModal">
+        新建团队
+    </button>
+</div>
+
+{% if team_blocks %}
+    {% for block in team_blocks %}
+        {% with team=block.team membership=block.membership member_count=team.memberships.all|length %}
+        <div class="card app-panel team-card mb-4">
+            <div class="team-card-header">
+                <div class="team-card-heading">
+                    <div class="team-card-avatar">
+                        {{ team.name|slice:":1"|upper }}
+                    </div>
+                    <div>
+                        <h2 class="team-card-title mb-1">{{ team.name }}</h2>
+                        <div class="team-card-meta">
+                            <span class="badge rounded-pill bg-light text-muted fw-semibold">
+                                {{ membership.get_role_display }}
+                            </span>
+                            <span class="team-card-meta-item">
+                                <span class="label">成员</span>
+                                <span class="value">{{ member_count }}</span>
+                            </span>
+                            <span class="team-card-meta-item text-muted">
+                                创建于 {{ team.created_at|date:"Y-m-d H:i" }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="team-card-actions">
+                    {% with team_id_str=team.id|stringformat:'s' %}
+                    <a class="btn btn-outline-primary" href="{% url 'totp:list' %}?space=team:{{ team_id_str }}">
+                        查看空间
+                    </a>
+                    {% endwith %}
+                </div>
+            </div>
+
+            {% if membership.role == 'owner' or membership.role == 'admin' %}
+            <div class="team-card-invite">
+                <h3 class="team-card-subtitle">邀请成员</h3>
+                <form method="post" action="{% url 'totp:team_add_member' team.id %}" class="row g-2 align-items-center team-invite-form">
+                    {% csrf_token %}
+                    <div class="col-12 col-md">
+                        <label class="visually-hidden" for="identifier-{{ team.id }}">邀请成员</label>
+                        <input id="identifier-{{ team.id }}" name="identifier" class="form-control" placeholder="用户名或邮箱" required>
+                    </div>
+                    {% if membership.role == 'owner' %}
+                    <div class="col-12 col-sm-6 col-md-auto">
+                        <select name="role" class="form-select">
+                            {% for value,label in available_roles %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="col-12 col-sm-auto">
+                        <button class="btn btn-primary w-100" type="submit">发送邀请</button>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+
+            <div class="team-card-section">
+                <div class="team-card-section-header">
+                    <h3 class="team-card-subtitle mb-0">成员管理</h3>
+                    <span class="text-muted small">当前共 {{ member_count }} 人</span>
+                </div>
+                <div class="table-responsive team-member-table-wrapper">
+                    <table class="table table-hover align-middle mb-0 team-member-table">
+                        <thead>
+                        <tr>
+                            <th scope="col">成员</th>
+                            <th scope="col">角色</th>
+                            <th scope="col">加入时间</th>
+                            <th scope="col" class="text-end">操作</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for member in team.memberships.all %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="team-member-avatar">
+                                            {{ member.user.username|slice:":1"|upper }}
+                                        </div>
+                                        <div class="d-flex flex-column">
+                                            <span class="fw-semibold">{{ member.user.username }}</span>
+                                            {% if member.user.email %}
+                                            <span class="text-muted small">{{ member.user.email }}</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge rounded-pill {% if member.role == 'owner' %}bg-dark{% elif member.role == 'admin' %}bg-primary{% else %}bg-secondary{% endif %}">
+                                        {{ member.get_role_display }}
+                                    </span>
+                                </td>
+                                <td class="text-muted small">{{ member.joined_at|date:"Y-m-d H:i" }}</td>
+                                <td class="text-end">
+                                    <div class="d-flex flex-wrap justify-content-end gap-2">
+                                        {% if membership.role == 'owner' and member.role != 'owner' %}
+                                            {% if member.role != 'admin' %}
+                                            <form method="post" action="{% url 'totp:team_member_role' team.id member.id %}">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="role" value="admin">
+                                                <button class="btn btn-outline-primary btn-sm" type="submit">设为管理员</button>
+                                            </form>
+                                            {% endif %}
+                                            {% if member.role != 'member' %}
+                                            <form method="post" action="{% url 'totp:team_member_role' team.id member.id %}">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="role" value="member">
+                                                <button class="btn btn-outline-secondary btn-sm" type="submit">设为成员</button>
+                                            </form>
+                                            {% endif %}
+                                        {% endif %}
+                                        {% if member.role != 'owner' %}
+                                            {% if membership.role == 'owner' %}
+                                            <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}" onsubmit="return confirm('确定移除 {{ member.user.username }} 吗？');">
+                                                {% csrf_token %}
+                                                <button class="btn btn-outline-danger btn-sm" type="submit">
+                                                    {% if member.user_id == request.user.id %}退出团队{% else %}移除{% endif %}
+                                                </button>
+                                            </form>
+                                            {% elif membership.role == 'admin' %}
+                                                {% if member.role == 'member' or member.user_id == request.user.id %}
+                                                <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}" onsubmit="return confirm('确定移除 {{ member.user.username }} 吗？');">
+                                                    {% csrf_token %}
+                                                    <button class="btn btn-outline-danger btn-sm" type="submit">
+                                                        {% if member.user_id == request.user.id %}退出团队{% else %}移除{% endif %}
+                                                    </button>
+                                                </form>
+                                                {% endif %}
+                                            {% elif member.user_id == request.user.id %}
+                                            <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}" onsubmit="return confirm('确定移除 {{ member.user.username }} 吗？');">
+                                                {% csrf_token %}
+                                                <button class="btn btn-outline-danger btn-sm" type="submit">
+                                                    退出团队
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center py-4 text-muted">暂未添加成员</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endwith %}
+    {% endfor %}
+{% else %}
+    <div class="card app-panel">
+        <div class="card-body text-center py-5">
+            <p class="lead mb-2">还没有团队空间</p>
+            <p class="text-muted mb-3">创建一个团队，与同事共享密钥并分配管理权限。</p>
+            <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#createTeamModal">
+                立即创建团队
+            </button>
+        </div>
+    </div>
+{% endif %}
+
+<!-- Create team modal -->
+<div class="modal fade" id="createTeamModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-3 shadow">
+            <form method="post" action="{% url 'totp:team_create' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">新建团队</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="teamNameInput">团队名称</label>
+                        <input type="text" id="teamNameInput" name="name" class="form-control" maxlength="80" required placeholder="例如：安全团队">
+                        <div class="form-text">团队创建后即可邀请成员共享密钥。</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary" type="submit">创建</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

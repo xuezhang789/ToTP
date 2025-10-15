@@ -11,6 +11,79 @@ from .utils import decrypt_str, encrypt_str
 
 User = settings.AUTH_USER_MODEL
 
+
+class Team(models.Model):
+    """团队空间，支持多个成员共享密钥。"""
+
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="owned_totp_teams"
+    )
+    name = models.CharField(max_length=80)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = (("owner", "name"),)
+        verbose_name = "团队"
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return self.name
+
+    def get_membership(self, user):
+        """返回指定用户在团队中的成员记录。"""
+
+        if not user or not getattr(user, "is_authenticated", False):
+            return None
+        memberships = getattr(self, "_prefetched_memberships", None)
+        if memberships is not None:
+            for membership in memberships:
+                if membership.user_id == user.id:
+                    return membership
+            return None
+        return self.memberships.filter(user=user).first()
+
+    def has_member(self, user) -> bool:
+        return self.get_membership(user) is not None
+
+    def user_can_manage_entries(self, user) -> bool:
+        membership = self.get_membership(user)
+        return membership.can_manage_entries if membership else False
+
+
+class TeamMembership(models.Model):
+    """团队成员关系。"""
+
+    class Role(models.TextChoices):
+        OWNER = "owner", "拥有者"
+        ADMIN = "admin", "管理员"
+        MEMBER = "member", "成员"
+
+        @classmethod
+        def manager_roles(cls):
+            return {cls.OWNER, cls.ADMIN}
+
+    team = models.ForeignKey(
+        Team, on_delete=models.CASCADE, related_name="memberships"
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="totp_team_memberships"
+    )
+    role = models.CharField(max_length=16, choices=Role.choices, default=Role.MEMBER)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = (("team", "user"),)
+        verbose_name = "团队成员"
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.user} @ {self.team} ({self.get_role_display()})"
+
+    @property
+    def can_manage_entries(self) -> bool:
+        return self.role in self.Role.manager_roles()
+
 class Group(models.Model):
     """用户自定义的分组，用于管理多个 TOTP 条目。"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="totp_groups")
@@ -34,6 +107,15 @@ class ActiveTOTPEntryManager(models.Manager):
     def get_queryset(self):
         return super().get_queryset().filter(is_deleted=False)
 
+    def for_user(self, user):
+        """返回用户可访问的个人与团队条目。"""
+
+        return (
+            self.get_queryset()
+            .filter(Q(user=user) | Q(team__memberships__user=user))
+            .distinct()
+        )
+
 
 class AllTOTPEntryManager(models.Manager):
     """返回包含已删除在内的所有密钥对象。"""
@@ -41,11 +123,25 @@ class AllTOTPEntryManager(models.Manager):
     def get_queryset(self):
         return super().get_queryset()
 
+    def for_user(self, user):
+        return (
+            self.get_queryset()
+            .filter(Q(user=user) | Q(team__memberships__user=user))
+            .distinct()
+        )
+
 
 class TOTPEntry(models.Model):
     """存储用户的 TOTP 密钥信息，同时支持回收站机制。"""
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="totp_entries")
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="entries",
+    )
     group = models.ForeignKey(
         Group, on_delete=models.SET_NULL, null=True, blank=True, related_name="entries"
     )
@@ -65,15 +161,22 @@ class TOTPEntry(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["user", "name"],
-                condition=Q(is_deleted=False),
-                name="uniq_active_totp_entry",
-            )
+                condition=Q(is_deleted=False, team__isnull=True),
+                name="uniq_active_personal_totp_entry",
+            ),
+            models.UniqueConstraint(
+                fields=["team", "name"],
+                condition=Q(is_deleted=False, team__isnull=False),
+                name="uniq_active_team_totp_entry",
+            ),
         ]
         indexes = [
             models.Index(fields=["user", "name", "is_deleted"]),
             models.Index(fields=["user", "created_at"]),
             models.Index(fields=["user", "group"]),
             models.Index(fields=["user", "is_deleted", "deleted_at"]),
+            models.Index(fields=["team", "name", "is_deleted"]),
+            models.Index(fields=["team", "created_at"]),
         ]
         verbose_name = "密钥"
         verbose_name_plural = verbose_name
@@ -81,19 +184,48 @@ class TOTPEntry(models.Model):
     def __str__(self):
         return self.name
 
+    @property
+    def is_team_entry(self) -> bool:
+        return self.team_id is not None
+
+    def membership_for(self, user):
+        if not self.team_id:
+            return None
+        return self.team.get_membership(user)
+
+    def user_can_view(self, user) -> bool:
+        if user is None or not getattr(user, "is_authenticated", False):
+            return False
+        if self.user_id == user.id:
+            return True
+        if self.team_id:
+            return self.team.has_member(user)
+        return False
+
+    def user_can_manage(self, user) -> bool:
+        if user is None or not getattr(user, "is_authenticated", False):
+            return False
+        if self.user_id == user.id:
+            return True
+        if self.team_id:
+            return self.team.user_can_manage_entries(user)
+        return False
+
     @classmethod
     def purge_expired_trash(cls, user=None):
         """清理超过 30 天仍在回收站中的密钥。
 
         参数:
-            user: 可选的用户对象，仅清理该用户的回收站。
+            user: 可选的用户对象，仅清理该用户可访问的回收站。
         """
 
-        # 只要有用户访问相关页面，就顺带清理过期数据，避免长期占用存储。
         cutoff = timezone.now() - timedelta(days=30)
         qs = cls.all_objects.filter(is_deleted=True, deleted_at__lt=cutoff)
         if user is not None:
-            qs = qs.filter(user=user)
+            team_ids = TeamMembership.objects.filter(user=user).values_list(
+                "team_id", flat=True
+            )
+            qs = qs.filter(Q(user=user) | Q(team_id__in=team_ids))
         qs.delete()
 
     @property

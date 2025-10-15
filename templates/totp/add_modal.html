@@ -12,6 +12,20 @@
                         <input name="name" class="form-control" placeholder="如：GitHub @me" required>
                     </div>
                     <div class="mb-2">
+                        <label class="form-label">空间</label>
+                        <select name="team_id" class="form-select" id="entryTeamSelect">
+                            <option value="">个人空间</option>
+                            {% for m in team_memberships %}
+                                {% if m.can_manage_entries %}
+                                    <option value="{{ m.team_id }}" {% if selected_team and selected_team.id == m.team_id %}selected{% endif %}>
+                                        {{ m.team.name }}{% if m.role != 'member' %} · {{ m.get_role_display }}{% endif %}
+                                    </option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">选择保存到个人或具有管理权限的团队空间。</div>
+                    </div>
+                    <div class="mb-2" data-group-field>
                         <label class="form-label">分组（可选）</label>
                         <select name="group_id" class="form-select">
                             <option value="">未分组</option>
@@ -112,7 +126,30 @@
      if (document.readyState === 'complete') {
        attachListener();
      } else {
-       window.addEventListener('load', attachListener, {once: true});
+     window.addEventListener('load', attachListener, {once: true});
+    }
+
+    const addModalEl = document.getElementById('addModal');
+    function syncSpaceControls() {
+      if (!addModalEl) return;
+      const teamSelect = addModalEl.querySelector('#entryTeamSelect');
+      const groupField = addModalEl.querySelector('[data-group-field]');
+      if (!teamSelect || !groupField) return;
+      const groupSelect = groupField.querySelector('select');
+      const isTeam = teamSelect.value !== '';
+      if (groupSelect) {
+        groupSelect.disabled = isTeam;
+      }
+      groupField.classList.toggle('d-none', isTeam);
+    }
+
+    if (addModalEl) {
+      addModalEl.addEventListener('shown.bs.modal', syncSpaceControls);
+      const teamSelect = addModalEl.querySelector('#entryTeamSelect');
+      if (teamSelect) {
+        teamSelect.addEventListener('change', syncSpaceControls);
+      }
+      syncSpaceControls();
     }
    })();
 </script>
