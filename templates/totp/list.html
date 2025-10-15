@@ -703,6 +703,7 @@
   const importManualText = document.getElementById('importManualText');
   const importFilePanel = document.getElementById('importFilePanel');
   const importFileInput = document.getElementById('importFileInput');
+  const importSpaceSelect = document.getElementById('importSpaceSelect');
   const importPreviewBtn = document.getElementById('importPreviewBtn');
   const importApplyBtn = document.getElementById('importApplyBtn');
   const importErrorAlert = document.getElementById('importErrorAlert');
@@ -712,6 +713,8 @@
   const importPreviewBody = document.getElementById('importPreviewBody');
   const importPreviewSummary = document.getElementById('importPreviewSummary');
   let importPreviewPayload = null;
+  let importPreviewTarget = importSpaceSelect ? importSpaceSelect.value : 'personal';
+  let importPreviewTargetLabel = '';
 
   function currentImportMode() {
     const active = Array.from(importModeRadios).find((radio) => radio.checked);
@@ -746,6 +749,13 @@
 
   function resetImportModal() {
     importPreviewPayload = null;
+    importPreviewTargetLabel = '';
+    if (importSpaceSelect) {
+      importSpaceSelect.value = 'personal';
+      importPreviewTarget = importSpaceSelect.value;
+    } else {
+      importPreviewTarget = 'personal';
+    }
     if (importManualText) {
       importManualText.value = '';
     }
@@ -818,7 +828,10 @@
       importPreviewBody.appendChild(tr);
     });
     if (importPreviewSummary && summary) {
-      importPreviewSummary.textContent = `共 ${summary.total} 条，预计新增 ${summary.new} 条，跳过 ${summary.existing} 条重复。`;
+      const targetNote = importPreviewTargetLabel && importPreviewTarget !== 'personal'
+        ? `（导入到 ${importPreviewTargetLabel}）`
+        : '';
+      importPreviewSummary.textContent = `共 ${summary.total} 条，预计新增 ${summary.new} 条，跳过 ${summary.existing} 条重复。${targetNote}`;
     }
     importPreviewWrapper.classList.remove('d-none');
   }
@@ -830,6 +843,23 @@
     setImportMode(currentImportMode());
   }
 
+  if (importSpaceSelect) {
+    importSpaceSelect.addEventListener('change', () => {
+      importPreviewTarget = importSpaceSelect.value;
+      importPreviewTargetLabel = '';
+      importPreviewPayload = null;
+      importPreviewWrapper?.classList.add('d-none');
+      if (importPreviewSummary) {
+        importPreviewSummary.textContent = '预览结果如下，请确认后导入：';
+      }
+      if (importApplyBtn) {
+        importApplyBtn.classList.add('d-none');
+        importApplyBtn.disabled = true;
+      }
+      hideImportFeedback();
+    });
+  }
+
   importPreviewBtn?.addEventListener('click', () => {
     hideImportFeedback();
     importPreviewWrapper?.classList.add('d-none');
@@ -837,6 +867,8 @@
     const mode = currentImportMode();
     const formData = new FormData();
     formData.append('mode', mode);
+    const space = importSpaceSelect?.value || 'personal';
+    formData.append('space', space);
 
     if (mode === 'file') {
       const file = importFileInput?.files?.[0];
@@ -876,6 +908,11 @@
           secret: entry.secret,
           source: entry.source,
         }));
+        if (importSpaceSelect && data.space) {
+          importSpaceSelect.value = data.space;
+        }
+        importPreviewTarget = data.space || space;
+        importPreviewTargetLabel = data.target_label || (importPreviewTarget === 'personal' ? '个人空间' : '');
         renderImportPreview(data.entries, data.summary);
         showImportWarnings(data.warnings || []);
         if (importApplyBtn) {
@@ -903,7 +940,7 @@
         'Content-Type': 'application/json',
         'X-CSRFToken': getCsrfToken(),
       },
-      body: JSON.stringify({ entries: importPreviewPayload }),
+      body: JSON.stringify({ space: importPreviewTarget, entries: importPreviewPayload }),
       credentials: 'same-origin',
     })
       .then(async (resp) => {

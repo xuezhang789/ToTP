@@ -61,6 +61,31 @@ def _get_team_membership(user, team_id, *, require_manage=False):
     return membership
 
 
+def _resolve_import_target(user, space_value, *, require_manage=False):
+    """解析批量导入目标空间，返回 (normalized_space, team, label)。"""
+
+    space_raw = (space_value or "personal").strip()
+    if space_raw.startswith("team:"):
+        try:
+            team_id = int(space_raw.split(":", 1)[1])
+        except (ValueError, IndexError):
+            raise ValueError("无效的团队空间")
+        try:
+            membership = _get_team_membership(
+                user, team_id, require_manage=require_manage
+            )
+        except Http404 as exc:
+            raise ValueError("无法访问指定团队或缺少权限") from exc
+        if require_manage and not membership.can_manage_entries:
+            raise ValueError("只有团队管理员可以导入到该空间")
+        return (
+            f"team:{membership.team_id}",
+            membership.team,
+            f"{membership.team.name} 团队",
+        )
+    return "personal", None, "个人空间"
+
+
 def _get_entry_for_user(user, pk, *, include_deleted=False, require_manage=False):
     """获取当前用户可访问的条目，必要时校验管理权限。"""
 
@@ -753,6 +778,13 @@ def restore_entry(request, pk: int):
 def batch_import_preview(request):
     """上传文件或文本后，返回解析结果供前端预览。"""
 
+    try:
+        space, target_team, target_label = _resolve_import_target(
+            request.user, request.POST.get("space"), require_manage=True
+        )
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "errors": [str(exc)]}, status=400)
+
     mode = (request.POST.get("mode") or "manual").strip()
     manual_text = (request.POST.get("manual_text") or "").strip() if mode == "manual" else ""
     uploaded = request.FILES.get("file") if mode == "file" else None
@@ -768,27 +800,43 @@ def batch_import_preview(request):
         return JsonResponse({"ok": False, "errors": ["没有可导入的条目"]}, status=400)
 
     names = [entry.name for entry in result.entries]
-    # 预先查询名称，避免在循环中重复命中数据库
-    existing_names = set(
-        # 一次获取当前用户的所有同名条目，后续循环内只需字典判断
-        TOTPEntry.objects.filter(
-            user=request.user,
-            team__isnull=True,
-            name__in=names,
-            is_deleted=False,
-        ).values_list("name", flat=True)
-    )
+    if target_team is None:
+        # 预先查询名称，避免在循环中重复命中数据库
+        existing_names = set(
+            TOTPEntry.objects.filter(
+                user=request.user,
+                team__isnull=True,
+                name__in=names,
+                is_deleted=False,
+            ).values_list("name", flat=True)
+        )
+    else:
+        existing_names = set(
+            TOTPEntry.objects.filter(
+                team=target_team,
+                name__in=names,
+                is_deleted=False,
+            ).values_list("name", flat=True)
+        )
 
     entries_payload = []
     duplicates = 0
+    ignored_groups = False
     for entry in result.entries:
         exists = entry.name in existing_names
         if exists:
             duplicates += 1
+        group_value = entry.group
+        if target_team is not None:
+            if entry.group:
+                ignored_groups = True
+            group_value = ""
+        else:
+            group_value = entry.group
         entries_payload.append(
             {
                 "name": entry.name,
-                "group": entry.group,
+                "group": group_value,
                 "secret": entry.secret,
                 "source": entry.source,
                 "exists": exists,
@@ -799,10 +847,14 @@ def batch_import_preview(request):
     warnings = list(result.warnings)
     if duplicates:
         warnings.append(f"发现 {duplicates} 条与现有名称重复的条目，导入时将跳过")
+    if ignored_groups:
+        warnings.append("团队空间不支持分组，已忽略导入数据中的分组信息")
 
     return JsonResponse(
         {
             "ok": True,
+            "space": space,
+            "target_label": target_label,
             "entries": entries_payload,
             "warnings": warnings,
             "summary": {
@@ -824,6 +876,13 @@ def batch_import_apply(request):
     except (TypeError, ValueError):
         return JsonResponse({"ok": False, "error": "请求格式无效"}, status=400)
 
+    try:
+        space, target_team, target_label = _resolve_import_target(
+            request.user, payload.get("space"), require_manage=True
+        )
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
     raw_entries = payload.get("entries") or []
     if not isinstance(raw_entries, list) or not raw_entries:
         return JsonResponse({"ok": False, "error": "缺少有效的导入数据"}, status=400)
@@ -838,6 +897,8 @@ def batch_import_apply(request):
         name = (item.get("name") or "").strip()
         secret = (item.get("secret") or "").strip()
         group = (item.get("group") or "").strip()
+        if target_team is not None:
+            group = ""
         if not name or name in seen:
             continue
         normalized = normalize_google_secret(secret)
@@ -860,10 +921,12 @@ def batch_import_apply(request):
             return JsonResponse({"ok": False, "error": errors[0]}, status=400)
         return JsonResponse({"ok": False, "error": "没有可导入的条目"}, status=400)
 
-    created, skipped = _apply_import_entries(request.user, entries)
+    created, skipped = _apply_import_entries(request.user, entries, team=target_team)
 
     if created:
         message = f"成功导入 {created} 条"
+        if target_team is not None:
+            message += f"到 {target_team.name} 团队空间"
         if skipped:
             message += f"，跳过 {skipped} 条重复"
         if errors:
@@ -878,15 +941,49 @@ def batch_import_apply(request):
     for err in errors:
         messages.warning(request, err)
 
-    return JsonResponse({"ok": True, "redirect": reverse("totp:list")})
+    redirect_url = reverse("totp:list")
+    if target_team is not None:
+        redirect_url = f"{redirect_url}?space=team:{target_team.id}"
+
+    return JsonResponse({"ok": True, "redirect": redirect_url, "space": space})
 
 
-def _apply_import_entries(user, entries):
+def _apply_import_entries(user, entries, *, team=None):
     """将解析后的条目写入数据库，返回 (新增数量, 跳过数量)。"""
 
     created = 0
     skipped = 0
     if not entries:
+        return created, skipped
+
+    if team is not None:
+        existing_names = set(
+            TOTPEntry.objects.filter(
+                team=team,
+                name__in=[entry.name for entry in entries],
+                is_deleted=False,
+            ).values_list("name", flat=True)
+        )
+
+        to_create = []
+        for entry in entries:
+            if entry.name in existing_names:
+                skipped += 1
+                continue
+            to_create.append(
+                TOTPEntry(
+                    user=user,
+                    team=team,
+                    name=entry.name,
+                    secret_encrypted=encrypt_str(entry.secret),
+                )
+            )
+            existing_names.add(entry.name)
+
+        if to_create:
+            TOTPEntry.objects.bulk_create(to_create)
+            created = len(to_create)
+
         return created, skipped
 
     # 一次性查出需要的分组，缺失的分组批量创建

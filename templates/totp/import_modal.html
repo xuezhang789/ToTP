@@ -7,6 +7,19 @@
             </div>
             <div class="modal-body">
                 <div class="mb-3">
+                    <label class="form-label" for="importSpaceSelect">导入到</label>
+                    <select class="form-select" id="importSpaceSelect">
+                        <option value="personal">个人空间</option>
+                        {% for membership in team_memberships %}
+                            {% if membership.can_manage_entries %}
+                            <option value="team:{{ membership.team_id }}">{{ membership.team.name }}（团队）</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">可选择个人空间或具备管理权限的团队空间。</div>
+                </div>
+
+                <div class="mb-3">
                     <div class="btn-group" role="group" aria-label="选择导入方式">
                         <input class="btn-check" type="radio" name="importMode" id="importModeManual" value="manual" checked>
                         <label class="btn btn-outline-primary" for="importModeManual">粘贴文本</label>
