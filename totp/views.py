@@ -6,6 +6,7 @@ from urllib.parse import quote
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, F, Q
@@ -25,6 +26,10 @@ from .utils import (
     parse_otpauth,
     totp_code_base32,
 )
+
+
+EXTERNAL_TOTP_RATE_LIMIT = 20
+EXTERNAL_TOTP_RATE_WINDOW_SECONDS = 60
 
 
 def dashboard(request):
@@ -770,6 +775,14 @@ def invalidate_one_time_link(request, pk: int):
 def external_totp(request):
     """根据链接参数返回动态验证码，供未登录场景使用。"""
 
+    if not _external_totp_rate_limit_allow(request):
+        return _external_totp_response(
+            request,
+            ok=False,
+            message="请求过于频繁，请稍后再试",
+            status_code=429,
+        )
+
     secret_raw = (request.GET.get("secret") or "").strip()
     if not secret_raw:
         return _external_totp_response(request, ok=False, message="缺少 secret 参数")
@@ -910,7 +923,36 @@ def _resolve_link_inactive_reason(link: OneTimeLink) -> str:
     return "revoked"
 
 
-def _external_totp_response(request, *, ok: bool, message: str | None = None, **extra):
+def _external_totp_rate_limit_allow(request) -> bool:
+    """简单的 IP 级频率限制，限制单位时间内的访问次数。"""
+
+    ip = _client_ip_from_request(request)
+    cache_key = f"totp:external_totp:rl:{ip}"
+    if cache.add(cache_key, 1, EXTERNAL_TOTP_RATE_WINDOW_SECONDS):
+        return True
+    try:
+        count = cache.incr(cache_key)
+    except ValueError:
+        cache.set(cache_key, 1, EXTERNAL_TOTP_RATE_WINDOW_SECONDS)
+        return True
+    return count <= EXTERNAL_TOTP_RATE_LIMIT
+
+
+def _client_ip_from_request(request) -> str:
+    forward = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forward:
+        return forward.split(",")[0].strip() or "unknown"
+    return request.META.get("REMOTE_ADDR") or "unknown"
+
+
+def _external_totp_response(
+    request,
+    *,
+    ok: bool,
+    message: str | None = None,
+    status_code: int | None = None,
+    **extra,
+):
     wants_json = request.GET.get("format") == "json"
     if not wants_json:
         accept = request.headers.get("Accept", "")
@@ -923,7 +965,8 @@ def _external_totp_response(request, *, ok: bool, message: str | None = None, **
         payload["message"] = message
     payload.update(extra)
 
-    status = 200 if ok else 400
+    default_status = 200 if ok else 400
+    status = status_code or default_status
     if wants_json:
         return JsonResponse(payload, status=status)
 
@@ -950,7 +993,10 @@ def _external_totp_response(request, *, ok: bool, message: str | None = None, **
         "refresh_url": refresh_url,
         "json_url": json_url,
     }
-    response_status = status if not ok else 200
+    if ok and status_code is None:
+        response_status = 200
+    else:
+        response_status = status
     return render(
         request,
         "totp/external_totp.html",
