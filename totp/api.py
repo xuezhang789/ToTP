@@ -20,7 +20,19 @@ def api_tokens(request):
 
     for entry in queryset.iterator(chunk_size=200):
         secret = decrypt_str(entry.secret_encrypted)
-        code, _ = totp_code_base32(secret, digits=6, period=period, timestamp=timestamp)
-        items.append({"id": entry.id, "code": code, "period": period})
+        code, item_remaining = totp_code_base32(
+            secret,
+            digits=6,
+            period=period,
+            timestamp=timestamp,
+        )
+        items.append(
+            {
+                "id": entry.id,
+                "code": code,
+                "period": period,
+                "remaining": item_remaining,
+            }
+        )
 
     return JsonResponse({"remaining": remaining, "items": items})
