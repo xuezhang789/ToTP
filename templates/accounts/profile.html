@@ -66,6 +66,180 @@
                 </dl>
             </div>
         </div>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <h2 class="h6 mb-3">修改密码</h2>
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    <input type="hidden" name="password_submit" value="1">
+                    {% if password_form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {{ password_form.non_field_errors|join:" " }}
+                    </div>
+                    {% endif %}
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ password_form.old_password.id_for_label }}">{{ password_form.old_password.label }}</label>
+                        {{ password_form.old_password }}
+                        {% if password_form.old_password.errors %}
+                        <div class="invalid-feedback d-block">
+                            {{ password_form.old_password.errors|join:", " }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ password_form.new_password1.id_for_label }}">{{ password_form.new_password1.label }}</label>
+                        {{ password_form.new_password1 }}
+                        <div class="password-assistant mt-2">
+                            <div class="form-text mb-1" id="password-change-hint">请输入至少 8 位，并混合多种字符类型以提升安全性。</div>
+                            <div class="progress password-strength-bar">
+                                <div class="progress-bar bg-secondary" id="password-change-strength-fill" style="width:0%"></div>
+                            </div>
+                            <div class="form-text mt-2" id="password-change-strength-label">等待输入密码...</div>
+                            <ul class="password-tips list-unstyled small text-muted mt-2" id="password-change-suggestions"></ul>
+                        </div>
+                        {% if password_form.new_password1.help_text %}
+                        <div class="form-text">{{ password_form.new_password1.help_text|safe }}</div>
+                        {% endif %}
+                        {% if password_form.new_password1.errors %}
+                        <div class="invalid-feedback d-block">
+                            {{ password_form.new_password1.errors|join:", " }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label" for="{{ password_form.new_password2.id_for_label }}">{{ password_form.new_password2.label }}</label>
+                        {{ password_form.new_password2 }}
+                        {% if password_form.new_password2.errors %}
+                        <div class="invalid-feedback d-block">
+                            {{ password_form.new_password2.errors|join:", " }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <button class="btn btn-outline-primary w-100" type="submit">更新密码</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<script>
+  (function () {
+    const passwordInput = document.getElementById('{{ password_form.new_password1.id_for_label }}');
+    if (!passwordInput) {
+      return;
+    }
+
+    const username = '{{ user_obj.username|escapejs }}';
+    const strengthFill = document.getElementById('password-change-strength-fill');
+    const strengthLabel = document.getElementById('password-change-strength-label');
+    const suggestionsEl = document.getElementById('password-change-suggestions');
+
+    const WEAK_PASSWORDS = new Set([
+      'password', '123456', '123456789', 'qwerty', 'abc123', 'password1', '111111', '12345678', '123123', 'qwertyuiop',
+      'letmein', 'admin', 'welcome', 'iloveyou', 'dragon', 'monkey', 'login', '000000', '1q2w3e4r', 'zaq12wsx'
+    ]);
+
+    function classifyStrength(score) {
+      if (score <= 1) return { variant: 'danger', label: '密码太弱，请继续加强' };
+      if (score === 2) return { variant: 'warning', label: '安全性一般，再提升一下更安心' };
+      if (score === 3) return { variant: 'info', label: '不错的密码，可再补充1~2个字符更佳' };
+      return { variant: 'success', label: '安全性很高，可以放心使用' };
+    }
+
+    function evaluatePassword(pwd, uname) {
+      const suggestions = [];
+      if (!pwd) {
+        return {
+          score: 0,
+          label: '等待输入密码...',
+          variant: 'secondary',
+          suggestions: ['输入密码后即可查看强度建议。'],
+        };
+      }
+
+      const lengthScore = Math.min(4, Math.floor(pwd.length / 3));
+      let score = lengthScore;
+
+      const varietyChecks = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/];
+      const varietyCount = varietyChecks.reduce((acc, re) => acc + (re.test(pwd) ? 1 : 0), 0);
+      score += varietyCount - 1;
+
+      if (varietyCount < 3) {
+        suggestions.push('再加入大写、小写、数字或符号中的缺失类型。');
+      }
+
+      if (/(.)\1{2,}/.test(pwd)) {
+        score -= 1;
+        suggestions.push('避免连续重复的字符，比如 "aaa"。');
+      }
+
+      if (/(?=012|123|234|345|456|567|678|789)/.test(pwd)) {
+        score -= 1;
+        suggestions.push('尝试打乱递增的数字顺序。');
+      }
+
+      if (/(?=abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz)/i.test(pwd)) {
+        score -= 1;
+        suggestions.push('打破键盘上的顺序字符组合。');
+      }
+
+      if (uname && pwd.toLowerCase().includes(uname.toLowerCase())) {
+        score -= 1;
+        suggestions.push('不要把用户名或账号信息放入密码中。');
+      }
+
+      if (WEAK_PASSWORDS.has(pwd.toLowerCase())) {
+        score = Math.min(score, 1);
+        suggestions.unshift('这个密码过于常见，换一个独特的吧。');
+      }
+
+      score = Math.max(0, Math.min(4, score));
+      const classification = classifyStrength(score);
+
+      if (!suggestions.length && score >= 3) {
+        suggestions.push('👍 密码看起来很可靠，请妥善保管并定期更新。');
+      }
+
+      return {
+        score,
+        label: classification.label,
+        variant: classification.variant,
+        suggestions,
+      };
+    }
+
+    function renderSuggestions(items) {
+      suggestionsEl.innerHTML = '';
+      if (!items || !items.length) {
+        return;
+      }
+      items.forEach((text) => {
+        const li = document.createElement('li');
+        li.textContent = text;
+        if (/过于常见|弱|避免|不要|打破/.test(text)) {
+          li.classList.add('is-warning');
+        }
+        suggestionsEl.appendChild(li);
+      });
+    }
+
+    function updateStrength() {
+      const pwd = passwordInput.value;
+      const result = evaluatePassword(pwd, username);
+      const basePct = (result.score / 4) * 100;
+      const pct = pwd ? Math.max(10, basePct) : 0;
+      strengthFill.style.width = `${pct}%`;
+      strengthFill.className = `progress-bar bg-${result.variant}`;
+      strengthLabel.textContent = result.label;
+      renderSuggestions(result.suggestions);
+    }
+
+    passwordInput.addEventListener('input', updateStrength);
+    updateStrength();
+  })();
+</script>
 {% endblock %}

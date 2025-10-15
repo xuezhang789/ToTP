@@ -48,3 +48,47 @@ class ProfileViewTests(TestCase):
         form = response.context["form"]
         self.assertTrue(form.errors)
         self.assertIn("该邮箱已被其他账号使用", form.errors.get("email", []))
+
+    def test_change_password_success(self):
+        self.client.force_login(self.user)
+        payload = {
+            "password_submit": "1",
+            "old_password": "StrongPass123!",
+            "new_password1": "EvenStronger456!",
+            "new_password2": "EvenStronger456!",
+        }
+        response = self.client.post(reverse("accounts:profile"), payload, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("EvenStronger456!"))
+        messages = list(response.context["messages"])
+        self.assertTrue(any("密码已更新" in str(msg) for msg in messages))
+
+    def test_change_password_requires_correct_old(self):
+        self.client.force_login(self.user)
+        payload = {
+            "password_submit": "1",
+            "old_password": "WrongPass123!",
+            "new_password1": "NewSecure789!",
+            "new_password2": "NewSecure789!",
+        }
+        response = self.client.post(reverse("accounts:profile"), payload)
+        self.assertEqual(response.status_code, 200)
+        password_form = response.context["password_form"]
+        self.assertTrue(password_form.errors)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("StrongPass123!"))
+
+    def test_change_password_strength_validation(self):
+        self.client.force_login(self.user)
+        payload = {
+            "password_submit": "1",
+            "old_password": "StrongPass123!",
+            "new_password1": "abc12345",
+            "new_password2": "abc12345",
+        }
+        response = self.client.post(reverse("accounts:profile"), payload)
+        self.assertEqual(response.status_code, 200)
+        password_form = response.context["password_form"]
+        self.assertTrue(password_form.errors)
+        self.assertIn("密码需至少包含", password_form.errors.get("new_password2", [""])[0])

@@ -4,7 +4,13 @@ import secrets
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth import (
+    authenticate,
+    get_user_model,
+    login,
+    logout,
+    update_session_auth_hash,
+)
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -17,30 +23,7 @@ from google.oauth2 import id_token
 
 User = get_user_model()
 
-from .forms import ProfileForm
-
-COMMON_WEAK_PASSWORDS = {
-    "password",
-    "123456",
-    "123456789",
-    "qwerty",
-    "abc123",
-    "password1",
-    "111111",
-    "12345678",
-    "123123",
-    "qwertyuiop",
-    "letmein",
-    "admin",
-    "welcome",
-    "iloveyou",
-    "dragon",
-    "monkey",
-    "login",
-    "000000",
-    "1q2w3e4r",
-    "zaq12wsx",
-}
+from .forms import PasswordUpdateForm, ProfileForm, password_strength_errors
 
 
 def _next_url(request, fallback="/"):
@@ -53,36 +36,6 @@ def _next_url(request, fallback="/"):
     ):
         return nxt
     return fallback
-
-
-def _password_strength_errors(password: str, username: str = ""):
-    """根据复杂度规则校验密码，返回需要提示的错误列表。"""
-
-    errors = []
-    pwd = password or ""
-
-    if len(pwd) < 8:
-        errors.append("密码长度至少需要 8 个字符")
-
-    categories = {
-        "upper": bool(re.search(r"[A-Z]", pwd)),
-        "lower": bool(re.search(r"[a-z]", pwd)),
-        "digit": bool(re.search(r"\d", pwd)),
-        "symbol": bool(re.search(r"[^A-Za-z0-9]", pwd)),
-    }
-    if sum(categories.values()) < 3:
-        errors.append("密码需至少包含大写字母、小写字母、数字、符号中的三类")
-
-    if re.search(r"\s", pwd):
-        errors.append("密码不能包含空白字符")
-
-    if username and username.lower() in pwd.lower():
-        errors.append("密码不能包含用户名")
-
-    if pwd.lower() in COMMON_WEAK_PASSWORDS:
-        errors.append("密码与常见弱口令一致，请重新设置")
-
-    return errors
 
 
 @require_http_methods(["GET", "POST"])
@@ -119,7 +72,7 @@ def signup_view(request):
             messages.error(request, "用户名已存在")
             return render(request, "accounts/signup.html", context, status=400)
 
-        strength_errors = _password_strength_errors(password, username=username)
+        strength_errors = password_strength_errors(password, username=username)
         if strength_errors:
             for msg in strength_errors:
                 messages.error(request, msg)
@@ -143,8 +96,18 @@ def profile_view(request):
     """展示并更新当前用户的个人资料。"""
 
     user = request.user
-    if request.method == "POST":
+    if request.method == "POST" and "password_submit" in request.POST:
+        form = ProfileForm(instance=user)
+        password_form = PasswordUpdateForm(user=user, data=request.POST)
+        if password_form.is_valid():
+            password_form.save()
+            update_session_auth_hash(request, password_form.user)
+            messages.success(request, "密码已更新")
+            return redirect("accounts:profile")
+        messages.error(request, "密码更新失败，请检查提示")
+    elif request.method == "POST":
         form = ProfileForm(request.POST, instance=user)
+        password_form = PasswordUpdateForm(user=user)
         if form.is_valid():
             form.save()
             messages.success(request, "个人资料已更新")
@@ -152,10 +115,12 @@ def profile_view(request):
         messages.error(request, "请检查填写内容")
     else:
         form = ProfileForm(instance=user)
+        password_form = PasswordUpdateForm(user=user)
 
     context = {
         "form": form,
         "user_obj": user,
+        "password_form": password_form,
     }
     return render(request, "accounts/profile.html", context)
 
