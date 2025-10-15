@@ -40,3 +40,26 @@ class ApiTokensTests(TestCase):
         self.assertEqual(item["remaining"], payload["remaining"])
         self.assertGreaterEqual(item["remaining"], 0)
         self.assertLessEqual(item["remaining"], item["period"])
+
+    def test_filter_by_ids(self):
+        first = TOTPEntry.objects.create(
+            user=self.user,
+            name="Entry A",
+            secret_encrypted=encrypt_str("JBSWY3DPEHPK3PXP"),
+        )
+        TOTPEntry.objects.create(
+            user=self.user,
+            name="Entry B",
+            secret_encrypted=encrypt_str("JBSWY3DPEHPK3PXQ"),
+        )
+
+        response = self.client.get(
+            reverse("totp:api_tokens"),
+            {"ids": str(first.id)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        items = payload.get("items") or []
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["id"], first.id)

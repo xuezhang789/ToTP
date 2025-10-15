@@ -348,6 +348,7 @@
   let cycleRemaining = 30;
   let refreshTimer = null;
   let pendingRequest = null;
+  const tokensUrl = "{% url 'totp:api_tokens' %}";
 
   const form = document.getElementById('searchForm');
   const qInput = document.getElementById('q');
@@ -447,7 +448,17 @@
     if (pendingRequest) {
       return pendingRequest;
     }
-    pendingRequest = fetch('{% url "totp:api_tokens" %}', {
+    const ids = Array.from(state.keys()).filter((id) => Number.isFinite(id) && id > 0);
+    if (!ids.length) {
+      setCountdown(30);
+      return Promise.resolve();
+    }
+
+    const params = new URLSearchParams();
+    params.set('ids', ids.join(','));
+    const url = `${tokensUrl}?${params.toString()}`;
+
+    pendingRequest = fetch(url, {
       headers: { 'X-Requested-With': 'fetch' },
       cache: 'no-store',
     })
