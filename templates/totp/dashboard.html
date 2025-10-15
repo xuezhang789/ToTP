@@ -37,24 +37,16 @@
             <div class="card app-stat-card h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="text-muted small">已保存的密钥</span>
+                        <span class="text-muted small">全部密钥</span>
                         <span class="badge bg-primary-subtle text-primary">最新统计</span>
                     </div>
                     <div class="display-6 fw-bold">{{ stats.total_entries|default:0 }}</div>
-                    <div class="text-muted small mt-1">系统中已录入的全部 TOTP 项目</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-12 col-sm-6 col-lg-3">
-            <div class="card app-stat-card h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="text-muted small">启用的分组</span>
-                        <span class="badge bg-secondary-subtle text-secondary">结构化</span>
+                    <div class="text-muted small mt-1">
+                        含个人与团队空间的全部 TOTP 条目
+                        {% if stats.today_added %}
+                        · 今日新增 {{ stats.today_added }}
+                        {% endif %}
                     </div>
-                    <div class="display-6 fw-bold">{{ stats.group_count|default:0 }}</div>
-                    <div class="text-muted small mt-1">按团队或用途划分，便于快速定位</div>
                 </div>
             </div>
         </div>
@@ -63,11 +55,17 @@
             <div class="card app-stat-card h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="text-muted small">今日新增</span>
-                        <span class="badge bg-success-subtle text-success">+</span>
+                        <span class="text-muted small">个人空间条目</span>
+                        <span class="badge bg-secondary-subtle text-secondary">个人</span>
                     </div>
-                    <div class="display-6 fw-bold">{{ stats.today_added|default:0 }}</div>
-                    <div class="text-muted small mt-1">今日新增的密钥条目</div>
+                    <div class="display-6 fw-bold">{{ stats.personal_entries|default:0 }}</div>
+                    <div class="text-muted small mt-1">
+                        {% if stats.group_count %}
+                        已建立 {{ stats.group_count }} 个个人分组
+                        {% else %}
+                        还没有创建个人分组
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -76,7 +74,26 @@
             <div class="card app-stat-card h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="text-muted small">当前周期剩余</span>
+                        <span class="text-muted small">团队空间条目</span>
+                        <span class="badge bg-info-subtle text-info">协作</span>
+                    </div>
+                    <div class="display-6 fw-bold">{{ stats.shared_entries|default:0 }}</div>
+                    <div class="text-muted small mt-1">
+                        {% if stats.team_count %}
+                        来自 {{ stats.team_count }} 个团队空间
+                        {% else %}
+                        尚未加入团队空间
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="card app-stat-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small">验证码刷新</span>
                         <span class="badge bg-warning-subtle text-warning">倒计时</span>
                     </div>
                     {% with remain=stats.current_cycle_remaining|default:0 total=stats.current_cycle_total|default:30 %}
@@ -131,7 +148,13 @@
                         <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
                             <div class="me-3">
                                 <div class="fw-semibold">{{ item.name }}</div>
-                                <div class="text-muted small">分组：{{ item.group_name|default:"未分组" }}</div>
+                                <div class="text-muted small">
+                                    {% if item.team_name %}
+                                    团队：{{ item.team_name }}
+                                    {% else %}
+                                    个人空间 · 分组：{{ item.group_name|default:"未分组" }}
+                                    {% endif %}
+                                </div>
                             </div>
                             <span class="text-muted small">{{ item.created_at|date:"Y-m-d H:i" }}</span>
                         </li>

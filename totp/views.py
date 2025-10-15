@@ -85,6 +85,7 @@ def dashboard(request):
     memberships = []
     if request.user.is_authenticated:
         memberships = _team_memberships_for_user(request.user)
+        team_ids = {m.team_id for m in memberships}
         # 登录用户访问仪表盘时也清理一次回收站，保证数据实时。
         TOTPEntry.purge_expired_trash(user=request.user)
         accessible_entries = (
@@ -105,9 +106,9 @@ def dashboard(request):
                 filter=Q(team__isnull=False),
                 distinct=True,
             ),
-            today_added_personal=Count(
+            today_added_total=Count(
                 "id",
-                filter=Q(team__isnull=True, created_at__date=today),
+                filter=Q(created_at__date=today),
                 distinct=True,
             ),
         )
@@ -116,8 +117,8 @@ def dashboard(request):
             "personal_entries": agg["personal_entries"] or 0,
             "shared_entries": agg["shared_entries"] or 0,
             "group_count": Group.objects.filter(user=request.user).count(),
-            "team_count": len(memberships),
-            "today_added": agg["today_added_personal"] or 0,
+            "team_count": len(team_ids),
+            "today_added": agg["today_added_total"] or 0,
         }
 
         cycle_total = 30
@@ -238,6 +239,14 @@ def teams_overview(request):
 
     teams = (
         Team.objects.filter(memberships__user=request.user)
+        .annotate(
+            member_count=Count("memberships", distinct=True),
+            entry_count=Count(
+                "entries",
+                filter=Q(entries__is_deleted=False),
+                distinct=True,
+            ),
+        )
         .prefetch_related(
             Prefetch(
                 "memberships",
@@ -247,7 +256,6 @@ def teams_overview(request):
             )
         )
         .order_by("name")
-        .distinct()
     )
     membership_map = {team.id: team.get_membership(request.user) for team in teams}
     role_labels = dict(TeamMembership.Role.choices)
@@ -256,7 +264,12 @@ def teams_overview(request):
         (TeamMembership.Role.ADMIN, role_labels[TeamMembership.Role.ADMIN]),
     ]
     team_blocks = [
-        {"team": team, "membership": membership_map.get(team.id)}
+        {
+            "team": team,
+            "membership": membership_map.get(team.id),
+            "member_count": team.member_count,
+            "entry_count": team.entry_count,
+        }
         for team in teams
     ]
     return render(
@@ -395,7 +408,7 @@ def team_update_member_role(request, team_id: int, member_id: int):
 def team_remove_member(request, team_id: int, member_id: int):
     """移除团队成员或主动退出团队。"""
 
-    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    membership = _get_team_membership(request.user, team_id, require_manage=False)
     target = get_object_or_404(
         TeamMembership.objects.select_related("user"),
         pk=member_id,
@@ -410,6 +423,10 @@ def team_remove_member(request, team_id: int, member_id: int):
         # 允许管理员或成员退出团队
         target.delete()
         messages.success(request, "已退出团队")
+        return redirect("totp:teams")
+
+    if membership.role not in TEAM_MANAGER_ROLES:
+        messages.error(request, "只有团队管理员或拥有者可以移除其他成员")
         return redirect("totp:teams")
 
     if membership.role != TeamMembership.Role.OWNER and target.role != TeamMembership.Role.MEMBER:

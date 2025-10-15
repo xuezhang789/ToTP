@@ -14,7 +14,7 @@
 
 {% if team_blocks %}
     {% for block in team_blocks %}
-        {% with team=block.team membership=block.membership member_count=team.memberships.all|length %}
+        {% with team=block.team membership=block.membership member_count=block.member_count entry_count=block.entry_count %}
         <div class="card app-panel team-card mb-4">
             <div class="team-card-header">
                 <div class="team-card-heading">
@@ -29,7 +29,11 @@
                             </span>
                             <span class="team-card-meta-item">
                                 <span class="label">成员</span>
-                                <span class="value">{{ member_count }}</span>
+                                <span class="value">{{ member_count|default:0 }}</span>
+                            </span>
+                            <span class="team-card-meta-item">
+                                <span class="label">密钥</span>
+                                <span class="value">{{ entry_count|default:0 }}</span>
                             </span>
                             <span class="team-card-meta-item text-muted">
                                 创建于 {{ team.created_at|date:"Y-m-d H:i" }}
@@ -74,7 +78,7 @@
             <div class="team-card-section">
                 <div class="team-card-section-header">
                     <h3 class="team-card-subtitle mb-0">成员管理</h3>
-                    <span class="text-muted small">当前共 {{ member_count }} 人</span>
+                    <span class="text-muted small">当前共 {{ member_count|default:0 }} 人 · {{ entry_count|default:0 }} 个密钥</span>
                 </div>
                 <div class="table-responsive team-member-table-wrapper">
                     <table class="table table-hover align-middle mb-0 team-member-table">
