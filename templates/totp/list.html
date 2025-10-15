@@ -402,8 +402,10 @@
     if (row.copyBtn && code && row.copyBtn.dataset.code !== code) {
       row.copyBtn.dataset.code = code;
     }
-    if (row.remainEl && remain !== row.lastRemain) {
+    if (row.remainEl && Number.isFinite(remain) && remain !== row.lastRemain) {
       row.remainEl.textContent = `${remain}s`;
+    }
+    if (Number.isFinite(remain)) {
       row.lastRemain = remain;
     }
     if (row.progressEl) {
@@ -469,8 +471,10 @@
         return resp.json();
       })
       .then((data) => {
-        const remaining = Number(data.remaining ?? 30);
-        setCountdown(Number.isFinite(remaining) ? remaining : 30);
+        const serverRemaining = Number.isFinite(Number(data.remaining))
+          ? Number(data.remaining)
+          : 30;
+        setCountdown(serverRemaining);
         const items = new Map((data.items || []).map((item) => [Number(item.id), item]));
         state.forEach((row, id) => {
           const payload = items.get(id);
@@ -479,7 +483,9 @@
           }
           const period = Number(payload.period) || row.period;
           row.period = period;
-          renderRow(row, payload.code, cycleRemaining, period);
+          const rowRemaining = Number(payload.remaining);
+          const remainValue = Number.isFinite(rowRemaining) ? rowRemaining : serverRemaining;
+          renderRow(row, payload.code, remainValue, period);
         });
       })
       .catch((err) => {
@@ -498,9 +504,11 @@
         refreshTokens();
         return;
       }
-      setCountdown(cycleRemaining - 1);
+      setCountdown(Math.max(0, cycleRemaining - 1));
       state.forEach((row) => {
-        renderRow(row, row.lastCode, cycleRemaining, row.period);
+        const currentRemain = Number.isFinite(row.lastRemain) ? row.lastRemain : cycleRemaining;
+        const nextRemain = currentRemain > 0 ? currentRemain - 1 : 0;
+        renderRow(row, row.lastCode, nextRemain, row.period);
       });
     }, 1000);
   }
