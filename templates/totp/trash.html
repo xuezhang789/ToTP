@@ -11,51 +11,73 @@
     回收站中的密钥会在 30 天后自动彻底删除，请在到期前完成恢复操作。
 </div>
 <div class="card app-table-card">
-    <div class="card-header">
-        <strong class="text-uppercase small text-muted">已删除的密钥</strong>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-hover table-striped mb-0 align-middle">
-            <thead>
-            <tr>
-                <th>名称</th>
-                <th>分组</th>
-                <th>删除时间</th>
-                <th>剩余天数</th>
-                <th class="text-nowrap">操作</th>
-            </tr>
-            </thead>
-            <tbody>
-            {% for e in entries %}
-            <tr>
-                <td>{{ e.name }}</td>
-                <td>{{ e.group.name|default:'未分组' }}</td>
-                <td>{{ e.deleted_at|date:'Y-m-d H:i' }}</td>
-                <td>
-                    {% if e.recycle_remaining_days is not None %}
-                    约 {{ e.recycle_remaining_days }} 天
-                    {% else %}
-                    --
-                    {% endif %}
-                </td>
-                <td>
-                    <form method="post" action="{% url 'totp:restore' e.id %}" class="d-inline">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-sm btn-outline-primary"
-                                onclick="return confirm('确认恢复该密钥？');">
-                            恢复
-                        </button>
-                    </form>
-                </td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="5" class="text-center text-muted py-5">回收站为空</td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <form method="post" action="{% url 'totp:trash_bulk' %}" id="trashForm">
+        {% csrf_token %}
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <strong class="text-uppercase small text-muted">已删除的密钥</strong>
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="trashSelectAll">
+                    <label class="form-check-label small text-muted" for="trashSelectAll">全选</label>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-primary trash-action-btn" type="submit" name="action" value="restore" disabled>
+                        批量恢复
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger trash-action-btn" type="submit" name="action" value="delete" disabled data-confirm="确认永久删除选中的密钥？此操作不可恢复。">
+                        永久删除
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0 align-middle">
+                <thead>
+                <tr>
+                    <th scope="col" style="width: 36px;"></th>
+                    <th>名称</th>
+                    <th>分组</th>
+                    <th>删除时间</th>
+                    <th>剩余天数</th>
+                    <th class="text-nowrap">操作</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for e in entries %}
+                <tr>
+                    <td>
+                        <input class="form-check-input trash-checkbox" type="checkbox" name="selected" value="{{ e.id }}" aria-label="选择 {{ e.name }}">
+                    </td>
+                    <td>{{ e.name }}</td>
+                    <td>{{ e.group.name|default:'未分组' }}</td>
+                    <td>{{ e.deleted_at|date:'Y-m-d H:i' }}</td>
+                    <td>
+                        {% if e.recycle_remaining_days is not None %}
+                        约 {{ e.recycle_remaining_days }} 天
+                        {% else %}
+                        --
+                        {% endif %}
+                    </td>
+                    <td class="text-nowrap">
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary restore-single-btn" data-entry-id="{{ e.id }}">
+                                恢复
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-single-btn" data-entry-id="{{ e.id }}">
+                                删除
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-5">回收站为空</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </form>
     {% if page_obj.has_other_pages %}
     <div class="card-footer">
         <nav aria-label="Page navigation">
@@ -90,4 +112,134 @@
     </div>
     {% endif %}
 </div>
+{% block extra_js %}
+{{ block.super }}
+<script>
+(function () {
+  const form = document.getElementById('trashForm');
+  if (!form) {
+    return;
+  }
+  const selectAll = document.getElementById('trashSelectAll');
+  const actionButtons = form.querySelectorAll('.trash-action-btn');
+  const restoreBtn = form.querySelector('button[name="action"][value="restore"]');
+  const deleteBtn = form.querySelector('button[name="action"][value="delete"]');
+
+  const getCheckboxes = () => Array.from(form.querySelectorAll('.trash-checkbox'));
+
+  function updateButtons() {
+    const checkedCount = getCheckboxes().filter((cb) => cb.checked).length;
+    actionButtons.forEach((btn) => {
+      btn.disabled = checkedCount === 0;
+    });
+  }
+
+  function updateSelectAll() {
+    if (!selectAll) {
+      return;
+    }
+    const checkboxes = getCheckboxes();
+    if (checkboxes.length === 0) {
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+      selectAll.disabled = true;
+      return;
+    }
+    selectAll.disabled = false;
+    const checkedCount = checkboxes.filter((cb) => cb.checked).length;
+    selectAll.checked = checkedCount === checkboxes.length && checkedCount > 0;
+    selectAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+  }
+
+  function syncControls() {
+    updateButtons();
+    updateSelectAll();
+  }
+
+  form.addEventListener('change', (event) => {
+    if (event.target.matches('.trash-checkbox')) {
+      syncControls();
+    }
+  });
+
+  if (selectAll) {
+    selectAll.addEventListener('change', () => {
+      const checked = selectAll.checked;
+      getCheckboxes().forEach((cb) => {
+        cb.checked = checked;
+      });
+      selectAll.indeterminate = false;
+      syncControls();
+    });
+  }
+
+  syncControls();
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', (event) => {
+      if (deleteBtn.disabled) {
+        event.preventDefault();
+        return;
+      }
+      const confirmMessage = deleteBtn.dataset.confirm;
+      if (confirmMessage && !window.confirm(confirmMessage)) {
+        event.preventDefault();
+      }
+    });
+  }
+
+  function performSingleAction(action, entryId) {
+    const checkboxes = getCheckboxes();
+    let targetFound = false;
+    checkboxes.forEach((cb) => {
+      const match = String(cb.value) === String(entryId);
+      cb.checked = match;
+      if (match) {
+        targetFound = true;
+      }
+    });
+    syncControls();
+    if (!targetFound) {
+      return;
+    }
+
+    if (action === 'delete') {
+      const confirmMessage = deleteBtn ? deleteBtn.dataset.confirm : null;
+      if (confirmMessage && !window.confirm(confirmMessage)) {
+        return;
+      }
+    }
+
+    const submitButton = action === 'restore' ? restoreBtn : deleteBtn;
+    if (!submitButton) {
+      return;
+    }
+    if (typeof form.requestSubmit === 'function') {
+      form.requestSubmit(submitButton);
+      return;
+    }
+    const hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.name = submitButton.name;
+    hidden.value = submitButton.value;
+    form.appendChild(hidden);
+    form.submit();
+  }
+
+  form.addEventListener('click', (event) => {
+    const restoreTrigger = event.target.closest('.restore-single-btn');
+    if (restoreTrigger) {
+      event.preventDefault();
+      performSingleAction('restore', restoreTrigger.dataset.entryId);
+      return;
+    }
+    const deleteTrigger = event.target.closest('.delete-single-btn');
+    if (deleteTrigger) {
+      event.preventDefault();
+      performSingleAction('delete', deleteTrigger.dataset.entryId);
+    }
+  });
+})();
+</script>
+{% endblock %}
 {% endblock %}

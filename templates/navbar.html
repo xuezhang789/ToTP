@@ -26,6 +26,8 @@
             <div class="d-flex gap-2">
                 {% if request.user.is_authenticated %}
                 <span class="navbar-text small text-muted d-none d-md-inline">Hi, {{ request.user.username }}</span>
+                <a class="btn btn-outline-primary btn-sm {% if request.resolver_match and request.resolver_match.url_name == 'profile' %}active{% endif %}"
+                   href="{% url 'accounts:profile' %}">个人资料</a>
                 <a class="btn btn-outline-secondary btn-sm" href="{% url 'accounts:logout' %}">退出</a>
                 {% else %}
                 <a class="btn btn-primary btn-sm" href="{% url 'accounts:login' %}">登录</a>

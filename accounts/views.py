@@ -5,6 +5,7 @@ import secrets
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -15,6 +16,8 @@ from google.auth.transport import requests as grequests
 from google.oauth2 import id_token
 
 User = get_user_model()
+
+from .forms import ProfileForm
 
 COMMON_WEAK_PASSWORDS = {
     "password",
@@ -132,6 +135,29 @@ def logout_view(request):
     """注销当前用户并跳转。"""
     logout(request)
     return redirect(settings.LOGOUT_REDIRECT_URL)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def profile_view(request):
+    """展示并更新当前用户的个人资料。"""
+
+    user = request.user
+    if request.method == "POST":
+        form = ProfileForm(request.POST, instance=user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "个人资料已更新")
+            return redirect("accounts:profile")
+        messages.error(request, "请检查填写内容")
+    else:
+        form = ProfileForm(instance=user)
+
+    context = {
+        "form": form,
+        "user_obj": user,
+    }
+    return render(request, "accounts/profile.html", context)
 
 
 @csrf_exempt

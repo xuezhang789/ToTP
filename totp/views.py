@@ -259,6 +259,78 @@ def trash_view(request):
 
 
 @login_required
+@require_POST
+def trash_bulk_action(request):
+    """针对回收站条目执行批量操作。"""
+
+    action = (request.POST.get("action") or "").strip()
+    raw_ids = request.POST.getlist("selected")
+    try:
+        selected_ids = [int(pk) for pk in raw_ids if pk]
+    except (TypeError, ValueError):
+        selected_ids = []
+
+    if not selected_ids:
+        messages.info(request, "请先选择至少一条记录")
+        return redirect("totp:trash")
+
+    entries = list(
+        TOTPEntry.all_objects.filter(
+            user=request.user,
+            pk__in=selected_ids,
+            is_deleted=True,
+        )
+    )
+
+    if not entries:
+        messages.info(request, "所选记录不存在或已处理")
+        return redirect("totp:trash")
+
+    if action == "restore":
+        names = [entry.name for entry in entries]
+        active_names = set(
+            TOTPEntry.objects.filter(
+                user=request.user,
+                is_deleted=False,
+                name__in=names,
+            ).values_list("name", flat=True)
+        )
+        restored = 0
+        conflicts = []
+        for entry in entries:
+            if entry.name in active_names:
+                conflicts.append(entry.name)
+                continue
+            entry.is_deleted = False
+            entry.deleted_at = None
+            entry.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+            restored += 1
+            active_names.add(entry.name)
+
+        if restored:
+            messages.success(request, f"已恢复 {restored} 条密钥")
+        if conflicts:
+            displayed = ", ".join(conflicts[:5])
+            suffix = "" if len(conflicts) <= 5 else " 等"
+            messages.warning(
+                request,
+                f"{len(conflicts)} 条因名称冲突未恢复：{displayed}{suffix}",
+            )
+        return redirect("totp:trash")
+
+    if action == "delete":
+        count = len(entries)
+        TOTPEntry.all_objects.filter(
+            user=request.user, pk__in=[entry.pk for entry in entries]
+        ).delete()
+        messages.success(request, f"已永久删除 {count} 条密钥")
+        return redirect("totp:trash")
+
+    messages.error(request, "未知操作")
+    return redirect("totp:trash")
+
+
+@login_required
 def restore_entry(request, pk: int):
     """从回收站恢复指定的 TOTP 条目。"""
 

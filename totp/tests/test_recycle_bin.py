@@ -106,3 +106,72 @@ class RecycleBinTests(TestCase):
         self.assertFalse(TOTPEntry.all_objects.filter(pk=expired.pk).exists())
         # 页面提示回收站为空
         self.assertIn("回收站为空", response.content.decode())
+
+    def test_bulk_restore_with_conflicts(self):
+        ok_entry = TOTPEntry.all_objects.create(
+            user=self.user,
+            name="Alpha",
+            secret_encrypted=self.secret,
+            is_deleted=True,
+            deleted_at=timezone.now(),
+        )
+        conflict_entry = TOTPEntry.all_objects.create(
+            user=self.user,
+            name="Beta",
+            secret_encrypted=self.secret,
+            is_deleted=True,
+            deleted_at=timezone.now(),
+        )
+        # Active entry with same name as conflict_entry
+        TOTPEntry.objects.create(
+            user=self.user,
+            name="Beta",
+            secret_encrypted=self.secret,
+        )
+
+        response = self.client.post(
+            reverse("totp:trash_bulk"),
+            {
+                "action": "restore",
+                "selected": [str(ok_entry.pk), str(conflict_entry.pk)],
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        ok_entry.refresh_from_db()
+        conflict_entry.refresh_from_db()
+        self.assertFalse(ok_entry.is_deleted)
+        self.assertIsNone(ok_entry.deleted_at)
+        self.assertTrue(conflict_entry.is_deleted)
+        messages = list(response.context["messages"])
+        self.assertTrue(any("已恢复 1 条" in str(msg) for msg in messages))
+        self.assertTrue(any("名称冲突" in str(msg) for msg in messages))
+
+    def test_bulk_permanent_delete(self):
+        entry_a = TOTPEntry.all_objects.create(
+            user=self.user,
+            name="Alpha",
+            secret_encrypted=self.secret,
+            is_deleted=True,
+            deleted_at=timezone.now(),
+        )
+        entry_b = TOTPEntry.all_objects.create(
+            user=self.user,
+            name="Beta",
+            secret_encrypted=self.secret,
+            is_deleted=True,
+            deleted_at=timezone.now(),
+        )
+
+        response = self.client.post(
+            reverse("totp:trash_bulk"),
+            {
+                "action": "delete",
+                "selected": [str(entry_a.pk), str(entry_b.pk)],
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TOTPEntry.all_objects.filter(pk__in=[entry_a.pk, entry_b.pk]).exists())
+        messages = list(response.context["messages"])
+        self.assertTrue(any("已永久删除 2 条" in str(msg) for msg in messages))
