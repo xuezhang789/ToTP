@@ -2,116 +2,112 @@
 {% block title %}团队空间 - TOTP管理平台{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap align-items-center justify-content-between mb-4">
-    <div class="mb-3 mb-md-0">
-        <h1 class="app-section-title mb-1">团队空间</h1>
-        <p class="text-muted small mb-0">创建共享空间，与成员共同管理关键密钥。</p>
+<div class="card app-panel border-0 shadow-sm mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <h1 class="app-section-title mb-1">团队空间</h1>
+            <p class="text-muted small mb-0">集中管理团队密钥、邀请成员协作，并实时掌握安全动态。</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}?space=personal">
+                <i class="bi bi-person-badge me-1"></i> 返回个人空间
+            </a>
+            <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#createTeamModal">
+                <i class="bi bi-plus-lg me-1"></i> 新建团队
+            </button>
+        </div>
     </div>
-    <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#createTeamModal">
-        新建团队
-    </button>
 </div>
 
 {% if incoming_invitations %}
-<div class="card app-panel mb-4">
+<div class="card app-panel border-0 shadow-sm mb-4">
     <div class="card-body">
-        <h2 class="h6 mb-3">待处理邀请</h2>
-        <p class="text-muted small mb-3">以下团队邀请需要你确认，可随时接受或拒绝。</p>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
-                <thead class="table-light">
-                <tr>
-                    <th scope="col">团队</th>
-                    <th scope="col">邀请人</th>
-                    <th scope="col">目标角色</th>
-                    <th scope="col">时间</th>
-                    <th scope="col" class="text-end">操作</th>
-                </tr>
-                </thead>
-                <tbody>
-                {% for invite in incoming_invitations %}
-                <tr>
-                    <td>{{ invite.team.name }}</td>
-                    <td>{{ invite.inviter.username }}</td>
-                    <td>{{ invite.get_role_display }}</td>
-                    <td class="text-muted small">{{ invite.created_at|date:"Y-m-d H:i" }}</td>
-                    <td class="text-end">
-                        <div class="d-inline-flex gap-2">
-                            <form method="post" action="{% url 'totp:team_invitation_accept' invite.id %}">
-                                {% csrf_token %}
-                                <button class="btn btn-sm btn-primary" type="submit">接受</button>
-                            </form>
-                            <form method="post" action="{% url 'totp:team_invitation_decline' invite.id %}">
-                                {% csrf_token %}
-                                <button class="btn btn-sm btn-outline-secondary" type="submit">拒绝</button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
+        <h2 class="h6 mb-3"><i class="bi bi-envelope-open me-1 text-primary"></i> 待处理邀请</h2>
+        <p class="text-muted small mb-3">确认后即可加入对应团队并获取权限。</p>
+        <div class="list-group list-group-flush">
+            {% for invite in incoming_invitations %}
+            <div class="list-group-item px-0 d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="flex-grow-1">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="badge rounded-pill bg-primary-subtle text-primary fw-semibold">{{ invite.team.name }}</span>
+                        <span class="text-muted small">邀请人：{{ invite.inviter.username }}</span>
+                        <span class="text-muted small">角色：{{ invite.get_role_display }}</span>
+                    </div>
+                    <div class="text-muted small mt-1">发送于 {{ invite.created_at|date:"Y-m-d H:i" }}</div>
+                </div>
+                <div class="d-flex gap-2">
+                    <form method="post" action="{% url 'totp:team_invitation_accept' invite.id %}">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-primary" type="submit">接受</button>
+                    </form>
+                    <form method="post" action="{% url 'totp:team_invitation_decline' invite.id %}">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-outline-secondary" type="submit">拒绝</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
         </div>
     </div>
 </div>
 {% endif %}
 
 {% if team_blocks %}
-    <div class="card app-panel mb-4">
+    <div class="card app-panel border-0 shadow-sm mb-4">
         <div class="card-body">
             <h2 class="h6 text-muted mb-3">团队统计</h2>
             <div class="row g-3 text-center text-md-start">
-                <div class="col-6 col-md-3">
-                    <div class="fs-4 fw-semibold">{{ team_summary.team_total }}</div>
-                    <div class="text-muted small">团队数量</div>
+                <div class="col-6 col-lg-3">
+                    <div class="p-3 bg-light rounded-3 border h-100">
+                        <div class="text-muted small mb-1">团队数量</div>
+                        <div class="fs-4 fw-semibold">{{ team_summary.team_total }}</div>
+                    </div>
                 </div>
-                <div class="col-6 col-md-3">
-                    <div class="fs-4 fw-semibold">{{ team_summary.member_total }}</div>
-                    <div class="text-muted small">成员总数</div>
+                <div class="col-6 col-lg-3">
+                    <div class="p-3 bg-light rounded-3 border h-100">
+                        <div class="text-muted small mb-1">成员总数</div>
+                        <div class="fs-4 fw-semibold">{{ team_summary.member_total }}</div>
+                    </div>
                 </div>
-                <div class="col-6 col-md-3">
-                    <div class="fs-4 fw-semibold">{{ team_summary.entry_total }}</div>
-                    <div class="text-muted small">团队密钥</div>
+                <div class="col-6 col-lg-3">
+                    <div class="p-3 bg-light rounded-3 border h-100">
+                        <div class="text-muted small mb-1">团队密钥</div>
+                        <div class="fs-4 fw-semibold">{{ team_summary.entry_total }}</div>
+                    </div>
                 </div>
-                <div class="col-6 col-md-3">
-                    <div class="fs-4 fw-semibold">{{ team_summary.manageable }}</div>
-                    <div class="text-muted small">可管理的团队</div>
+                <div class="col-6 col-lg-3">
+                    <div class="p-3 bg-light rounded-3 border h-100">
+                        <div class="text-muted small mb-1">可管理团队</div>
+                        <div class="fs-4 fw-semibold">{{ team_summary.manageable }}</div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
     {% for block in team_blocks %}
         {% with team=block.team membership=block.membership member_count=block.member_count entry_count=block.entry_count %}
-        <div class="card app-panel team-card mb-4">
+        <div class="card app-panel team-card border-0 shadow-sm mb-4">
             <div class="team-card-header">
                 <div class="team-card-heading">
                     <div class="team-card-avatar">
                         {{ team.name|slice:":1"|upper }}
                     </div>
                     <div>
-                        <h2 class="team-card-title mb-1">{{ team.name }}</h2>
+                        <h2 class="team-card-title mb-1 d-flex flex-wrap align-items-center gap-2">
+                            {{ team.name }}
+                            <span class="badge rounded-pill bg-light text-muted fw-semibold">{{ membership.get_role_display }}</span>
+                        </h2>
                         <div class="team-card-meta">
-                            <span class="badge rounded-pill bg-light text-muted fw-semibold">
-                                {{ membership.get_role_display }}
-                            </span>
-                            <span class="team-card-meta-item">
-                                <span class="label">成员</span>
-                                <span class="value">{{ member_count|default:0 }}</span>
-                            </span>
-                            <span class="team-card-meta-item">
-                                <span class="label">密钥</span>
-                                <span class="value">{{ entry_count|default:0 }}</span>
-                            </span>
-                            <span class="team-card-meta-item text-muted">
-                                创建于 {{ team.created_at|date:"Y-m-d H:i" }}
-                            </span>
+                            <span class="team-card-meta-item"><i class="bi bi-people me-1"></i>成员 {{ member_count|default:0 }}</span>
+                            <span class="team-card-meta-item"><i class="bi bi-key me-1"></i>密钥 {{ entry_count|default:0 }}</span>
+                            <span class="team-card-meta-item text-muted"><i class="bi bi-clock-history me-1"></i>{{ team.created_at|date:"Y-m-d" }}</span>
                         </div>
                     </div>
                 </div>
                 <div class="team-card-actions">
                     {% with team_id_str=team.id|stringformat:'s' %}
                     <a class="btn btn-outline-primary" href="{% url 'totp:list' %}?space=team:{{ team_id_str }}">
-                        查看空间
+                        <i class="bi bi-box-arrow-up-right me-1"></i> 查看空间
                     </a>
                     {% endwith %}
                 </div>
@@ -148,16 +144,16 @@
                     <span class="text-muted small">当前共 {{ member_count|default:0 }} 人 · {{ entry_count|default:0 }} 个密钥</span>
                 </div>
                 {% if block.pending_invites and membership and membership.can_manage_entries %}
-                <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                    <div class="small mb-0">尚有 {{ block.pending_invites|length }} 位成员等待确认。</div>
+                <div class="alert alert-warning bg-warning-subtle border-0 d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <div class="small mb-0"><i class="bi bi-hourglass-split me-1"></i> {{ block.pending_invites|length }} 位成员等待确认。</div>
                     <div class="d-flex flex-wrap gap-2">
                         {% for invite in block.pending_invites %}
-                        <div class="badge bg-light text-muted d-flex align-items-center gap-2">
-                            <span>{{ invite.invitee.username }}</span>
+                        <div class="badge bg-light text-muted d-flex align-items-center gap-2 px-3 py-2 rounded-pill">
+                            <span class="fw-semibold">{{ invite.invitee.username }}</span>
                             <span class="text-muted">{{ invite.get_role_display }}</span>
                             <form method="post" action="{% url 'totp:team_invitation_cancel' invite.id %}" class="ms-1">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-link btn-sm p-0 text-decoration-none">取消</button>
+                                <button type="submit" class="btn btn-link btn-sm p-0 text-decoration-none text-muted">取消</button>
                             </form>
                         </div>
                         {% endfor %}

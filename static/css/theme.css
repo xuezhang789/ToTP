@@ -314,6 +314,64 @@ main.app-main {
   color: var(--app-text-color);
 }
 
+.dashboard-hero {
+  background: linear-gradient(140deg, #eef2ff, #dbeafe);
+  border-radius: var(--app-radius-lg);
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-hero::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: -20%;
+  inset-block-start: -45%;
+  width: 55%;
+  aspect-ratio: 1;
+  background: radial-gradient(circle at center, rgba(79, 70, 229, 0.18), transparent 70%);
+  pointer-events: none;
+}
+
+.metric-card .metric-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  box-shadow: 0 12px 24px -14px rgba(15, 23, 42, 0.4);
+}
+
+.metric-card .metric-value {
+  font-size: clamp(1.9rem, 2.8vw, 2.4rem);
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.progress-thin {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.quick-start-list {
+  counter-reset: quick;
+}
+
+.quick-start-step {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--app-primary);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.15rem;
+}
+
 .team-card-actions {
   display: flex;
   align-items: center;
@@ -758,4 +816,20 @@ footer.app-footer a {
 
 footer.app-footer a:hover {
   color: var(--app-primary);
+}
+.timeline li {
+  position: relative;
+  padding-left: 1.5rem;
+}
+
+.timeline li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.4rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
 }

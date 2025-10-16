@@ -12,101 +12,87 @@
 <div class="py-3 py-md-4">
 
     <!-- 顶部欢迎区 -->
-    <div class="app-panel mb-4">
-        <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">
+    <div class="card border-0 shadow-sm dashboard-hero mb-4">
+        <div class="card-body d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-4">
             <div>
-                <h1 class="h4 mb-2">欢迎回来，{{ request.user.username }}</h1>
-                <p class="text-muted mb-0">集中管理动态口令、掌握核心数据，并随时导入或导出你的密钥。</p>
+                <h1 class="display-6 fw-semibold mb-2">欢迎回来，{{ request.user.username }}</h1>
+                <p class="mb-0 text-muted">统一查看验证码、管理团队密钥，并通过审计时间线掌握一切重要操作。</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
-                <!-- 与现有模态框对接 -->
-                <button class="btn btn-primary" type="button"
-                        data-bs-toggle="modal" data-bs-target="#addModal">添加密钥
+                <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#addModal">
+                    <i class="bi bi-plus-lg me-1"></i> 添加密钥
                 </button>
-                <button class="btn btn-outline-primary" type="button"
-                        data-bs-toggle="modal" data-bs-target="#importModal">批量导入
+                <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#importModal">
+                    <i class="bi bi-arrow-bar-up me-1"></i> 批量导入
                 </button>
-                <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}">查看全部密钥</a>
+                <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}"><i class="bi bi-grid me-1"></i> 我的密钥</a>
             </div>
         </div>
     </div>
 
     <!-- 关键统计 -->
     <div class="row g-3 g-md-4 mb-4">
-        <div class="col-12 col-sm-6 col-lg-3">
-            <div class="card app-stat-card h-100">
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card metric-card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="text-muted small">全部密钥</span>
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div class="metric-icon bg-primary-subtle text-primary">
+                            <i class="bi bi-collection"></i>
+                        </div>
                         <span class="badge bg-primary-subtle text-primary">最新统计</span>
                     </div>
-                    <div class="display-6 fw-bold">{{ stats.total_entries|default:0 }}</div>
-                    <div class="text-muted small mt-1">
-                        含个人与团队空间的全部 TOTP 条目
-                        {% if stats.today_added %}
-                        · 今日新增 {{ stats.today_added }}
-                        {% endif %}
-                    </div>
+                    <div class="metric-value">{{ stats.total_entries|default:0 }}</div>
+                    <div class="text-muted small">全部密钥{% if stats.today_added %} · 今日新增 {{ stats.today_added }}{% endif %}</div>
                 </div>
             </div>
         </div>
 
-        <div class="col-12 col-sm-6 col-lg-3">
-            <div class="card app-stat-card h-100">
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card metric-card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="text-muted small">个人空间条目</span>
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div class="metric-icon bg-secondary-subtle text-secondary">
+                            <i class="bi bi-person-lines-fill"></i>
+                        </div>
                         <span class="badge bg-secondary-subtle text-secondary">个人</span>
                     </div>
-                    <div class="display-6 fw-bold">{{ stats.personal_entries|default:0 }}</div>
-                    <div class="text-muted small mt-1">
-                        {% if stats.group_count %}
-                        已建立 {{ stats.group_count }} 个个人分组
-                        {% else %}
-                        还没有创建个人分组
-                        {% endif %}
-                    </div>
+                    <div class="metric-value">{{ stats.personal_entries|default:0 }}</div>
+                    <div class="text-muted small">{% if stats.group_count %}使用 {{ stats.group_count }} 个分组{% else %}尚未设置分组{% endif %}</div>
                 </div>
             </div>
         </div>
 
-        <div class="col-12 col-sm-6 col-lg-3">
-            <div class="card app-stat-card h-100">
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card metric-card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="text-muted small">团队空间条目</span>
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div class="metric-icon bg-info-subtle text-info">
+                            <i class="bi bi-people"></i>
+                        </div>
                         <span class="badge bg-info-subtle text-info">协作</span>
                     </div>
-                    <div class="display-6 fw-bold">{{ stats.shared_entries|default:0 }}</div>
-                    <div class="text-muted small mt-1">
-                        {% if stats.team_count %}
-                        来自 {{ stats.team_count }} 个团队空间
-                        {% else %}
-                        尚未加入团队空间
-                        {% endif %}
-                    </div>
+                    <div class="metric-value">{{ stats.shared_entries|default:0 }}</div>
+                    <div class="text-muted small">{% if stats.team_count %}来自 {{ stats.team_count }} 个团队{% else %}尚未加入团队空间{% endif %}</div>
                 </div>
             </div>
         </div>
 
-        <div class="col-12 col-sm-6 col-lg-3">
-            <div class="card app-stat-card h-100">
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card metric-card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="text-muted small">验证码刷新</span>
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <div class="metric-icon bg-warning-subtle text-warning">
+                            <i class="bi bi-stopwatch"></i>
+                        </div>
                         <span class="badge bg-warning-subtle text-warning">倒计时</span>
                     </div>
                     {% with remain=stats.current_cycle_remaining|default:0 total=stats.current_cycle_total|default:30 %}
                     {% if total > 0 %}
                     {% widthratio remain total 100 as pct %}
-                    <div class="progress" role="progressbar" aria-label="当前周期剩余" aria-valuemin="0"
-                         aria-valuemax="100">
-                        <div id="cycle-progress" class="progress-bar" style="width:{{ pct }}%"
-                             aria-valuenow="{{ pct }}"></div>
+                    <div class="progress progress-thin" role="progressbar" aria-label="当前周期剩余" aria-valuemin="0" aria-valuemax="100">
+                        <div id="cycle-progress" class="progress-bar bg-warning" style="width:{{ pct }}%" aria-valuenow="{{ pct }}"></div>
                     </div>
-                    <div class="text-muted small mt-1">本周期剩余 <span id="cycle-remaining">{{ remain }}</span> 秒 /
-                        <span id="cycle-total">{{ total }}</span> 秒
-                    </div>
+                    <div class="text-muted small mt-1">剩余 <span id="cycle-remaining">{{ remain }}</span>s / 共 <span id="cycle-total">{{ total }}</span>s</div>
                     {% else %}
                     <div class="text-muted small">—</div>
                     {% endif %}
@@ -119,32 +105,56 @@
     <!-- 快捷操作 & 使用说明 -->
     <div class="row g-3 g-md-4">
         <div class="col-12 col-lg-7">
-            <div class="card h-100">
-                <div class="card-header d-flex align-items-center justify-content-between">
-                    <h2 class="h6 mb-0">快速上手</h2>
-                    <a href="{% url 'totp:list' %}" class="btn btn-sm btn-outline-secondary">前往“我的密钥”</a>
-                </div>
+            <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <ol class="mb-0 ps-3">
-                        <li class="mb-2">先在左上角的空间切换器里选择目标空间：个人空间用于自用条目，团队空间需具备管理权限后可邀请成员协作。</li>
-                        <li class="mb-2">通过 <strong>添加密钥</strong> 或 <strong>批量导入</strong> 写入数据，导入预览会标记重复项并允许直接导入到指定团队。</li>
-                        <li class="mb-2">在“我的密钥”列表实时查看验证码、复制、重命名或调整分组；团队条目会标识所属空间与权限。</li>
-                        <li class="mb-2">需要安全分享时，使用<strong>一次性链接</strong>设置有效期与查看次数，并在“链接审计”里随时失效或追踪访问。</li>
-                        <li>按需导出明文或离线包完成备份，回收站可恢复误删条目，空间统计可帮助快速定位异常变化。</li>
-                    </ol>
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <h2 class="h6 mb-0"><i class="bi bi-lightning-charge me-1 text-primary"></i> 快速上手</h2>
+                        <a href="{% url 'totp:list' %}" class="btn btn-sm btn-outline-secondary">我的密钥</a>
+                    </div>
+                    <ul class="list-unstyled mb-0 quick-start-list">
+                        <li class="d-flex align-items-start gap-3 mb-3">
+                            <span class="quick-start-step">1</span>
+                            <div>
+                                <strong>选择操作空间</strong>
+                                <p class="mb-0 text-muted small">先通过顶部空间切换器定位到个人或团队空间，确保操作权限正确。</p>
+                            </div>
+                        </li>
+                        <li class="d-flex align-items-start gap-3 mb-3">
+                            <span class="quick-start-step">2</span>
+                            <div>
+                                <strong>写入或导入密钥</strong>
+                                <p class="mb-0 text-muted small">使用“添加密钥”或“批量导入”，导入预览会提示重复项并可指定团队。</p>
+                            </div>
+                        </li>
+                        <li class="d-flex align-items-start gap-3 mb-3">
+                            <span class="quick-start-step">3</span>
+                            <div>
+                                <strong>日常管理与分享</strong>
+                                <p class="mb-0 text-muted small">在列表页复制验证码、调整分组；生成一次性链接可安全分享给同事。</p>
+                            </div>
+                        </li>
+                        <li class="d-flex align-items-start gap-3">
+                            <span class="quick-start-step">4</span>
+                            <div>
+                                <strong>备份与合规</strong>
+                                <p class="mb-0 text-muted small">导出或生成离线包后请妥善加密保存，回收站与审计时间线便于追踪与恢复。</p>
+                            </div>
+                        </li>
+                    </ul>
                 </div>
             </div>
         </div>
 
         <div class="col-12 col-lg-5">
             <div class="d-flex flex-column gap-3 h-100">
-                <div class="card h-100">
-                    <div class="card-header">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-transparent border-0 d-flex align-items-center justify-content-between">
                         <h2 class="h6 mb-0">最近活动</h2>
+                        <i class="bi bi-activity text-muted"></i>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body pt-0">
                         {% if recent_entries %}
-                        <ul class="list-group list-group-flush">
+                        <ul class="list-group list-group-flush border-top-0">
                             {% for item in recent_entries %}
                             <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
                                 <div class="me-3">
@@ -166,11 +176,12 @@
                         {% endif %}
                     </div>
                 </div>
-                <div class="card">
-                    <div class="card-header">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-transparent border-0 d-flex align-items-center justify-content-between">
                         <h2 class="h6 mb-0">密钥审计时间线</h2>
+                        <i class="bi bi-journal-text text-muted"></i>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body pt-0">
                         {% if recent_audits %}
                         <ul class="timeline list-unstyled mb-0">
                             {% for audit in recent_audits %}
