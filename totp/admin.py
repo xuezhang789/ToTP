@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Group, Team, TeamMembership, TOTPEntry
+from .models import Group, Team, TeamInvitation, TeamMembership, TOTPEntry
 
 
 @admin.register(Group)
@@ -36,3 +36,12 @@ class TeamMembershipAdmin(admin.ModelAdmin):
     list_display = ("id", "team", "user", "role", "joined_at")
     search_fields = ("team__name", "user__username")
     list_filter = ("role",)
+
+
+@admin.register(TeamInvitation)
+class TeamInvitationAdmin(admin.ModelAdmin):
+    """团队邀请后台配置。"""
+
+    list_display = ("id", "team", "invitee", "inviter", "role", "status", "created_at")
+    list_filter = ("status", "role")
+    search_fields = ("team__name", "invitee__username", "inviter__username")

@@ -21,6 +21,21 @@ urlpatterns = [
         views.team_remove_member,
         name="team_remove_member",
     ),
+    path(
+        "teams/invitations/<int:invitation_id>/accept/",
+        views.team_invitation_accept,
+        name="team_invitation_accept",
+    ),
+    path(
+        "teams/invitations/<int:invitation_id>/decline/",
+        views.team_invitation_decline,
+        name="team_invitation_decline",
+    ),
+    path(
+        "teams/invitations/<int:invitation_id>/cancel/",
+        views.team_invitation_cancel,
+        name="team_invitation_cancel",
+    ),
     path("add/", views.add_entry, name="add"),
     path("group/add/", views.add_group, name="add_group"),
     path("group/<int:pk>/rename/", views.rename_group, name="rename_group"),

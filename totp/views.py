@@ -19,7 +19,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from . import importers
-from .models import Group, OneTimeLink, Team, TeamMembership, TOTPEntry
+from .models import Group, OneTimeLink, Team, TeamInvitation, TeamMembership, TOTPEntry
 
 UserModel = get_user_model()
 from .utils import (
@@ -288,12 +288,24 @@ def teams_overview(request):
         (TeamMembership.Role.MEMBER, role_labels[TeamMembership.Role.MEMBER]),
         (TeamMembership.Role.ADMIN, role_labels[TeamMembership.Role.ADMIN]),
     ]
+    pending_invites = (
+        TeamInvitation.objects.filter(
+            team__in=teams, status=TeamInvitation.Status.PENDING
+        )
+        .select_related("invitee")
+        .order_by("-created_at")
+    )
+    invites_by_team: dict[int, list[TeamInvitation]] = {}
+    for invite in pending_invites:
+        invites_by_team.setdefault(invite.team_id, []).append(invite)
+
     team_blocks = [
         {
             "team": team,
             "membership": membership_map.get(team.id),
             "member_count": team.member_count,
             "entry_count": team.entry_count,
+            "pending_invites": invites_by_team.get(team.id, []),
         }
         for team in teams
     ]
@@ -307,6 +319,14 @@ def teams_overview(request):
             if block["membership"] and block["membership"].can_manage_entries
         ),
     }
+
+    inbound_invitations = list(
+        TeamInvitation.objects.filter(
+            invitee=request.user, status=TeamInvitation.Status.PENDING
+        )
+        .select_related("team", "inviter")
+        .order_by("-created_at")
+    )
     return render(
         request,
         "totp/teams.html",
@@ -317,6 +337,7 @@ def teams_overview(request):
             "role_labels": role_labels,
             "available_roles": available_roles,
             "team_summary": summary,
+            "incoming_invitations": inbound_invitations,
         },
     )
 
@@ -376,30 +397,33 @@ def team_add_member(request, team_id: int):
 
     team = membership.team
 
-    member, created = TeamMembership.objects.get_or_create(
-        team=team,
-        user=target_user,
-        defaults={"role": desired_role},
-    )
+    existing_member = TeamMembership.objects.filter(team=team, user=target_user).first()
+    if existing_member:
+        messages.info(request, f"{target_user} 已在团队中")
+        return redirect("totp:teams")
 
-    if created:
-        messages.success(request, f"{target_user} 已加入团队")
-    else:
-        if member.role == TeamMembership.Role.OWNER:
-            messages.info(request, f"{target_user} 已是该团队的拥有者")
+    pending_invite = TeamInvitation.objects.filter(
+        team=team,
+        invitee=target_user,
+        status=TeamInvitation.Status.PENDING,
+    ).first()
+    if pending_invite:
+        if membership.role == TeamMembership.Role.OWNER and pending_invite.role != desired_role:
+            pending_invite.role = desired_role
+            pending_invite.inviter = request.user
+            pending_invite.save(update_fields=["role", "inviter"])
+            messages.success(request, f"已更新对 {target_user} 的邀请角色")
         else:
-            if member.role == desired_role:
-                messages.info(request, f"{target_user} 已在团队中")
-            else:
-                if membership.role != TeamMembership.Role.OWNER:
-                    messages.error(request, "只有拥有者可以调整成员角色")
-                else:
-                    member.role = desired_role
-                    member.save(update_fields=["role"])
-                    messages.success(
-                        request,
-                        f"{target_user} 角色已更新为 {member.get_role_display()}",
-                    )
+            messages.info(request, f"已存在发送给 {target_user} 的待确认邀请")
+        return redirect("totp:teams")
+
+    TeamInvitation.objects.create(
+        team=team,
+        inviter=request.user,
+        invitee=target_user,
+        role=desired_role,
+    )
+    messages.success(request, f"已向 {target_user} 发送团队邀请，等待对方确认")
     return redirect("totp:teams")
 
 
@@ -471,6 +495,67 @@ def team_remove_member(request, team_id: int, member_id: int):
 
     target.delete()
     messages.success(request, f"{target.user} 已被移出团队")
+    return redirect("totp:teams")
+
+
+@login_required
+@require_POST
+def team_invitation_accept(request, invitation_id: int):
+    invitation = get_object_or_404(
+        TeamInvitation.objects.select_related("team"),
+        pk=invitation_id,
+        invitee=request.user,
+        status=TeamInvitation.Status.PENDING,
+    )
+
+    with transaction.atomic():
+        membership, created = TeamMembership.objects.get_or_create(
+            team=invitation.team,
+            user=request.user,
+            defaults={"role": invitation.role},
+        )
+        if not created and membership.role != invitation.role and invitation.role != TeamMembership.Role.MEMBER:
+            membership.role = invitation.role
+            membership.save(update_fields=["role"])
+        invitation.status = TeamInvitation.Status.ACCEPTED
+        invitation.responded_at = timezone.now()
+        invitation.save(update_fields=["status", "responded_at"])
+
+    messages.success(request, f"已加入 {invitation.team.name}")
+    return redirect("totp:teams")
+
+
+@login_required
+@require_POST
+def team_invitation_decline(request, invitation_id: int):
+    invitation = get_object_or_404(
+        TeamInvitation.objects.select_related("team"),
+        pk=invitation_id,
+        invitee=request.user,
+        status=TeamInvitation.Status.PENDING,
+    )
+    invitation.status = TeamInvitation.Status.DECLINED
+    invitation.responded_at = timezone.now()
+    invitation.save(update_fields=["status", "responded_at"])
+    messages.info(request, f"已拒绝加入 {invitation.team.name}")
+    return redirect("totp:teams")
+
+
+@login_required
+@require_POST
+def team_invitation_cancel(request, invitation_id: int):
+    invitation = get_object_or_404(
+        TeamInvitation.objects.select_related("team"),
+        pk=invitation_id,
+    )
+    membership = _get_team_membership(request.user, invitation.team_id, require_manage=True)
+    if not invitation.is_pending:
+        messages.info(request, "该邀请已处理")
+        return redirect("totp:teams")
+    invitation.status = TeamInvitation.Status.CANCELLED
+    invitation.responded_at = timezone.now()
+    invitation.save(update_fields=["status", "responded_at"])
+    messages.success(request, "已取消邀请")
     return redirect("totp:teams")
 
 

@@ -12,6 +12,50 @@
     </button>
 </div>
 
+{% if incoming_invitations %}
+<div class="card app-panel mb-4">
+    <div class="card-body">
+        <h2 class="h6 mb-3">待处理邀请</h2>
+        <p class="text-muted small mb-3">以下团队邀请需要你确认，可随时接受或拒绝。</p>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead class="table-light">
+                <tr>
+                    <th scope="col">团队</th>
+                    <th scope="col">邀请人</th>
+                    <th scope="col">目标角色</th>
+                    <th scope="col">时间</th>
+                    <th scope="col" class="text-end">操作</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for invite in incoming_invitations %}
+                <tr>
+                    <td>{{ invite.team.name }}</td>
+                    <td>{{ invite.inviter.username }}</td>
+                    <td>{{ invite.get_role_display }}</td>
+                    <td class="text-muted small">{{ invite.created_at|date:"Y-m-d H:i" }}</td>
+                    <td class="text-end">
+                        <div class="d-inline-flex gap-2">
+                            <form method="post" action="{% url 'totp:team_invitation_accept' invite.id %}">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-primary" type="submit">接受</button>
+                            </form>
+                            <form method="post" action="{% url 'totp:team_invitation_decline' invite.id %}">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-outline-secondary" type="submit">拒绝</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% if team_blocks %}
     <div class="card app-panel mb-4">
         <div class="card-body">
@@ -103,6 +147,23 @@
                     <h3 class="team-card-subtitle mb-0">成员管理</h3>
                     <span class="text-muted small">当前共 {{ member_count|default:0 }} 人 · {{ entry_count|default:0 }} 个密钥</span>
                 </div>
+                {% if block.pending_invites and membership and membership.can_manage_entries %}
+                <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <div class="small mb-0">尚有 {{ block.pending_invites|length }} 位成员等待确认。</div>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for invite in block.pending_invites %}
+                        <div class="badge bg-light text-muted d-flex align-items-center gap-2">
+                            <span>{{ invite.invitee.username }}</span>
+                            <span class="text-muted">{{ invite.get_role_display }}</span>
+                            <form method="post" action="{% url 'totp:team_invitation_cancel' invite.id %}" class="ms-1">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-link btn-sm p-0 text-decoration-none">取消</button>
+                            </form>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
                 <div class="table-responsive team-member-table-wrapper">
                     <table class="table table-hover align-middle mb-0 team-member-table">
                         <thead>
@@ -198,7 +259,11 @@
     <div class="card app-panel">
         <div class="card-body text-center py-5">
             <p class="lead mb-2">还没有团队空间</p>
+            {% if incoming_invitations %}
+            <p class="text-muted mb-3">你已有待处理邀请，确认后即可加入团队。</p>
+            {% else %}
             <p class="text-muted mb-3">创建一个团队，与同事共享密钥并分配管理权限。</p>
+            {% endif %}
             <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#createTeamModal">
                 立即创建团队
             </button>

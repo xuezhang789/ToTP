@@ -84,6 +84,63 @@ class TeamMembership(models.Model):
     def can_manage_entries(self) -> bool:
         return self.role in self.Role.manager_roles()
 
+
+class TeamInvitation(models.Model):
+    """团队邀请，需受邀成员确认后生效。"""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "待确认"
+        ACCEPTED = "accepted", "已接受"
+        DECLINED = "declined", "已拒绝"
+        CANCELLED = "cancelled", "已取消"
+
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.CASCADE,
+        related_name="invitations",
+    )
+    inviter = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="sent_team_invitations",
+    )
+    invitee = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="team_invitations",
+    )
+    role = models.CharField(
+        max_length=16,
+        choices=TeamMembership.Role.choices,
+        default=TeamMembership.Role.MEMBER,
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    message = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["team", "invitee"],
+                condition=models.Q(status="pending"),
+                name="uniq_pending_team_invitation",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.inviter} -> {self.invitee} @ {self.team} ({self.get_status_display()})"
+
+    @property
+    def is_pending(self) -> bool:
+        return self.status == self.Status.PENDING
+
 class Group(models.Model):
     """用户自定义的分组，用于管理多个 TOTP 条目。"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="totp_groups")
