@@ -57,13 +57,47 @@
 
         <div class="card mt-3">
             <div class="card-body">
-                <h2 class="h6 text-muted mb-3">安全信息</h2>
+                <h2 class="h6 text-muted mb-3">安全概览</h2>
+                <div class="row g-3 text-center text-md-start">
+                    <div class="col-6 col-md-3">
+                        <div class="fw-semibold fs-5">{{ security_summary.total_entries }}</div>
+                        <div class="text-muted small">总密钥</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="fw-semibold fs-5">{{ security_summary.personal_entries }}</div>
+                        <div class="text-muted small">个人空间</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="fw-semibold fs-5">{{ security_summary.team_entries }}</div>
+                        <div class="text-muted small">团队空间</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="fw-semibold fs-5">{{ security_summary.active_links }}</div>
+                        <div class="text-muted small">有效分享链接</div>
+                    </div>
+                </div>
+                <hr class="my-3">
                 <dl class="row mb-0">
                     <dt class="col-sm-4 text-muted">上次登录</dt>
-                    <dd class="col-sm-8">{{ user_obj.last_login|default:"--" }}</dd>
+                    <dd class="col-sm-8">{{ security_summary.last_login|default:"--" }}</dd>
                     <dt class="col-sm-4 text-muted">注册时间</dt>
                     <dd class="col-sm-8">{{ user_obj.date_joined }}</dd>
                 </dl>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-body">
+                <h2 class="h6 text-muted mb-3">安全提醒</h2>
+                {% if security_alerts %}
+                <ul class="mb-0 small ps-3">
+                    {% for alert in security_alerts %}
+                    <li class="mb-1">{{ alert }}</li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-muted small">当前没有需要处理的安全提醒。</div>
+                {% endif %}
             </div>
         </div>
 

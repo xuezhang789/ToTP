@@ -1,6 +1,12 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
+
+from totp.models import OneTimeLink, TOTPEntry
+from totp.utils import encrypt_str
 
 
 class ProfileViewTests(TestCase):
@@ -78,6 +84,32 @@ class ProfileViewTests(TestCase):
         self.assertTrue(password_form.errors)
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password("StrongPass123!"))
+
+    def test_security_alerts_include_active_link_and_stale_entries(self):
+        self.client.force_login(self.user)
+        secret = encrypt_str("JBSWY3DPEHPK3PXP")
+        old_entry = TOTPEntry.objects.create(
+            user=self.user,
+            name="Old",
+            secret_encrypted=secret,
+        )
+        old_entry.created_at = timezone.now() - timedelta(days=120)
+        old_entry.save(update_fields=["created_at"])
+        active_link = OneTimeLink.objects.create(
+            entry=old_entry,
+            created_by=self.user,
+            token_hash="hash1",
+            expires_at=timezone.now() + timedelta(minutes=10),
+            max_views=3,
+        )
+        response = self.client.get(reverse("accounts:profile"))
+        self.assertEqual(response.status_code, 200)
+        alerts = response.context["security_alerts"]
+        self.assertTrue(any("一次性访问链接" in alert for alert in alerts))
+        self.assertTrue(any("90 天" in alert for alert in alerts))
+        summary = response.context["security_summary"]
+        self.assertEqual(summary["total_entries"], 1)
+        self.assertEqual(summary["active_links"], 1)
 
     def test_change_password_strength_validation(self):
         self.client.force_login(self.user)

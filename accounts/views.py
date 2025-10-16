@@ -1,6 +1,7 @@
 import json
 import re
 import secrets
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib import messages
@@ -14,6 +15,7 @@ from django.contrib.auth import (
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -24,6 +26,7 @@ from google.oauth2 import id_token
 User = get_user_model()
 
 from .forms import PasswordUpdateForm, ProfileForm, password_strength_errors
+from totp.models import OneTimeLink, TOTPEntry
 
 
 def _next_url(request, fallback="/"):
@@ -117,10 +120,39 @@ def profile_view(request):
         form = ProfileForm(instance=user)
         password_form = PasswordUpdateForm(user=user)
 
+    now = timezone.now()
+    security_alerts: list[str] = []
+    entry_qs = TOTPEntry.objects.filter(user=user, is_deleted=False)
+    total_entries = entry_qs.count()
+    personal_entries = entry_qs.filter(team__isnull=True).count()
+    team_entries = total_entries - personal_entries
+    active_links = OneTimeLink.active.filter(created_by=user).count()
+
+    if not user.email:
+        security_alerts.append("尚未设置邮箱，建议补充邮箱以便账号找回和安全通知。")
+    if active_links:
+        security_alerts.append(f"当前有 {active_links} 条一次性访问链接仍然有效，请确认是否需要失效。")
+    stale_cutoff = now - timedelta(days=90)
+    stale_entries = entry_qs.filter(created_at__lt=stale_cutoff).count()
+    if stale_entries:
+        security_alerts.append(f"{stale_entries} 条密钥已超过 90 天未更新，可考虑定期轮换以提升安全性。")
+    if personal_entries == 0 and team_entries == 0:
+        security_alerts.append("还没有保存任何密钥，建议添加后再使用导出功能定期备份。")
+
+    security_summary = {
+        "total_entries": total_entries,
+        "personal_entries": personal_entries,
+        "team_entries": team_entries,
+        "active_links": active_links,
+        "last_login": user.last_login,
+    }
+
     context = {
         "form": form,
         "user_obj": user,
         "password_form": password_form,
+        "security_alerts": security_alerts,
+        "security_summary": security_summary,
     }
     return render(request, "accounts/profile.html", context)
 

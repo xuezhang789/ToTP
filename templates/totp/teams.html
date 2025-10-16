@@ -13,6 +13,29 @@
 </div>
 
 {% if team_blocks %}
+    <div class="card app-panel mb-4">
+        <div class="card-body">
+            <h2 class="h6 text-muted mb-3">团队统计</h2>
+            <div class="row g-3 text-center text-md-start">
+                <div class="col-6 col-md-3">
+                    <div class="fs-4 fw-semibold">{{ team_summary.team_total }}</div>
+                    <div class="text-muted small">团队数量</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="fs-4 fw-semibold">{{ team_summary.member_total }}</div>
+                    <div class="text-muted small">成员总数</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="fs-4 fw-semibold">{{ team_summary.entry_total }}</div>
+                    <div class="text-muted small">团队密钥</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="fs-4 fw-semibold">{{ team_summary.manageable }}</div>
+                    <div class="text-muted small">可管理的团队</div>
+                </div>
+            </div>
+        </div>
+    </div>
     {% for block in team_blocks %}
         {% with team=block.team membership=block.membership member_count=block.member_count entry_count=block.entry_count %}
         <div class="card app-panel team-card mb-4">

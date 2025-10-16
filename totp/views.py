@@ -297,6 +297,16 @@ def teams_overview(request):
         }
         for team in teams
     ]
+    summary = {
+        "team_total": len(team_blocks),
+        "member_total": sum(block["member_count"] or 0 for block in team_blocks),
+        "entry_total": sum(block["entry_count"] or 0 for block in team_blocks),
+        "manageable": sum(
+            1
+            for block in team_blocks
+            if block["membership"] and block["membership"].can_manage_entries
+        ),
+    }
     return render(
         request,
         "totp/teams.html",
@@ -306,6 +316,7 @@ def teams_overview(request):
             "membership_map": membership_map,
             "role_labels": role_labels,
             "available_roles": available_roles,
+            "team_summary": summary,
         },
     )
 
