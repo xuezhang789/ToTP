@@ -132,7 +132,7 @@
 </div>
 
 <div class="card app-table-card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
             <strong class="text-uppercase small text-muted">
                 {% if selected_team %}
@@ -147,7 +147,15 @@
             </span>
             {% endif %}
         </div>
-        <div class="small text-muted">下次刷新倒计时：<span class="fw-semibold text-dark" id="countdown">--</span>s</div>
+        <div class="d-flex align-items-center gap-2 text-muted small">
+            <span>
+                下次刷新倒计时：<span class="fw-semibold text-dark" id="countdown">--</span>s
+            </span>
+            <span class="badge rounded-pill bg-light text-muted" id="refreshStatus">自动刷新中</span>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="manualRefreshBtn">
+                手动刷新
+            </button>
+        </div>
     </div>
     <div class="table-responsive">
         <table class="table table-hover table-striped mb-0 align-middle" id="totpTable">
@@ -343,12 +351,16 @@
   const countdownEl = document.getElementById('countdown');
   const importPreviewUrl = "{% url 'totp:batch_import_preview' %}";
   const importApplyUrl = "{% url 'totp:batch_import_apply' %}";
+  const tokensUrl = "{% url 'totp:api_tokens' %}";
+  const refreshStatusEl = document.getElementById('refreshStatus');
+  const manualRefreshBtn = document.getElementById('manualRefreshBtn');
 
   const state = new Map();
   let cycleRemaining = 30;
   let refreshTimer = null;
   let pendingRequest = null;
-  const tokensUrl = "{% url 'totp:api_tokens' %}";
+  let isPaused = document.hidden;
+  let manualRefreshOriginalLabel = manualRefreshBtn ? manualRefreshBtn.innerHTML : '';
 
   const form = document.getElementById('searchForm');
   const qInput = document.getElementById('q');
@@ -391,6 +403,77 @@
     cycleRemaining = Math.max(0, value);
     if (countdownEl) {
       countdownEl.textContent = cycleRemaining;
+    }
+  }
+
+  function updateRefreshStatus(text) {
+    if (refreshStatusEl) {
+      refreshStatusEl.textContent = text;
+    }
+  }
+
+  function stopTicker() {
+    if (refreshTimer) {
+      clearInterval(refreshTimer);
+      refreshTimer = null;
+    }
+  }
+
+  function startTicker() {
+    if (refreshTimer || isPaused) {
+      return;
+    }
+    refreshTimer = setInterval(() => {
+      if (cycleRemaining <= 1) {
+        refreshTokens();
+        return;
+      }
+      setCountdown(Math.max(0, cycleRemaining - 1));
+      state.forEach((row) => {
+        const currentRemain = Number.isFinite(row.lastRemain) ? row.lastRemain : cycleRemaining;
+        const nextRemain = currentRemain > 0 ? currentRemain - 1 : 0;
+        renderRow(row, row.lastCode, nextRemain, row.period);
+      });
+    }, 1000);
+  }
+
+  function pauseAutoRefresh() {
+    if (isPaused) {
+      return;
+    }
+    isPaused = true;
+    stopTicker();
+    updateRefreshStatus('自动刷新已暂停（切回页面继续）');
+  }
+
+  function resumeAutoRefresh({ refresh = true } = {}) {
+    if (!isPaused) {
+      if (!refreshTimer) {
+        startTicker();
+      }
+      return;
+    }
+    isPaused = false;
+    updateRefreshStatus('自动刷新中');
+    if (refresh) {
+      refreshTokens().finally(() => startTicker());
+    } else {
+      startTicker();
+    }
+  }
+
+  function setManualLoading(flag) {
+    if (!manualRefreshBtn) {
+      return;
+    }
+    if (!manualRefreshOriginalLabel) {
+      manualRefreshOriginalLabel = manualRefreshBtn.innerHTML;
+    }
+    manualRefreshBtn.disabled = flag;
+    if (flag) {
+      manualRefreshBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>刷新中';
+    } else {
+      manualRefreshBtn.innerHTML = manualRefreshOriginalLabel;
     }
   }
 
@@ -497,26 +580,13 @@
     return pendingRequest;
   }
 
-  function scheduleTicker() {
-    clearInterval(refreshTimer);
-    refreshTimer = setInterval(() => {
-      if (cycleRemaining <= 1) {
-        refreshTokens();
-        return;
-      }
-      setCountdown(Math.max(0, cycleRemaining - 1));
-      state.forEach((row) => {
-        const currentRemain = Number.isFinite(row.lastRemain) ? row.lastRemain : cycleRemaining;
-        const nextRemain = currentRemain > 0 ? currentRemain - 1 : 0;
-        renderRow(row, row.lastCode, nextRemain, row.period);
-      });
-    }, 1000);
-  }
-
   async function bootstrapTicker() {
     initRows();
+    updateRefreshStatus(isPaused ? '自动刷新已暂停（切回页面继续）' : '自动刷新中');
     await refreshTokens();
-    scheduleTicker();
+    if (!isPaused) {
+      startTicker();
+    }
   }
 
   function copyToClipboard(text) {
@@ -596,6 +666,31 @@
         : null;
     if (renameModalInstance) {
       renameModalInstance.show();
+    }
+  });
+
+  manualRefreshBtn?.addEventListener('click', () => {
+    if (pendingRequest) {
+      return;
+    }
+    setManualLoading(true);
+    refreshTokens()
+      .catch((err) => {
+        console.error('Manual refresh failed:', err);
+      })
+      .finally(() => {
+        setManualLoading(false);
+        if (!isPaused) {
+          startTicker();
+        }
+      });
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      pauseAutoRefresh();
+    } else {
+      resumeAutoRefresh();
     }
   });
 
