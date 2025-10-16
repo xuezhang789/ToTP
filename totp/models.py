@@ -299,6 +299,61 @@ class TOTPEntry(models.Model):
         return (remaining_seconds + 24 * 60 * 60 - 1) // (24 * 60 * 60)
 
 
+class TOTPEntryAudit(models.Model):
+    """记录密钥的关键操作，便于安全审计。"""
+
+    class Action(models.TextChoices):
+        CREATED = "created", "创建"
+        RENAMED = "renamed", "重命名"
+        GROUP_CHANGED = "group_changed", "分组调整"
+        TRASHED = "trashed", "移入回收站"
+        RESTORED = "restored", "恢复"
+        DELETED = "deleted", "永久删除"
+
+    entry = models.ForeignKey(
+        TOTPEntry,
+        on_delete=models.CASCADE,
+        related_name="audits",
+    )
+    actor = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="totp_audits",
+    )
+    action = models.CharField(max_length=32, choices=Action.choices)
+    old_value = models.CharField(max_length=128, blank=True)
+    new_value = models.CharField(max_length=128, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.entry} {self.get_action_display()} by {self.actor or '系统'}"
+
+
+def log_entry_audit(entry: TOTPEntry, actor, action: str, *, old_value="", new_value="", metadata=None):
+    """创建一条审计记录。"""
+
+    from django.contrib.auth import get_user_model  # 避免循环导入
+
+    metadata = metadata or {}
+    actor_obj = None
+    if actor and getattr(actor, "is_authenticated", False):
+        actor_obj = actor
+    TOTPEntryAudit.objects.create(
+        entry=entry,
+        actor=actor_obj,
+        action=action,
+        old_value=old_value or "",
+        new_value=new_value or "",
+        metadata=metadata,
+    )
+
+
 class ActiveOneTimeLinkManager(models.Manager):
     """仅返回仍然有效的一次性访问链接。"""
 

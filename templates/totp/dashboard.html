@@ -137,32 +137,69 @@
         </div>
 
         <div class="col-12 col-lg-5">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h2 class="h6 mb-0">最近活动</h2>
+            <div class="d-flex flex-column gap-3 h-100">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h2 class="h6 mb-0">最近活动</h2>
+                    </div>
+                    <div class="card-body">
+                        {% if recent_entries %}
+                        <ul class="list-group list-group-flush">
+                            {% for item in recent_entries %}
+                            <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                                <div class="me-3">
+                                    <div class="fw-semibold">{{ item.name }}</div>
+                                    <div class="text-muted small">
+                                        {% if item.team_name %}
+                                        团队：{{ item.team_name }}
+                                        {% else %}
+                                        个人空间 · 分组：{{ item.group_name|default:"未分组" }}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <span class="text-muted small">{{ item.created_at|date:"Y-m-d H:i" }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <div class="text-muted small">暂无最近活动记录</div>
+                        {% endif %}
+                    </div>
                 </div>
-                <div class="card-body">
-                    {% if recent_entries %}
-                    <ul class="list-group list-group-flush">
-                        {% for item in recent_entries %}
-                        <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
-                            <div class="me-3">
-                                <div class="fw-semibold">{{ item.name }}</div>
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="h6 mb-0">密钥审计时间线</h2>
+                    </div>
+                    <div class="card-body">
+                        {% if recent_audits %}
+                        <ul class="timeline list-unstyled mb-0">
+                            {% for audit in recent_audits %}
+                            <li class="mb-3">
+                                <div class="fw-semibold">{{ audit.entry.name }}</div>
                                 <div class="text-muted small">
-                                    {% if item.team_name %}
-                                    团队：{{ item.team_name }}
+                                    {% if audit.action == 'created' %}创建{% elif audit.action == 'renamed' %}重命名{% elif audit.action == 'group_changed' %}分组调整{% elif audit.action == 'trashed' %}移入回收站{% elif audit.action == 'restored' %}恢复{% elif audit.action == 'deleted' %}永久删除{% else %}操作{% endif %}
+                                    {% if audit.old_value or audit.new_value %}
+                                    · {{ audit.old_value|default:'—' }} → {{ audit.new_value|default:'—' }}
+                                    {% endif %}
+                                    {% if audit.entry.team %}
+                                    · 团队：{{ audit.entry.team.name }}
                                     {% else %}
-                                    个人空间 · 分组：{{ item.group_name|default:"未分组" }}
+                                    · 个人空间
                                     {% endif %}
                                 </div>
-                            </div>
-                            <span class="text-muted small">{{ item.created_at|date:"Y-m-d H:i" }}</span>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% else %}
-                    <div class="text-muted small">暂无最近活动记录</div>
-                    {% endif %}
+                                <div class="text-muted small">
+                                    {{ audit.created_at|date:"Y-m-d H:i" }}
+                                    {% if audit.actor %}
+                                    · 由 {{ audit.actor.username }}
+                                    {% endif %}
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <div class="text-muted small">暂无新的审计记录。</div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>

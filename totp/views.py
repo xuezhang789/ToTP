@@ -19,7 +19,16 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from . import importers
-from .models import Group, OneTimeLink, Team, TeamInvitation, TeamMembership, TOTPEntry
+from .models import (
+    Group,
+    OneTimeLink,
+    Team,
+    TeamInvitation,
+    TeamMembership,
+    TOTPEntry,
+    TOTPEntryAudit,
+    log_entry_audit,
+)
 
 UserModel = get_user_model()
 from .utils import (
@@ -107,6 +116,7 @@ def dashboard(request):
 
     stats = {}
     recent_entries = []
+    recent_audits = []
     memberships = []
     if request.user.is_authenticated:
         memberships = _team_memberships_for_user(request.user)
@@ -161,6 +171,13 @@ def dashboard(request):
             )[:5]
         )
 
+        audit_qs = (
+            TOTPEntryAudit.objects.filter(entry__in=accessible_entries.values("pk"))
+            .select_related("entry", "entry__team", "actor")
+            .order_by("-created_at")[:10]
+        )
+        recent_audits = list(audit_qs)
+
     return render(
         request,
         "totp/dashboard.html",
@@ -168,6 +185,7 @@ def dashboard(request):
             "stats": stats,
             "recent_entries": recent_entries,
             "team_memberships": memberships,
+            "recent_audits": recent_audits,
         },
     )
 
@@ -613,6 +631,16 @@ def add_entry(request):
             group=group,
             secret_encrypted=enc,
         )
+        log_entry_audit(
+            entry,
+            request.user,
+            TOTPEntryAudit.Action.CREATED,
+            new_value=name,
+            metadata={
+                "space": "team" if entry.team_id else "personal",
+                "group": group.name if group else "",
+            },
+        )
         messages.success(request, "已添加")
         if entry.team_id:
             return redirect(f"{reverse('totp:list')}?space=team:{entry.team_id}")
@@ -701,6 +729,15 @@ def delete_entry(request, pk: int):
     e.is_deleted = True
     e.deleted_at = timezone.now()
     e.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+    log_entry_audit(
+        e,
+        request.user,
+        TOTPEntryAudit.Action.TRASHED,
+        old_value=e.name,
+        metadata={
+            "space": "team" if e.team_id else "personal",
+        },
+    )
     messages.success(request, "已移入回收站，可在 30 天内恢复")
     if e.team_id:
         return redirect(f"{reverse('totp:list')}?space=team:{e.team_id}")
@@ -803,6 +840,16 @@ def trash_bulk_action(request):
             entry.is_deleted = False
             entry.deleted_at = None
             entry.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+            log_entry_audit(
+                entry,
+                request.user,
+                TOTPEntryAudit.Action.RESTORED,
+                new_value=entry.name,
+                metadata={
+                    "space": "team" if entry.team_id else "personal",
+                    "bulk": True,
+                },
+            )
             restored += 1
 
         if restored:
@@ -818,6 +865,17 @@ def trash_bulk_action(request):
 
     if action == "delete":
         count = len(entries)
+        for entry in entries:
+            log_entry_audit(
+                entry,
+                request.user,
+                TOTPEntryAudit.Action.DELETED,
+                old_value=entry.name,
+                metadata={
+                    "space": "team" if entry.team_id else "personal",
+                    "bulk": True,
+                },
+            )
         TOTPEntry.all_objects.filter(pk__in=[entry.pk for entry in entries]).delete()
         messages.success(request, f"已永久删除 {count} 条密钥")
         return redirect("totp:trash")
@@ -862,6 +920,15 @@ def restore_entry(request, pk: int):
     entry.is_deleted = False
     entry.deleted_at = None
     entry.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+    log_entry_audit(
+        entry,
+        request.user,
+        TOTPEntryAudit.Action.RESTORED,
+        new_value=entry.name,
+        metadata={
+            "space": "team" if entry.team_id else "personal",
+        },
+    )
     messages.success(request, "密钥已成功恢复")
     if entry.team_id:
         return redirect(f"{reverse('totp:list')}?space=team:{entry.team_id}")
@@ -1077,8 +1144,16 @@ def _apply_import_entries(user, entries, *, team=None):
             existing_names.add(entry.name)
 
         if to_create:
-            TOTPEntry.objects.bulk_create(to_create)
-            created = len(to_create)
+            created_entries = TOTPEntry.objects.bulk_create(to_create)
+            created = len(created_entries)
+            for created_entry in created_entries:
+                log_entry_audit(
+                    created_entry,
+                    user,
+                    TOTPEntryAudit.Action.CREATED,
+                    new_value=created_entry.name,
+                    metadata={"space": "team", "import": True},
+                )
 
         return created, skipped
 
@@ -1129,8 +1204,16 @@ def _apply_import_entries(user, entries, *, team=None):
         existing_names.add(entry.name)  # 防止本次导入中出现重复名称
 
     if to_create:
-        TOTPEntry.objects.bulk_create(to_create)
-        created = len(to_create)
+        created_entries = TOTPEntry.objects.bulk_create(to_create)
+        created = len(created_entries)
+        for created_entry in created_entries:
+            log_entry_audit(
+                created_entry,
+                user,
+                TOTPEntryAudit.Action.CREATED,
+                new_value=created_entry.name,
+                metadata={"space": "personal", "import": True},
+            )
 
     return created, skipped
 
@@ -1252,8 +1335,17 @@ def update_entry_group(request, pk: int):
         except (Group.DoesNotExist, ValueError, TypeError):
             return JsonResponse({"error": "invalid_group"}, status=400)
 
+    old_group = entry.group.name if entry.group else ""
     entry.group = group
     entry.save(update_fields=["group", "updated_at"])
+    log_entry_audit(
+        entry,
+        request.user,
+        TOTPEntryAudit.Action.GROUP_CHANGED,
+        old_value=old_group,
+        new_value=group.name if group else "",
+        metadata={"space": "personal"},
+    )
 
     return JsonResponse(
         {
@@ -1316,8 +1408,19 @@ def rename_entry(request, pk: int):
             status=400,
         )
 
+    old_name = entry.name
     entry.name = new_name
     entry.save(update_fields=["name", "updated_at"])
+    log_entry_audit(
+        entry,
+        request.user,
+        TOTPEntryAudit.Action.RENAMED,
+        old_value=old_name,
+        new_value=new_name,
+        metadata={
+            "space": "team" if entry.team_id else "personal",
+        },
+    )
 
     return JsonResponse({"ok": True, "name": entry.name})
 

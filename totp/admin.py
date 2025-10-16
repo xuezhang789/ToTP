@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import Group, Team, TeamInvitation, TeamMembership, TOTPEntry
+from .models import (
+    Group,
+    Team,
+    TeamInvitation,
+    TeamMembership,
+    TOTPEntry,
+    TOTPEntryAudit,
+)
 
 
 @admin.register(Group)
@@ -45,3 +52,12 @@ class TeamInvitationAdmin(admin.ModelAdmin):
     list_display = ("id", "team", "invitee", "inviter", "role", "status", "created_at")
     list_filter = ("status", "role")
     search_fields = ("team__name", "invitee__username", "inviter__username")
+
+
+@admin.register(TOTPEntryAudit)
+class TOTPEntryAuditAdmin(admin.ModelAdmin):
+    """密钥审计记录后台配置。"""
+
+    list_display = ("id", "entry", "action", "actor", "created_at")
+    list_filter = ("action",)
+    search_fields = ("entry__name", "actor__username")
