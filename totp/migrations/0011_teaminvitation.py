@@ -29,6 +29,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name="teaminvitation",
-            constraint=models.UniqueConstraint(condition=models.Q(("status", "pending")), fields=("team", "invitee"), name="uniq_pending_team_invitation"),
+            constraint=models.UniqueConstraint(condition=models.Q(status="pending"), fields=("team", "invitee"), name="uniq_pending_team_invitation"),
         ),
     ]
