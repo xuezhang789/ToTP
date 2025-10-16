@@ -3,6 +3,30 @@
 from django.db import migrations
 
 
+def rename_index_if_exists(schema_editor, model, old_name, new_name):
+    table = model._meta.db_table
+    connection = schema_editor.connection
+    with connection.cursor() as cursor:
+        constraints = connection.introspection.get_constraints(cursor, table)
+    if old_name not in constraints:
+        return
+    if not getattr(connection.features, "can_rename_index", False):
+        return
+    schema_editor.execute(schema_editor._rename_index_sql(model, old_name, new_name))
+
+
+def forwards(apps, schema_editor):
+    model = apps.get_model('totp', 'TOTPEntry')
+    rename_index_if_exists(schema_editor, model, 'totpentry_team_name_idx', 'totp_totpen_team_id_a89936_idx')
+    rename_index_if_exists(schema_editor, model, 'totpentry_team_created_idx', 'totp_totpen_team_id_e45175_idx')
+
+
+def backwards(apps, schema_editor):
+    model = apps.get_model('totp', 'TOTPEntry')
+    rename_index_if_exists(schema_editor, model, 'totp_totpen_team_id_a89936_idx', 'totpentry_team_name_idx')
+    rename_index_if_exists(schema_editor, model, 'totp_totpen_team_id_e45175_idx', 'totpentry_team_created_idx')
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -10,14 +34,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RenameIndex(
-            model_name='totpentry',
-            new_name='totp_totpen_team_id_a89936_idx',
-            old_name='totpentry_team_name_idx',
-        ),
-        migrations.RenameIndex(
-            model_name='totpentry',
-            new_name='totp_totpen_team_id_e45175_idx',
-            old_name='totpentry_team_created_idx',
-        ),
+        migrations.RunPython(forwards, backwards),
     ]
