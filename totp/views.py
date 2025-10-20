@@ -118,6 +118,7 @@ def dashboard(request):
     recent_entries = []
     recent_audits = []
     memberships = []
+    groups = []
     if request.user.is_authenticated:
         memberships = _team_memberships_for_user(request.user)
         team_ids = {m.team_id for m in memberships}
@@ -129,6 +130,7 @@ def dashboard(request):
             .distinct()
         )
         today = timezone.localdate()
+        group_list = list(Group.objects.filter(user=request.user).order_by("name"))
         agg = accessible_entries.aggregate(
             total_entries=Count("id", distinct=True),
             personal_entries=Count(
@@ -151,7 +153,7 @@ def dashboard(request):
             "total_entries": agg["total_entries"] or 0,
             "personal_entries": agg["personal_entries"] or 0,
             "shared_entries": agg["shared_entries"] or 0,
-            "group_count": Group.objects.filter(user=request.user).count(),
+            "group_count": len(group_list),
             "team_count": len(team_ids),
             "today_added": agg["today_added_total"] or 0,
         }
@@ -160,6 +162,7 @@ def dashboard(request):
         now = timezone.now()
         stats["current_cycle_total"] = cycle_total
         stats["current_cycle_remaining"] = cycle_total - (int(now.timestamp()) % cycle_total)
+        groups = group_list
 
         recent_entries = list(
             accessible_entries.order_by("-created_at")
@@ -186,6 +189,7 @@ def dashboard(request):
             "recent_entries": recent_entries,
             "team_memberships": memberships,
             "recent_audits": recent_audits,
+            "groups": groups,
         },
     )
 

@@ -29,7 +29,7 @@
                         <label class="form-label">分组（可选）</label>
                         <select name="group_id" class="form-select">
                             <option value="">未分组</option>
-                            {% for g in request.user.totp_groups.all %}
+                            {% for g in groups %}
                             <option value="{{ g.id }}">{{ g.name }}</option>
                             {% endfor %}
                         </select>
@@ -42,7 +42,10 @@
                     </div>
                     <div class="mb-2">
                         <label class="form-label">二维码图片（可选）</label>
-                        <input type="file" id="qrFile" accept="image/*" class="form-control"/>
+                        <div class="d-flex gap-2">
+                            <input type="file" id="qrFile" accept="image/*" class="form-control"/>
+                            <button type="button" id="pickFromGallery" class="btn btn-outline-primary">从相册导入</button>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -55,101 +58,156 @@
 </div>
 <script>
     (function () {
-     function parseOtpAuth(text) {
-       if (!text || typeof text !== 'string' || !text.startsWith('otpauth://')) {
-         return null;
-       }
-       try {
-         const url = new URL(text);
-         if (url.protocol !== 'otpauth:') return null;
-         const rawLabel = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
-         const labelParts = rawLabel.split(':');
-         const label = (labelParts.length > 1 ? labelParts.slice(1).join(':') : rawLabel).trim();
-         const secret = (url.searchParams.get('secret') || '').trim();
-         return {label, secret};
-       } catch (err) {
-         console.error('无法解析 otpauth URI', err);
-         return null;
-       }
-     }
+      const ZXING_SRC = 'https://cdn.bootcdn.net/ajax/libs/zxing/0.20.0/zxing.min.js';
+      let readerPromise = null;
 
-     function attachListener() {
-       if (!window.ZXing?.BrowserQRCodeReader) {
-         console.error('二维码识别库未加载');
-         return;
-       }
-       const qrInput = document.getElementById('qrFile');
-       if (!qrInput) {
-         return;
-       }
-       const codeReader = new ZXing.BrowserQRCodeReader();
-       qrInput.addEventListener('change', async (e) => {
-         const file = e.target.files?.[0];
-         if (!file) return;
-
-         const reader = new FileReader();
-         reader.onload = async () => {
-           const dataUrl = typeof reader.result === 'string' ? reader.result : '';
-           if (!dataUrl) return;
-           try {
-             const res = await codeReader.decodeFromImageUrl(dataUrl);
-             const text = typeof res?.getText === 'function' ? res.getText() : (res?.text || '');
-             if (!text) {
-               alert('未识别到二维码内容');
-               return;
-             }
-
-             const secretInput = document.getElementById('secretInput');
-             const nameInput = document.querySelector('input[name="name"]');
-             const parsed = parseOtpAuth(text);
-
-             if (parsed?.secret) {
-               secretInput.value = parsed.secret;
-             } else {
-               secretInput.value = text;
-             }
-
-             if (parsed?.label && nameInput) {
-               nameInput.value = parsed.label;
-             }
-           } catch (err) {
-             alert('解析二维码失败');
-             console.error(err);
-           } finally {
-             qrInput.value = '';
-           }
-         };
-         reader.readAsDataURL(file);
-       });
-     }
-
-     if (document.readyState === 'complete') {
-       attachListener();
-     } else {
-     window.addEventListener('load', attachListener, {once: true});
-    }
-
-    const addModalEl = document.getElementById('addModal');
-    function syncSpaceControls() {
-      if (!addModalEl) return;
-      const teamSelect = addModalEl.querySelector('#entryTeamSelect');
-      const groupField = addModalEl.querySelector('[data-group-field]');
-      if (!teamSelect || !groupField) return;
-      const groupSelect = groupField.querySelector('select');
-      const isTeam = teamSelect.value !== '';
-      if (groupSelect) {
-        groupSelect.disabled = isTeam;
+      function loadScriptOnce(src) {
+        return new Promise((resolve, reject) => {
+          if (window.ZXing?.BrowserQRCodeReader) {
+            resolve(window.ZXing);
+            return;
+          }
+          const existing = document.getElementById('zxing-script');
+          if (existing) {
+            existing.addEventListener('load', () => resolve(window.ZXing), { once: true });
+            existing.addEventListener('error', () => reject(new Error('ZXing 加载失败')), { once: true });
+            return;
+          }
+          const script = document.createElement('script');
+          script.id = 'zxing-script';
+          script.src = src;
+          script.async = true;
+          script.onload = () => resolve(window.ZXing);
+          script.onerror = () => reject(new Error('ZXing 加载失败'));
+          document.head.appendChild(script);
+        });
       }
-      groupField.classList.toggle('d-none', isTeam);
-    }
 
-    if (addModalEl) {
-      addModalEl.addEventListener('shown.bs.modal', syncSpaceControls);
-      const teamSelect = addModalEl.querySelector('#entryTeamSelect');
-      if (teamSelect) {
-        teamSelect.addEventListener('change', syncSpaceControls);
+      function ensureCodeReader() {
+        if (readerPromise) {
+          return readerPromise;
+        }
+        readerPromise = loadScriptOnce(ZXING_SRC).then((ZXing) => {
+          if (!ZXing?.BrowserQRCodeReader) {
+            throw new Error('未找到二维码识别器');
+          }
+          return new ZXing.BrowserQRCodeReader();
+        });
+        return readerPromise;
       }
-      syncSpaceControls();
-    }
-   })();
+
+      function parseOtpAuth(text) {
+        if (!text || typeof text !== 'string' || !text.startsWith('otpauth://')) {
+          return null;
+        }
+        try {
+          const url = new URL(text);
+          if (url.protocol !== 'otpauth:') return null;
+          const rawLabel = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+          const labelParts = rawLabel.split(':');
+          const label = (labelParts.length > 1 ? labelParts.slice(1).join(':') : rawLabel).trim();
+          const secret = (url.searchParams.get('secret') || '').trim();
+          return { label, secret };
+        } catch (err) {
+          console.error('无法解析 otpauth URI', err);
+          return null;
+        }
+      }
+
+      function readFileAsDataURL(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+            resolve(dataUrl);
+          };
+          reader.onerror = () => reject(reader.error || new Error('读取文件失败'));
+          reader.readAsDataURL(file);
+        });
+      }
+
+      async function decodeQrFile(file, qrInput) {
+        try {
+          const codeReader = await ensureCodeReader();
+          const dataUrl = await readFileAsDataURL(file);
+          if (!dataUrl) {
+            alert('未识别到二维码内容');
+            return;
+          }
+          const result = await codeReader.decodeFromImageUrl(dataUrl);
+          const text =
+            typeof result?.getText === 'function' ? result.getText() : result?.text || '';
+          if (!text) {
+            alert('未识别到二维码内容');
+            return;
+          }
+          const secretInput = document.getElementById('secretInput');
+          const nameInput = document.querySelector('input[name="name"]');
+          const parsed = parseOtpAuth(text);
+          if (secretInput) {
+            secretInput.value = parsed?.secret || text;
+          }
+          if (parsed?.label && nameInput) {
+            nameInput.value = parsed.label;
+          }
+        } catch (err) {
+          alert('解析二维码失败');
+          console.error(err);
+        } finally {
+          if (qrInput) {
+            qrInput.value = '';
+          }
+        }
+      }
+
+      function attachListener() {
+        const qrInput = document.getElementById('qrFile');
+        const pickFromGallery = document.getElementById('pickFromGallery');
+        if (!qrInput || !pickFromGallery) {
+          return;
+        }
+
+        qrInput.addEventListener('change', async (event) => {
+          const file = event.target.files?.[0];
+          if (!file) {
+            return;
+          }
+          await decodeQrFile(file, qrInput);
+        });
+
+        pickFromGallery.addEventListener('click', () => {
+          ensureCodeReader().catch((err) => console.error(err));
+          qrInput.click();
+        });
+      }
+
+      if (document.readyState === 'complete') {
+        attachListener();
+      } else {
+        window.addEventListener('load', attachListener, { once: true });
+      }
+
+      const addModalEl = document.getElementById('addModal');
+      function syncSpaceControls() {
+        if (!addModalEl) return;
+        const teamSelect = addModalEl.querySelector('#entryTeamSelect');
+        const groupField = addModalEl.querySelector('[data-group-field]');
+        if (!teamSelect || !groupField) return;
+        const groupSelect = groupField.querySelector('select');
+        const isTeam = teamSelect.value !== '';
+        if (groupSelect) {
+          groupSelect.disabled = isTeam;
+        }
+        groupField.classList.toggle('d-none', isTeam);
+      }
+
+      if (addModalEl) {
+        addModalEl.addEventListener('shown.bs.modal', syncSpaceControls);
+        const teamSelect = addModalEl.querySelector('#entryTeamSelect');
+        if (teamSelect) {
+          teamSelect.addEventListener('change', syncSpaceControls);
+        }
+        syncSpaceControls();
+      }
+    })();
 </script>

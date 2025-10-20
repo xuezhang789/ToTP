@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}2FA在线工具,TOTP管理平台,动态验证码助手{% endblock %}
 {% block head %}
 {{ block.super }}
@@ -252,302 +253,89 @@
 
 {% block scripts %}
 {% if request.user.is_authenticated %}
+<script src="{% static 'js/import_modal.js' %}"></script>
 <script>
-    (function(){
-      const total = {{ stats.current_cycle_total|default:30 }};
-      let remain = {{ stats.current_cycle_remaining|default:0 }};
+    (function () {
+      const total = Number('{{ stats.current_cycle_total|default:30 }}');
+      const initialRemain = Number('{{ stats.current_cycle_remaining|default:0 }}');
       const progress = document.getElementById('cycle-progress');
       const remainEl = document.getElementById('cycle-remaining');
-      if (progress && remainEl && total > 0) {
-        function update(){
-          const percent = Math.round(((total - remain) / total) * 100);
-          progress.style.width = percent + '%';
-          progress.setAttribute('aria-valuenow', percent);
-          remainEl.textContent = remain;
-          remain = remain <= 1 ? total : remain - 1;
-        }
-        update();
-        setInterval(update, 1000);
-      }
-    })();
 
-    (function(){
-      const importPreviewUrl = "{% url 'totp:batch_import_preview' %}";
-      const importApplyUrl = "{% url 'totp:batch_import_apply' %}";
-      const importModalEl = document.getElementById('importModal');
-      if (!importModalEl) {
+      const safeTotal = Number.isFinite(total) ? Math.max(0, total) : 0;
+      if (!progress || !remainEl || safeTotal <= 0) {
         return;
       }
 
-      const importModeRadios = importModalEl.querySelectorAll('input[name="importMode"]');
-      const importManualPanel = document.getElementById('importManualPanel');
-      const importManualText = document.getElementById('importManualText');
-      const importFilePanel = document.getElementById('importFilePanel');
-      const importFileInput = document.getElementById('importFileInput');
-      const importPreviewBtn = document.getElementById('importPreviewBtn');
-      const importApplyBtn = document.getElementById('importApplyBtn');
-      const importErrorAlert = document.getElementById('importErrorAlert');
-      const importWarningAlert = document.getElementById('importWarningAlert');
-      const importWarningList = document.getElementById('importWarningList');
-      const importPreviewWrapper = document.getElementById('importPreviewWrapper');
-      const importPreviewBody = document.getElementById('importPreviewBody');
-      const importPreviewSummary = document.getElementById('importPreviewSummary');
-      let importPreviewPayload = null;
+      const safeRemain = Number.isFinite(initialRemain)
+        ? Math.min(safeTotal, Math.max(0, initialRemain))
+        : 0;
+      const cycleMs = safeTotal * 1000;
+      const elapsedMs = Math.min(cycleMs, Math.max(0, (safeTotal - safeRemain) * 1000));
+      let cycleStart = Date.now() - elapsedMs;
+      let timerId = null;
 
-      function getCsrfToken() {
-        const match = document.cookie.match(/csrftoken=([^;]+)/);
-        return match ? decodeURIComponent(match[1]) : '';
+      function render() {
+        const now = Date.now();
+        if (now < cycleStart) {
+          cycleStart = now;
+        }
+
+        const elapsedSinceStart = now - cycleStart;
+        if (elapsedSinceStart >= cycleMs) {
+          const cyclesPassed = Math.floor(elapsedSinceStart / cycleMs) || 1;
+          cycleStart += cyclesPassed * cycleMs;
+        }
+
+        const remainingMs = Math.max(0, cycleStart + cycleMs - now);
+        const secondsLeft = Math.max(0, Math.ceil(remainingMs / 1000));
+        if (remainEl.textContent !== String(secondsLeft)) {
+          remainEl.textContent = secondsLeft;
+        }
+
+        const percent = cycleMs
+          ? Math.min(100, Math.max(0, Math.round(((cycleMs - remainingMs) / cycleMs) * 100)))
+          : 0;
+        if (progress.style.width !== `${percent}%`) {
+          progress.style.width = `${percent}%`;
+          progress.setAttribute('aria-valuenow', String(percent));
+        }
       }
 
-      function setButtonLoading(button, loading, label) {
-        if (!button) {
-          return;
+      function start() {
+        if (!timerId) {
+          render();
+          timerId = setInterval(render, 1000);
         }
-        if (loading) {
-          button.disabled = true;
-          if (!button.dataset.originalLabel) {
-            button.dataset.originalLabel = button.innerHTML;
-          }
-          const text = label || button.dataset.originalLabel || '';
-          button.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>${text}`;
+      }
+
+      function stop() {
+        if (timerId) {
+          clearInterval(timerId);
+          timerId = null;
+        }
+      }
+
+      function handleVisibilityChange() {
+        if (document.hidden) {
+          stop();
         } else {
-          button.disabled = false;
-          if (button.dataset.originalLabel) {
-            button.innerHTML = button.dataset.originalLabel;
-            delete button.dataset.originalLabel;
-          }
+          render();
+          start();
         }
       }
 
-      function currentImportMode() {
-        const active = Array.from(importModeRadios).find((radio) => radio.checked);
-        return active ? active.value : 'manual';
-      }
+      start();
 
-      function hideImportFeedback() {
-        importErrorAlert?.classList.add('d-none');
-        if (importWarningAlert && importWarningList) {
-          importWarningAlert.classList.add('d-none');
-          importWarningList.replaceChildren();
-        }
-      }
-
-      function showImportError(message) {
-        if (!importErrorAlert) {
-          return;
-        }
-        importErrorAlert.textContent = message;
-        importErrorAlert.classList.toggle('d-none', !message);
-      }
-
-      function showImportWarnings(warnings) {
-        if (!importWarningAlert || !importWarningList) {
-          return;
-        }
-        importWarningList.replaceChildren();
-        if (warnings && warnings.length) {
-          warnings.forEach((text) => {
-            const li = document.createElement('li');
-            li.textContent = text;
-            importWarningList.appendChild(li);
-          });
-          importWarningAlert.classList.remove('d-none');
-        } else {
-          importWarningAlert.classList.add('d-none');
-        }
-      }
-
-      function setImportMode(mode) {
-        if (mode === 'file') {
-          importManualPanel?.classList.add('d-none');
-          importFilePanel?.classList.remove('d-none');
-        } else {
-          importManualPanel?.classList.remove('d-none');
-          importFilePanel?.classList.add('d-none');
-        }
-        hideImportFeedback();
-        importPreviewPayload = null;
-        importPreviewWrapper?.classList.add('d-none');
-        if (importApplyBtn) {
-          importApplyBtn.classList.add('d-none');
-          importApplyBtn.disabled = true;
-          delete importApplyBtn.dataset.originalLabel;
-          importApplyBtn.innerHTML = '确认导入';
-        }
-        setButtonLoading(importPreviewBtn, false);
-      }
-
-      function resetImportModal() {
-        importPreviewPayload = null;
-        if (importManualText) {
-          importManualText.value = '';
-        }
-        if (importFileInput) {
-          importFileInput.value = '';
-        }
-        hideImportFeedback();
-        importPreviewWrapper?.classList.add('d-none');
-        importPreviewBody?.replaceChildren();
-        if (importPreviewSummary) {
-          importPreviewSummary.textContent = '预览结果如下，请确认后导入：';
-        }
-        if (importModeRadios.length) {
-          importModeRadios.forEach((radio) => {
-            radio.checked = radio.value === 'manual';
-          });
-        }
-        setImportMode('manual');
-      }
-
-      function renderImportPreview(entries, summary) {
-        if (!importPreviewWrapper || !importPreviewBody) {
-          return;
-        }
-        importPreviewBody.replaceChildren();
-        entries.forEach((entry) => {
-          const tr = document.createElement('tr');
-
-          const nameTd = document.createElement('td');
-          nameTd.textContent = entry.name || '—';
-          tr.appendChild(nameTd);
-
-          const groupTd = document.createElement('td');
-          groupTd.textContent = entry.group || '—';
-          tr.appendChild(groupTd);
-
-          const sourceTd = document.createElement('td');
-          sourceTd.textContent = entry.source || '—';
-          tr.appendChild(sourceTd);
-
-          const statusTd = document.createElement('td');
-          statusTd.classList.add('text-nowrap');
-          const badge = document.createElement('span');
-          badge.className = entry.exists ? 'badge text-bg-secondary' : 'badge text-bg-success';
-          badge.textContent = entry.exists ? '已存在' : '新建';
-          statusTd.appendChild(badge);
-          tr.appendChild(statusTd);
-
-          const secretTd = document.createElement('td');
-          secretTd.classList.add('text-nowrap');
-          const codeEl = document.createElement('code');
-          codeEl.textContent = entry.secret_preview || '';
-          secretTd.appendChild(codeEl);
-          tr.appendChild(secretTd);
-
-          importPreviewBody.appendChild(tr);
-        });
-
-        if (importPreviewSummary && summary) {
-          importPreviewSummary.textContent = `共 ${summary.total} 条，预计新增 ${summary.new} 条，跳过 ${summary.existing} 条重复。`;
-        }
-        importPreviewWrapper.classList.remove('d-none');
-      }
-
-      if (importModeRadios.length) {
-        importModeRadios.forEach((radio) => {
-          radio.addEventListener('change', () => setImportMode(radio.value));
-        });
-        setImportMode(currentImportMode());
-      }
-
-      importPreviewBtn?.addEventListener('click', () => {
-        hideImportFeedback();
-        importPreviewWrapper?.classList.add('d-none');
-        importPreviewPayload = null;
-        const mode = currentImportMode();
-        const formData = new FormData();
-        formData.append('mode', mode);
-
-        if (mode === 'file') {
-          const file = importFileInput?.files?.[0];
-          if (!file) {
-            showImportError('请选择要导入的文件');
-            return;
-          }
-          formData.append('file', file);
-        } else {
-          const value = importManualText?.value.trim() || '';
-          if (!value) {
-            showImportError('请粘贴待导入的内容');
-            return;
-          }
-          formData.append('manual_text', value);
-        }
-
-        setButtonLoading(importPreviewBtn, true, '解析中...');
-
-        fetch(importPreviewUrl, {
-          method: 'POST',
-          headers: {
-            'X-CSRFToken': getCsrfToken(),
-          },
-          body: formData,
-          credentials: 'same-origin',
-        })
-          .then(async (resp) => {
-            const data = await resp.json().catch(() => ({}));
-            if (!resp.ok || !data.ok) {
-              const message = (data.errors && data.errors[0]) || data.error || '解析失败，请检查格式';
-              throw new Error(message);
-            }
-            importPreviewPayload = data.entries.map((entry) => ({
-              name: entry.name,
-              group: entry.group,
-              secret: entry.secret,
-              source: entry.source,
-            }));
-            renderImportPreview(data.entries, data.summary);
-            showImportWarnings(data.warnings || []);
-            if (importApplyBtn) {
-              importApplyBtn.classList.remove('d-none');
-              importApplyBtn.disabled = false;
-            }
-          })
-          .catch((err) => {
-            showImportError(err.message || '解析失败，请稍后再试');
-          })
-          .finally(() => {
-            setButtonLoading(importPreviewBtn, false);
-          });
-      });
-
-      importApplyBtn?.addEventListener('click', () => {
-        if (!importPreviewPayload || !importPreviewPayload.length) {
-          showImportError('请先完成预览');
-          return;
-        }
-        setButtonLoading(importApplyBtn, true, '导入中...');
-        fetch(importApplyUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken(),
-          },
-          body: JSON.stringify({ entries: importPreviewPayload }),
-          credentials: 'same-origin',
-        })
-          .then(async (resp) => {
-            const data = await resp.json().catch(() => ({}));
-            if (!resp.ok || !data.ok) {
-              const message = data.error || '导入失败，请稍后再试';
-              throw new Error(message);
-            }
-            if (data.redirect) {
-              window.location.href = data.redirect;
-            } else {
-              window.location.reload();
-            }
-          })
-          .catch((err) => {
-            showImportError(err.message || '导入失败，请稍后再试');
-            setButtonLoading(importApplyBtn, false);
-          });
-      });
-
-      importModalEl.addEventListener('hidden.bs.modal', () => {
-        resetImportModal();
-      });
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('beforeunload', stop);
     })();
+
+    TotpImportModal?.init({
+      modalId: 'importModal',
+      previewUrl: "{% url 'totp:batch_import_preview' %}",
+      applyUrl: "{% url 'totp:batch_import_apply' %}",
+      defaultSpace: 'personal',
+    });
 </script>
 {% endif %}
 {% endblock %}
