@@ -260,9 +260,10 @@
       const initialRemain = Number('{{ stats.current_cycle_remaining|default:0 }}');
       const progress = document.getElementById('cycle-progress');
       const remainEl = document.getElementById('cycle-remaining');
+      const mainRemainEl = document.getElementById('cycle-remaining-main');
 
       const safeTotal = Number.isFinite(total) ? Math.max(0, total) : 0;
-      if (!progress || !remainEl || safeTotal <= 0) {
+      if (!progress || safeTotal <= 0 || (!remainEl && !mainRemainEl)) {
         return;
       }
 
@@ -288,8 +289,12 @@
 
         const remainingMs = Math.max(0, cycleStart + cycleMs - now);
         const secondsLeft = Math.max(0, Math.ceil(remainingMs / 1000));
-        if (remainEl.textContent !== String(secondsLeft)) {
-          remainEl.textContent = secondsLeft;
+        const secondsText = String(secondsLeft);
+        if (remainEl && remainEl.textContent !== secondsText) {
+          remainEl.textContent = secondsText;
+        }
+        if (mainRemainEl && mainRemainEl.textContent !== secondsText) {
+          mainRemainEl.textContent = secondsText;
         }
 
         const percent = cycleMs
