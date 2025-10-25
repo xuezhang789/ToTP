@@ -20,6 +20,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from django.db.models import Count, Q
 from google.auth.transport import requests as grequests
 from google.oauth2 import id_token
 
@@ -123,17 +124,21 @@ def profile_view(request):
     now = timezone.now()
     security_alerts: list[str] = []
     entry_qs = TOTPEntry.objects.filter(user=user, is_deleted=False)
-    total_entries = entry_qs.count()
-    personal_entries = entry_qs.filter(team__isnull=True).count()
+    stale_cutoff = now - timedelta(days=90)
+    entry_counts = entry_qs.aggregate(
+        total_entries=Count("id"),
+        personal_entries=Count("id", filter=Q(team__isnull=True)),
+        stale_entries=Count("id", filter=Q(created_at__lt=stale_cutoff)),
+    )
+    total_entries = entry_counts.get("total_entries") or 0
+    personal_entries = entry_counts.get("personal_entries") or 0
     team_entries = total_entries - personal_entries
     active_links = OneTimeLink.active.filter(created_by=user).count()
-
     if not user.email:
         security_alerts.append("尚未设置邮箱，建议补充邮箱以便账号找回和安全通知。")
     if active_links:
         security_alerts.append(f"当前有 {active_links} 条一次性访问链接仍然有效，请确认是否需要失效。")
-    stale_cutoff = now - timedelta(days=90)
-    stale_entries = entry_qs.filter(created_at__lt=stale_cutoff).count()
+    stale_entries = entry_counts.get("stale_entries") or 0
     if stale_entries:
         security_alerts.append(f"{stale_entries} 条密钥已超过 90 天未更新，可考虑定期轮换以提升安全性。")
     if personal_entries == 0 and team_entries == 0:

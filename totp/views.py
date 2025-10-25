@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Q, Prefetch
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -47,6 +47,20 @@ TEAM_MANAGER_ROLES = (
     TeamMembership.Role.OWNER,
     TeamMembership.Role.ADMIN,
 )
+
+PURGE_TRASH_THROTTLE_SECONDS = 60 * 60  # 每位用户至多每小时触发一次回收站清理
+
+
+def _purge_trash_throttled(user):
+    """控制调用频率的回收站清理，避免高频页面引发重复删除查询。"""
+
+    if not user or not getattr(user, "is_authenticated", False):
+        return
+    cache_key = f"totp:purge_trash:v1:{user.pk}"
+    if cache.get(cache_key):
+        return
+    TOTPEntry.purge_expired_trash(user=user)
+    cache.set(cache_key, True, PURGE_TRASH_THROTTLE_SECONDS)
 
 
 def _team_memberships_for_user(user):
@@ -123,7 +137,7 @@ def dashboard(request):
         memberships = _team_memberships_for_user(request.user)
         team_ids = {m.team_id for m in memberships}
         # 登录用户访问仪表盘时也清理一次回收站，保证数据实时。
-        TOTPEntry.purge_expired_trash(user=request.user)
+        _purge_trash_throttled(request.user)
         accessible_entries = (
             TOTPEntry.objects.for_user(request.user)
             .select_related("team", "group")
@@ -199,7 +213,7 @@ def dashboard(request):
 def list_view(request):
     """列出用户的所有 TOTP 条目。"""
     # 在展示列表前先顺带清理一下过期的回收站数据，保证统计准确。
-    TOTPEntry.purge_expired_trash(user=request.user)
+    _purge_trash_throttled(request.user)
 
     memberships = _team_memberships_for_user(request.user)
 
@@ -1150,13 +1164,19 @@ def _apply_import_entries(user, entries, *, team=None):
         if to_create:
             created_entries = TOTPEntry.objects.bulk_create(to_create)
             created = len(created_entries)
-            for created_entry in created_entries:
-                log_entry_audit(
-                    created_entry,
-                    user,
-                    TOTPEntryAudit.Action.CREATED,
-                    new_value=created_entry.name,
-                    metadata={"space": "team", "import": True},
+            if created_entries:
+                actor_obj = user if getattr(user, "is_authenticated", False) else None
+                TOTPEntryAudit.objects.bulk_create(
+                    [
+                        TOTPEntryAudit(
+                            entry=created_entry,
+                            actor=actor_obj,
+                            action=TOTPEntryAudit.Action.CREATED,
+                            new_value=created_entry.name,
+                            metadata={"space": "team", "import": True},
+                        )
+                        for created_entry in created_entries
+                    ]
                 )
 
         return created, skipped
@@ -1210,13 +1230,19 @@ def _apply_import_entries(user, entries, *, team=None):
     if to_create:
         created_entries = TOTPEntry.objects.bulk_create(to_create)
         created = len(created_entries)
-        for created_entry in created_entries:
-            log_entry_audit(
-                created_entry,
-                user,
-                TOTPEntryAudit.Action.CREATED,
-                new_value=created_entry.name,
-                metadata={"space": "personal", "import": True},
+        if created_entries:
+            actor_obj = user if getattr(user, "is_authenticated", False) else None
+            TOTPEntryAudit.objects.bulk_create(
+                [
+                    TOTPEntryAudit(
+                        entry=created_entry,
+                        actor=actor_obj,
+                        action=TOTPEntryAudit.Action.CREATED,
+                        new_value=created_entry.name,
+                        metadata={"space": "personal", "import": True},
+                    )
+                    for created_entry in created_entries
+                ]
             )
 
     return created, skipped
@@ -1243,12 +1269,13 @@ def export_entries(request):
         is_deleted=False,
     ).select_related("group").order_by("name")
 
-    if not queryset.exists():
+    entries = list(queryset)
+    if not entries:
         messages.info(request, "当前没有可以导出的密钥")
         return redirect("totp:list")
 
     lines = []
-    for entry in queryset:
+    for entry in entries:
         secret = decrypt_str(entry.secret_encrypted)
         parts = [secret, entry.name]
         if entry.group:
@@ -1280,15 +1307,16 @@ def export_offline_package(request):
         .order_by("name")
     )
 
-    if not queryset.exists():
+    entries = list(queryset)
+    if not entries:
         messages.info(request, "当前没有可用的密钥，无法生成离线包")
         return redirect("totp:list")
 
-    entries = []
-    for entry in queryset:
+    entries_payload = []
+    for entry in entries:
         secret = decrypt_str(entry.secret_encrypted)
         issuer = entry.group.name if entry.group else request.user.username
-        entries.append(
+        entries_payload.append(
             {
                 "name": entry.name,
                 "secret": secret,
@@ -1306,8 +1334,8 @@ def export_offline_package(request):
     context = {
         "generated_at": generated_at,
         "owner": request.user,
-        "entries_json": json.dumps(entries, ensure_ascii=False),
-        "entry_count": len(entries),
+        "entries_json": json.dumps(entries_payload, ensure_ascii=False),
+        "entry_count": len(entries_payload),
     }
 
     response = render(request, "totp/offline_package.html", context)
@@ -1524,27 +1552,27 @@ def create_one_time_link(request, pk: int):
     expires_at = now + timedelta(minutes=duration_minutes)
 
     token = None
-    token_hash = None
+    link = None
     for _ in range(6):
         # 最多重试 6 次生成随机 token，以避免哈希碰撞
         candidate = secrets.token_urlsafe(32)
         candidate_hash = hashlib.sha256(candidate.encode()).hexdigest()
-        if not OneTimeLink.objects.filter(token_hash=candidate_hash).exists():
-            token = candidate
-            token_hash = candidate_hash
-            break
-    if not token:
+        try:
+            link = OneTimeLink.objects.create(
+                entry=entry,
+                created_by=request.user,
+                token_hash=candidate_hash,
+                expires_at=expires_at,
+                max_views=max_views,
+            )
+        except IntegrityError:
+            continue
+        token = candidate
+        break
+    if not token or link is None:
         return JsonResponse(
             {"ok": False, "error": "token_generation_failed"}, status=500
         )
-
-    link = OneTimeLink.objects.create(
-        entry=entry,
-        created_by=request.user,
-        token_hash=token_hash,
-        expires_at=expires_at,
-        max_views=max_views,
-    )
 
     path = reverse("totp:one_time_view", args=[token])
     origin = request.headers.get("Origin")

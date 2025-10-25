@@ -93,7 +93,7 @@
                             {% with remain=stats.current_cycle_remaining|default:0 total=stats.current_cycle_total|default:30 %}
                             {% if total > 0 %}
                             {% widthratio remain total 100 as pct %}
-                            <div class="metric-value">{{ remain|default:0 }}s</div>
+                            <div class="metric-value"><span id="cycle-remaining-main">{{ remain|default:0 }}</span>s</div>
                             {% else %}
                             <div class="metric-value">--</div>
                             {% endif %}
