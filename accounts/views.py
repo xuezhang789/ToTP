@@ -184,10 +184,13 @@ def google_onetap(request):
         sub = idinfo.get("sub") or ""
         if not email or not email_verified:
             return _json({"ok": False, "error": "email_not_verified"}, 400)
-        username = _username_from_email(email)
-        user, created = User.objects.get_or_create(
-            username=username, defaults={"email": email}
-        )
+        user = User.objects.filter(email__iexact=email).first()
+        created = False
+        if not user:
+            username = _username_from_email(email)
+            user, created = User.objects.get_or_create(
+                username=username, defaults={"email": email}
+            )
         # 保持邮箱信息最新
         if not user.email:
             user.email = email
