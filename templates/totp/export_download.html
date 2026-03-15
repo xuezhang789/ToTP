@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="card app-panel border-0 shadow-sm">
+    <div class="card-body">
+        <h1 class="h5 mb-2">{{ title }}</h1>
+        <p class="text-muted small mb-3">已完成二次确认，正在开始下载。下载开始后将自动返回上一页。</p>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-primary" href="{{ download_url }}">重新开始下载</a>
+            <a class="btn btn-outline-secondary" href="{{ return_url }}">返回</a>
+        </div>
+    </div>
+</div>
+
+<iframe src="{{ download_url }}" style="display:none" title="download"></iframe>
+{{ return_url|json_script:"returnUrl" }}
+<script>
+(function () {
+  const value = JSON.parse(document.getElementById('returnUrl')?.textContent || '""');
+  if (value) {
+    window.setTimeout(() => {
+      window.location.replace(value);
+    }, 600);
+  }
+})();
+</script>
+{% endblock %}

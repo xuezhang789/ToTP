@@ -94,10 +94,22 @@
                     <ul class="dropdown-menu dropdown-menu-end shadow">
                         {% if selected_space == 'personal' %}
                         <li>
-                            <a class="dropdown-item" href="{% url 'totp:export' %}" id="exportPlainBtn">导出密钥</a>
+                            <a class="dropdown-item"
+                               href="{% url 'totp:export_download' %}?kind=plain&amp;return={{ request.get_full_path|urlencode }}"
+                               id="exportPlainBtn"
+                               data-confirm="导出文件会包含所有密钥明文，请确认当前环境安全，是否继续？"
+                               data-confirm-title="导出密钥"
+                               data-confirm-ok="继续导出"
+                               data-confirm-variant="warning">导出密钥</a>
                         </li>
                         <li>
-                            <a class="dropdown-item" href="{% url 'totp:export_offline' %}" id="exportOfflineBtn">离线导出</a>
+                            <a class="dropdown-item"
+                               href="{% url 'totp:export_download' %}?kind=offline&amp;return={{ request.get_full_path|urlencode }}"
+                               id="exportOfflineBtn"
+                               data-confirm="导出离线包会在本地保存全部密钥明文，使用完毕后请及时销毁文件。确认生成吗？"
+                               data-confirm-title="离线导出"
+                               data-confirm-ok="确认生成"
+                               data-confirm-variant="warning">离线导出</a>
                         </li>
                         <li>
                             <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportEncryptedModal" type="button">加密导出</button>
@@ -168,7 +180,7 @@
             <span>
                 下次刷新倒计时：<span class="fw-semibold text-dark" id="countdown">--</span>s
             </span>
-            <span class="badge rounded-pill bg-light text-muted" id="refreshStatus">自动刷新中</span>
+            <span class="badge rounded-pill bg-light text-muted" id="refreshStatus" role="button" tabindex="0">自动刷新中</span>
             <button type="button" class="btn btn-outline-secondary btn-sm" id="manualRefreshBtn">
                 手动刷新
             </button>
@@ -203,7 +215,7 @@
                 {% if page_obj.has_previous %}
                 <li class="page-item">
                     <a class="page-link"
-                       href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
+                       href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
                        aria-label="Previous">
                         <span aria-hidden="true">&laquo;</span>
                     </a>
@@ -217,14 +229,14 @@
                 <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
                 {% else %}
                 <li class="page-item"><a class="page-link"
-                                         href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}page={{ num }}">{{ num }}</a></li>
+                                         href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}page={{ num }}">{{ num }}</a></li>
                 {% endif %}
                 {% endfor %}
 
                 {% if page_obj.has_next %}
                 <li class="page-item">
                     <a class="page-link"
-                       href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
+                       href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
                        aria-label="Next">
                         <span aria-hidden="true">&raquo;</span>
                     </a>
@@ -411,6 +423,7 @@
   let refreshTimer = null;
   let pendingRequest = null;
   let isPaused = document.hidden;
+  let isAutoRefreshDisabled = false;
   let manualRefreshOriginalLabel = manualRefreshBtn ? manualRefreshBtn.innerHTML : '';
 
   const form = document.getElementById('searchForm');
@@ -429,6 +442,30 @@
   let renameModalInstance = null;
   let renameTargetRow = null;
   let renameSubmitUrl = '';
+
+  function inlineAlert(alertEl, variant, message) {
+    if (window.appInlineAlert) {
+      window.appInlineAlert(alertEl, variant, message);
+      return;
+    }
+    if (!alertEl) {
+      return;
+    }
+    const text = message == null ? '' : String(message);
+    alertEl.textContent = text;
+    alertEl.classList.toggle('d-none', !text);
+  }
+
+  function notify(alertEl, variant, message) {
+    if (window.appNotify) {
+      window.appNotify({ alertEl, variant, message });
+      return;
+    }
+    inlineAlert(alertEl, variant, message);
+    if ((!alertEl || alertEl.classList.contains('d-none')) && window.appToast) {
+      window.appToast(variant || 'danger', message);
+    }
+  }
 
   function initRows() {
     const currentIds = new Set();
@@ -479,6 +516,23 @@
     }
   }
 
+  function setRefreshStatusState(state) {
+    if (!refreshStatusEl) {
+      return;
+    }
+    refreshStatusEl.dataset.state = state;
+    refreshStatusEl.classList.remove('bg-light', 'text-muted', 'bg-danger', 'text-white', 'bg-success');
+    if (state === 'error') {
+      refreshStatusEl.classList.add('bg-danger', 'text-white');
+      refreshStatusEl.setAttribute('aria-label', '刷新失败，点击重试');
+      refreshStatusEl.setAttribute('title', '刷新失败，点击重试');
+      return;
+    }
+    refreshStatusEl.classList.add('bg-light', 'text-muted');
+    refreshStatusEl.removeAttribute('title');
+    refreshStatusEl.setAttribute('aria-label', '自动刷新状态');
+  }
+
   function stopTicker() {
     if (refreshTimer) {
       clearInterval(refreshTimer);
@@ -487,7 +541,7 @@
   }
 
   function startTicker() {
-    if (refreshTimer || isPaused) {
+    if (refreshTimer || isPaused || isAutoRefreshDisabled) {
       return;
     }
     refreshTimer = setInterval(() => {
@@ -521,7 +575,10 @@
       return;
     }
     isPaused = false;
-    updateRefreshStatus('自动刷新中');
+    if (!isAutoRefreshDisabled) {
+      setRefreshStatusState('ok');
+      updateRefreshStatus('自动刷新中');
+    }
     if (refresh) {
       refreshTokens().finally(() => startTicker());
     } else {
@@ -581,19 +638,12 @@
     if (renameForm) {
       renameForm.reset();
     }
-    if (renameAlert) {
-      renameAlert.classList.add('d-none');
-      renameAlert.textContent = '';
-    }
+    inlineAlert(renameAlert, 'danger', '');
     setRenameLoading(false);
   }
 
   function showRenameError(message) {
-    if (!renameAlert) {
-      return;
-    }
-    renameAlert.textContent = message;
-    renameAlert.classList.remove('d-none');
+    notify(renameAlert, 'danger', message || '保存失败，请稍后再试');
   }
 
   async function refreshTokens() {
@@ -622,6 +672,9 @@
         return resp.json();
       })
       .then((data) => {
+        isAutoRefreshDisabled = false;
+        setRefreshStatusState('ok');
+        updateRefreshStatus(isPaused ? '自动刷新已暂停（切回页面继续）' : '自动刷新中');
         const serverRemaining = Number.isFinite(Number(data.remaining))
           ? Number(data.remaining)
           : 30;
@@ -641,6 +694,13 @@
       })
       .catch((err) => {
         console.error('Refresh tokens failed:', err);
+        isAutoRefreshDisabled = true;
+        stopTicker();
+        setRefreshStatusState('error');
+        updateRefreshStatus('刷新失败，点击重试');
+        if (window.appToast) {
+          window.appToast('danger', '验证码刷新失败，可点击“刷新失败”状态重试。');
+        }
       })
       .finally(() => {
         pendingRequest = null;
@@ -650,12 +710,42 @@
 
   async function bootstrapTicker() {
     initRows();
+    setRefreshStatusState('ok');
     updateRefreshStatus(isPaused ? '自动刷新已暂停（切回页面继续）' : '自动刷新中');
     await refreshTokens();
     if (!isPaused) {
       startTicker();
     }
   }
+
+  function tryResumeAfterError() {
+    if (!isAutoRefreshDisabled) {
+      return;
+    }
+    setManualLoading(true);
+    refreshTokens()
+      .finally(() => {
+        setManualLoading(false);
+        if (!document.hidden && !isPaused) {
+          startTicker();
+        }
+      });
+  }
+
+  refreshStatusEl?.addEventListener('click', () => {
+    if (refreshStatusEl?.dataset?.state === 'error') {
+      tryResumeAfterError();
+    }
+  });
+  refreshStatusEl?.addEventListener('keydown', (event) => {
+    if (refreshStatusEl?.dataset?.state !== 'error') {
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      tryResumeAfterError();
+    }
+  });
 
   function copyToClipboard(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -695,6 +785,17 @@
       })
       .catch((err) => {
         console.error('Copy failed:', err);
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-danger');
+        btn.innerHTML = '复制失败';
+        if (window.appToast) {
+          window.appToast('danger', '复制失败，请检查浏览器权限或手动复制。');
+        }
+        setTimeout(() => {
+          btn.classList.remove('btn-danger');
+          btn.classList.add('btn-outline-secondary');
+          btn.innerHTML = original;
+        }, 1400);
       });
   });
 
@@ -723,10 +824,7 @@
     if (renameNameInput) {
       renameNameInput.value = currentName;
     }
-    if (renameAlert) {
-      renameAlert.classList.add('d-none');
-      renameAlert.textContent = '';
-    }
+    inlineAlert(renameAlert, 'danger', '');
     setRenameLoading(false);
     renameModalInstance =
       window.bootstrap && typeof window.bootstrap.Modal === 'function'
@@ -745,6 +843,9 @@
     refreshTokens()
       .catch((err) => {
         console.error('Manual refresh failed:', err);
+        if (window.appToast) {
+          window.appToast('danger', '刷新失败，请稍后再试。');
+        }
       })
       .finally(() => {
         setManualLoading(false);
@@ -770,10 +871,7 @@
   });
 
   renameNameInput?.addEventListener('input', () => {
-    if (renameAlert) {
-      renameAlert.classList.add('d-none');
-      renameAlert.textContent = '';
-    }
+    inlineAlert(renameAlert, 'danger', '');
   });
 
   renameSubmitBtn?.addEventListener('click', () => {
@@ -787,10 +885,7 @@
       return;
     }
 
-    if (renameAlert) {
-      renameAlert.classList.add('d-none');
-      renameAlert.textContent = '';
-    }
+    inlineAlert(renameAlert, 'danger', '');
     setRenameLoading(true);
 
     const formData = new FormData();
@@ -903,6 +998,9 @@
       })
       .catch((err) => {
         console.error('Update group failed:', err);
+        if (window.appToast) {
+          window.appToast('danger', '更新分组失败，请稍后再试。');
+        }
         select.value = previous;
         select.classList.add('is-invalid');
         setTimeout(() => select.classList.remove('is-invalid'), 1500);
@@ -963,22 +1061,12 @@
   const groupManageEmpty = document.getElementById('groupManageEmpty');
 
   function clearGroupManageAlert() {
-    if (!groupManageAlert) {
-      return;
-    }
-    groupManageAlert.classList.add('d-none');
-    groupManageAlert.classList.remove('alert-success', 'alert-warning', 'alert-danger', 'alert-info');
-    groupManageAlert.textContent = '';
+    inlineAlert(groupManageAlert, 'danger', '');
   }
 
   function showGroupManageAlert(kind, message) {
-    if (!groupManageAlert) {
-      return;
-    }
-    const level = kind === 'success' ? 'alert-success' : kind === 'warning' ? 'alert-warning' : 'alert-danger';
-    groupManageAlert.classList.remove('d-none', 'alert-success', 'alert-warning', 'alert-danger', 'alert-info');
-    groupManageAlert.classList.add(level);
-    groupManageAlert.textContent = message;
+    const variant = kind === 'success' ? 'success' : kind === 'warning' ? 'warning' : 'danger';
+    notify(groupManageAlert, variant, message);
   }
 
   function refreshGroupManageEmptyState() {
@@ -1099,18 +1187,25 @@
       });
   }
 
-  function handleGroupDelete(row, trigger) {
+  async function handleGroupDelete(row, trigger) {
     const url = row.dataset.deleteUrl;
     const groupId = row.dataset.groupId;
     if (!url || !groupId) {
       return;
     }
     const count = Number(row.dataset.entryCount || '0');
-    const confirmed = window.confirm(
+    const message =
       count > 0
         ? `该分组下还有 ${count} 条密钥，删除后将移动到“未分组”。是否继续？`
-        : '确定删除该分组？'
-    );
+        : '确定删除该分组？';
+    const confirmed = window.appConfirm
+      ? await window.appConfirm({
+          title: '删除分组',
+          message,
+          confirmText: '删除',
+          confirmVariant: 'danger',
+        })
+      : window.confirm(message);
     if (!confirmed) {
       return;
     }
@@ -1199,30 +1294,17 @@
   const shareLinkSummary = document.getElementById('shareLinkSummary');
   const shareLinkInvalidateBtn = document.getElementById('shareLinkInvalidateBtn');
 
-  const exportPlainBtn = document.getElementById('exportPlainBtn');
-  const exportOfflineBtn = document.getElementById('exportOfflineBtn');
+  function clearShareLinkAlert() {
+    inlineAlert(shareLinkAlert, 'danger', '');
+  }
 
-  exportPlainBtn?.addEventListener('click', (event) => {
-    const ok = window.confirm('导出文件会包含所有密钥明文，请确认当前环境安全，是否继续？');
-    if (!ok) {
-      event.preventDefault();
-    }
-  });
-
-  exportOfflineBtn?.addEventListener('click', (event) => {
-    const ok = window.confirm('导出离线包会在本地保存全部密钥明文，使用完毕后请及时销毁文件。确认生成吗？');
-    if (!ok) {
-      event.preventDefault();
-    }
-  });
+  function showShareLinkAlert(kind, message) {
+    const variant = kind === 'success' ? 'success' : kind === 'warning' ? 'warning' : 'danger';
+    notify(shareLinkAlert, variant, message);
+  }
 
   function resetShareModal() {
-    if (shareLinkAlert) {
-      shareLinkAlert.classList.add('d-none');
-      shareLinkAlert.classList.remove('alert-success');
-      shareLinkAlert.classList.add('alert-danger');
-      shareLinkAlert.textContent = '';
-    }
+    clearShareLinkAlert();
     shareLinkResult?.classList.add('d-none');
     if (shareLinkUrl) {
       shareLinkUrl.value = '';
@@ -1305,7 +1387,7 @@
     if (!shareLinkEntryId?.value) {
       return;
     }
-    shareLinkAlert?.classList.add('d-none');
+    clearShareLinkAlert();
     setShareSubmitting(true);
     const formData = new FormData();
     formData.append('duration', shareLinkDuration?.value || '10');
@@ -1342,10 +1424,7 @@
         }
       })
       .catch((err) => {
-        if (shareLinkAlert) {
-          shareLinkAlert.textContent = err.message;
-          shareLinkAlert.classList.remove('d-none');
-        }
+        showShareLinkAlert('danger', err.message || '生成链接失败，请稍后重试。');
       })
       .finally(() => setShareSubmitting(false));
   });
@@ -1366,10 +1445,7 @@
         }, 1600);
       })
       .catch(() => {
-        if (shareLinkAlert) {
-          shareLinkAlert.textContent = '复制失败，请手动复制链接。';
-          shareLinkAlert.classList.remove('d-none');
-        }
+        showShareLinkAlert('danger', '复制失败，请手动复制链接。');
       });
   });
 
@@ -1396,20 +1472,12 @@
         if (!resp.ok || !data.ok) {
           throw new Error(data.message || '未能立即失效，请稍后再试。');
         }
-        if (shareLinkAlert) {
-          shareLinkAlert.classList.remove('alert-danger');
-          shareLinkAlert.classList.add('alert-success');
-          shareLinkAlert.textContent = '链接已失效。';
-          shareLinkAlert.classList.remove('d-none');
-        }
+        showShareLinkAlert('success', '链接已失效。');
         shareLinkInvalidateBtn.classList.add('d-none');
         shareLinkInvalidateBtn.dataset.linkId = '';
       })
       .catch((err) => {
-        if (shareLinkAlert) {
-          shareLinkAlert.textContent = err.message;
-          shareLinkAlert.classList.remove('d-none');
-        }
+        showShareLinkAlert('danger', err.message || '未能立即失效，请稍后再试。');
       })
       .finally(() => {
         shareLinkInvalidateBtn.disabled = false;

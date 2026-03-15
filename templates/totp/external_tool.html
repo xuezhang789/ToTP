@@ -138,6 +138,10 @@
   }
 
   function showError(msg) {
+    if (window.appNotify) {
+      window.appNotify({ alertEl: alertBox, variant: 'danger', message: msg || '请求失败，请稍后再试。' });
+      return;
+    }
     if (!alertBox) return;
     alertBox.textContent = msg || '请求失败，请稍后再试。';
     alertBox.classList.remove('d-none');

@@ -51,9 +51,14 @@
                     title="生成临时访问链接">
                 <i class="bi bi-link-45deg"></i>
             </button>
-            <form method="post" action="{% url 'totp:delete' e.id %}" onsubmit="return confirm('确定删除？');">
+            <form method="post" action="{% url 'totp:delete' e.id %}">
                 {% csrf_token %}
-                <button class="btn btn-sm btn-outline-danger btn-touch" type="submit" title="删除">
+                <button class="btn btn-sm btn-outline-danger btn-touch" type="submit" title="删除"
+                        data-confirm="确定删除该密钥吗？"
+                        data-confirm-title="删除密钥"
+                        data-confirm-ok="删除"
+                        data-confirm-variant="danger"
+                        data-confirm-hint="此操作会要求你先进行二次确认密码。">
                     <i class="bi bi-trash"></i>
                 </button>
             </form>

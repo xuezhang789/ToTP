@@ -61,6 +61,7 @@ urlpatterns = [
     path("import/preview/", views.batch_import_preview, name="batch_import_preview"),
     path("import/apply/", views.batch_import_apply, name="batch_import_apply"),
     path("export/", views.export_entries, name="export"),
+    path("export/download/", views.export_download, name="export_download"),
     path("export/encrypted/", views.export_encrypted_package, name="export_encrypted"),
     path("export/offline/", views.export_offline_package, name="export_offline"),
     path(

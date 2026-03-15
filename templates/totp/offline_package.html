@@ -634,11 +634,49 @@
 
   manualRefresh?.addEventListener('click', refreshAll);
 
-  destroyBtn?.addEventListener('click', () => {
+  function showConfirm(message) {
+    const overlay = document.getElementById('app-confirm-overlay');
+    const textEl = document.getElementById('app-confirm-text');
+    const okBtn = document.getElementById('app-confirm-ok');
+    const cancelBtn = document.getElementById('app-confirm-cancel');
+    if (!overlay || !textEl || !okBtn || !cancelBtn) {
+      return Promise.resolve(window.confirm(message));
+    }
+    textEl.textContent = message || '';
+    overlay.classList.add('show');
+    return new Promise((resolve) => {
+      function cleanup() {
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        overlay.removeEventListener('click', onOverlay);
+      }
+      function close(value) {
+        overlay.classList.remove('show');
+        cleanup();
+        resolve(value);
+      }
+      function onOk() {
+        close(true);
+      }
+      function onCancel() {
+        close(false);
+      }
+      function onOverlay(e) {
+        if (e.target === overlay) {
+          close(false);
+        }
+      }
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      overlay.addEventListener('click', onOverlay);
+    });
+  }
+
+  destroyBtn?.addEventListener('click', async () => {
     if (destroyed) {
       return;
     }
-    const confirmed = window.confirm('销毁后页面将不再显示任何验证码，需要重新导出新的离线包才能恢复。是否继续？');
+    const confirmed = await showConfirm('销毁后页面将不再显示任何验证码，需要重新导出新的离线包才能恢复。是否继续？');
     if (!confirmed) {
       return;
     }
@@ -659,5 +697,26 @@
   });
 })();
 </script>
+<div class="app-confirm-overlay" id="app-confirm-overlay" aria-hidden="true">
+  <div class="app-confirm-dialog" role="dialog" aria-modal="true" aria-label="确认操作">
+    <div class="app-confirm-title">请确认操作</div>
+    <div class="app-confirm-body" id="app-confirm-text"></div>
+    <div class="app-confirm-actions">
+      <button class="app-confirm-btn app-confirm-cancel" type="button" id="app-confirm-cancel">取消</button>
+      <button class="app-confirm-btn app-confirm-ok" type="button" id="app-confirm-ok">确认</button>
+    </div>
+  </div>
+</div>
+<style>
+  .app-confirm-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(15,23,42,.55);padding:16px;z-index:9999}
+  .app-confirm-overlay.show{display:flex}
+  .app-confirm-dialog{width:min(520px,100%);background:#0b1220;border:1px solid rgba(148,163,184,.25);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.45);padding:16px;color:#e2e8f0}
+  .app-confirm-title{font-weight:700;font-size:16px;margin-bottom:10px}
+  .app-confirm-body{font-size:14px;line-height:1.6;color:#cbd5e1}
+  .app-confirm-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+  .app-confirm-btn{border-radius:12px;border:1px solid rgba(148,163,184,.25);padding:10px 14px;font-weight:600;background:transparent;color:#e2e8f0;cursor:pointer}
+  .app-confirm-ok{background:#ef4444;border-color:#ef4444;color:#fff}
+  .app-confirm-btn:focus{outline:2px solid rgba(96,165,250,.75);outline-offset:2px}
+ </style>
 </body>
 </html>

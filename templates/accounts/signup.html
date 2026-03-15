@@ -263,7 +263,11 @@
       }else{
         const t = await r.text();
         console.error("Google One Tap failed:", t);
-        alert("Google 登录失败，请重试或使用账号密码登录。");
+        if (window.appToast) {
+          window.appToast('danger', 'Google 登录失败，请重试或使用账号密码登录。');
+        } else {
+          alert("Google 登录失败，请重试或使用账号密码登录。");
+        }
       }
     }
     function handleCredentialResponse(resp){ onetapLogin(resp.credential); }

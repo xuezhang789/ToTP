@@ -71,7 +71,11 @@
       if (r.ok) {
         window.location.href = nextValue;
       } else {
-        alert('确认失败，请重试。');
+        if (window.appToast) {
+          window.appToast('danger', '确认失败，请重试。');
+        } else {
+          alert('确认失败，请重试。');
+        }
       }
     }
   })();

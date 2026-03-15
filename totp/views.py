@@ -18,6 +18,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
@@ -1631,6 +1632,42 @@ def _secret_preview(secret: str) -> str:
 
 
 @login_required
+@require_GET
+def export_download(request):
+    kind = (request.GET.get("kind") or "").strip()
+    return_url = (request.GET.get("return") or "").strip()
+    if not url_has_allowed_host_and_scheme(
+        url=return_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return_url = reverse("totp:list")
+
+    if kind == "plain":
+        download_url = reverse("totp:export")
+        title = "导出密钥"
+    elif kind == "offline":
+        download_url = reverse("totp:export_offline")
+        title = "离线导出"
+    else:
+        raise Http404("Not found")
+
+    if not _has_recent_reauth(request):
+        messages.info(request, "为保障安全，请先确认密码后再继续")
+        return _reauth_redirect(request)
+
+    return render(
+        request,
+        "totp/export_download.html",
+        {
+            "title": title,
+            "download_url": download_url,
+            "return_url": return_url,
+        },
+    )
+
+
+@login_required
 def export_entries(request):
     """导出当前用户的全部密钥，以文本形式下载。"""
 
@@ -1685,7 +1722,8 @@ def export_entries(request):
 def export_encrypted_package(request):
     if not _has_recent_reauth(request):
         messages.info(request, "为保障安全，请先确认密码后再导出")
-        return _reauth_redirect(request)
+        next_url = f"{reverse('totp:list')}?modal=export_encrypted"
+        return redirect(f"{reverse('accounts:reauth')}?next={quote(next_url)}")
 
     passphrase = (request.POST.get("passphrase") or "").strip()
     passphrase2 = (request.POST.get("passphrase2") or "").strip()

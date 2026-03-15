@@ -143,6 +143,10 @@
     }
 
     function showImportError(message) {
+      if (global.appNotify) {
+        global.appNotify({ alertEl: importErrorAlert, variant: 'danger', message: message || DEFAULT_TEXTS.parseError });
+        return;
+      }
       if (!importErrorAlert) {
         return;
       }

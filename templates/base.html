@@ -28,8 +28,27 @@
     <a href="https://2fa.97.cx/" target="_blank" rel="noopener"
        class="text-decoration-none">TOTP管理平台，2FA在线工具</a>
 </footer>
-<!-- Bootstrap Bundle JS (含 Popper) -->
 <script src="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="appToastContainer"></div>
+<div class="modal fade" id="appConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+        <div class="modal-content border-0 rounded-3 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title" id="appConfirmTitle">请确认操作</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <div id="appConfirmMessage" class="mb-0"></div>
+                <div id="appConfirmHint" class="text-muted small mt-2 d-none"></div>
+            </div>
+            <div class="modal-footer d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="appConfirmCancelBtn">取消</button>
+                <button type="button" class="btn btn-danger" id="appConfirmOkBtn">确认</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="{% static 'js/ui.js' %}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

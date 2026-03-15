@@ -24,7 +24,12 @@
                     <button class="btn btn-outline-primary trash-action-btn" type="submit" name="action" value="restore" disabled>
                         批量恢复
                     </button>
-                    <button class="btn btn-outline-danger trash-action-btn" type="submit" name="action" value="delete" disabled data-confirm="确认永久删除选中的密钥？此操作不可恢复。">
+                    <button class="btn btn-outline-danger trash-action-btn" type="submit" name="action" value="delete" disabled
+                            data-confirm="确认永久删除选中的密钥？此操作不可恢复。"
+                            data-confirm-title="永久删除"
+                            data-confirm-ok="永久删除"
+                            data-confirm-variant="danger"
+                            data-confirm-hint="此操作会要求你先进行二次确认密码。">
                         永久删除
                     </button>
                 </div>
@@ -188,20 +193,7 @@
 
   syncControls();
 
-  if (deleteBtn) {
-    deleteBtn.addEventListener('click', (event) => {
-      if (deleteBtn.disabled) {
-        event.preventDefault();
-        return;
-      }
-      const confirmMessage = deleteBtn.dataset.confirm;
-      if (confirmMessage && !window.confirm(confirmMessage)) {
-        event.preventDefault();
-      }
-    });
-  }
-
-  function performSingleAction(action, entryId) {
+  async function performSingleAction(action, entryId) {
     const checkboxes = getCheckboxes();
     let targetFound = false;
     checkboxes.forEach((cb) => {
@@ -218,8 +210,19 @@
 
     if (action === 'delete') {
       const confirmMessage = deleteBtn ? deleteBtn.dataset.confirm : null;
-      if (confirmMessage && !window.confirm(confirmMessage)) {
-        return;
+      if (confirmMessage) {
+        const ok = window.appConfirm
+          ? await window.appConfirm({
+              title: '永久删除',
+              message: confirmMessage,
+              confirmText: '永久删除',
+              confirmVariant: 'danger',
+              hint: '此操作会要求你先进行二次确认密码。',
+            })
+          : window.confirm(confirmMessage);
+        if (!ok) {
+          return;
+        }
       }
     }
 

@@ -7,6 +7,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <div id="addEntryAlert" class="alert alert-danger d-none" role="alert"></div>
                     <div class="mb-2">
                         <label class="form-label">名称</label>
                         <input name="name" class="form-control" placeholder="如：GitHub @me" required>
@@ -127,18 +128,44 @@
       }
 
       async function decodeQrFile(file, qrInput) {
+        const addAlert = document.getElementById('addEntryAlert');
+        const pickFromGallery = document.getElementById('pickFromGallery');
+        function showError(message) {
+          if (window.appNotify) {
+            window.appNotify({ alertEl: addAlert, variant: 'danger', message });
+            return;
+          }
+          if (!addAlert) return;
+          addAlert.textContent = message;
+          addAlert.classList.remove('d-none');
+        }
+        function clearError() {
+          if (!addAlert) return;
+          addAlert.textContent = '';
+          addAlert.classList.add('d-none');
+        }
+        function setLoading(flag) {
+          if (qrInput) {
+            qrInput.disabled = flag;
+          }
+          if (pickFromGallery) {
+            pickFromGallery.disabled = flag;
+          }
+        }
         try {
+          clearError();
+          setLoading(true);
           const codeReader = await ensureCodeReader();
           const dataUrl = await readFileAsDataURL(file);
           if (!dataUrl) {
-            alert('未识别到二维码内容');
+            showError('未识别到二维码内容');
             return;
           }
           const result = await codeReader.decodeFromImageUrl(dataUrl);
           const text =
             typeof result?.getText === 'function' ? result.getText() : result?.text || '';
           if (!text) {
-            alert('未识别到二维码内容');
+            showError('未识别到二维码内容');
             return;
           }
           const secretInput = document.getElementById('secretInput');
@@ -151,9 +178,10 @@
             nameInput.value = parsed.label;
           }
         } catch (err) {
-          alert('解析二维码失败');
+          showError('解析二维码失败，请尝试更清晰的二维码图片或手动粘贴 otpauth:// URI');
           console.error(err);
         } finally {
+          setLoading(false);
           if (qrInput) {
             qrInput.value = '';
           }
@@ -202,7 +230,14 @@
       }
 
       if (addModalEl) {
-        addModalEl.addEventListener('shown.bs.modal', syncSpaceControls);
+        addModalEl.addEventListener('shown.bs.modal', () => {
+          const addAlert = document.getElementById('addEntryAlert');
+          if (addAlert) {
+            addAlert.textContent = '';
+            addAlert.classList.add('d-none');
+          }
+          syncSpaceControls();
+        });
         const teamSelect = addModalEl.querySelector('#entryTeamSelect');
         if (teamSelect) {
           teamSelect.addEventListener('change', syncSpaceControls);

@@ -148,9 +148,14 @@
                 {% if membership and membership.can_manage_entries %}
                 <div class="alert alert-info bg-info-subtle border-0 d-flex flex-wrap align-items-center justify-content-between gap-2">
                     <div class="small mb-0">当前有效分享链接：{{ block.active_share_links|default:0 }} 条</div>
-                    <form method="post" action="{% url 'totp:team_revoke_all_share_links' team.id %}" onsubmit="return confirm('确定撤销该团队下所有有效分享链接吗？');">
+                    <form method="post" action="{% url 'totp:team_revoke_all_share_links' team.id %}">
                         {% csrf_token %}
-                        <button class="btn btn-outline-danger" type="submit">一键撤销</button>
+                        <button class="btn btn-outline-danger" type="submit"
+                                data-confirm="确定撤销该团队下所有有效分享链接吗？"
+                                data-confirm-title="撤销全部链接"
+                                data-confirm-ok="撤销"
+                                data-confirm-variant="danger"
+                                data-confirm-hint="此操作会要求你先进行二次确认密码。">一键撤销</button>
                     </form>
                 </div>
                 {% endif %}
@@ -254,25 +259,37 @@
                                             {% endif %}
                                             {% if member.role != 'owner' %}
                                                 {% if membership.role == 'owner' %}
-                                                <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}" onsubmit="return confirm('确定移除 {{ member.user.username }} 吗？');">
+                                                <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}">
                                                     {% csrf_token %}
-                                                    <button class="btn btn-outline-danger btn-sm" type="submit">
+                                                    <button class="btn btn-outline-danger btn-sm" type="submit"
+                                                            data-confirm="确定对 {{ member.user.username }} 执行“{% if member.user_id == request.user.id %}退出团队{% else %}移除{% endif %}”吗？"
+                                                            data-confirm-title="{% if member.user_id == request.user.id %}退出团队{% else %}移除成员{% endif %}"
+                                                            data-confirm-ok="{% if member.user_id == request.user.id %}退出{% else %}移除{% endif %}"
+                                                            data-confirm-variant="danger">
                                                         {% if member.user_id == request.user.id %}退出团队{% else %}移除{% endif %}
                                                     </button>
                                                 </form>
                                                 {% elif membership.role == 'admin' %}
                                                     {% if member.role == 'member' or member.user_id == request.user.id %}
-                                                    <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}" onsubmit="return confirm('确定移除 {{ member.user.username }} 吗？');">
+                                                    <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}">
                                                         {% csrf_token %}
-                                                        <button class="btn btn-outline-danger btn-sm" type="submit">
+                                                        <button class="btn btn-outline-danger btn-sm" type="submit"
+                                                                data-confirm="确定对 {{ member.user.username }} 执行“{% if member.user_id == request.user.id %}退出团队{% else %}移除{% endif %}”吗？"
+                                                                data-confirm-title="{% if member.user_id == request.user.id %}退出团队{% else %}移除成员{% endif %}"
+                                                                data-confirm-ok="{% if member.user_id == request.user.id %}退出{% else %}移除{% endif %}"
+                                                                data-confirm-variant="danger">
                                                             {% if member.user_id == request.user.id %}退出团队{% else %}移除{% endif %}
                                                         </button>
                                                     </form>
                                                     {% endif %}
                                                 {% elif member.user_id == request.user.id %}
-                                                <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}" onsubmit="return confirm('确定移除 {{ member.user.username }} 吗？');">
+                                                <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}">
                                                     {% csrf_token %}
-                                                    <button class="btn btn-outline-danger btn-sm" type="submit">
+                                                    <button class="btn btn-outline-danger btn-sm" type="submit"
+                                                            data-confirm="确定退出该团队吗？"
+                                                            data-confirm-title="退出团队"
+                                                            data-confirm-ok="退出"
+                                                            data-confirm-variant="danger">
                                                         退出团队
                                                     </button>
                                                 </form>
@@ -402,9 +419,13 @@
                                     <td class="text-end">
                                         <div class="d-flex flex-wrap justify-content-end gap-2">
                                             {% if member.role != 'owner' and member.user_id == request.user.id %}
-                                            <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}" onsubmit="return confirm('确定退出该团队吗？');">
+                                            <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}">
                                                 {% csrf_token %}
-                                                <button class="btn btn-outline-danger btn-sm" type="submit">
+                                                <button class="btn btn-outline-danger btn-sm" type="submit"
+                                                        data-confirm="确定退出该团队吗？"
+                                                        data-confirm-title="退出团队"
+                                                        data-confirm-ok="退出"
+                                                        data-confirm-variant="danger">
                                                     退出团队
                                                 </button>
                                             </form>
