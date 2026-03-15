@@ -96,8 +96,22 @@ def _has_recent_reauth(request) -> bool:
     return now_ts - value <= EXPORT_REAUTH_MAX_AGE_SECONDS
 
 
-def _reauth_redirect(request):
-    return redirect(f"{reverse('accounts:reauth')}?next={quote(request.get_full_path())}")
+def _reauth_redirect(request, *, next_url: str | None = None, fallback: str | None = None):
+    if fallback is None:
+        fallback = reverse("totp:list")
+    candidate = next_url
+    if not candidate:
+        if request.method == "GET":
+            candidate = request.get_full_path()
+        else:
+            candidate = request.META.get("HTTP_REFERER") or fallback
+    if not url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        candidate = fallback
+    return redirect(f"{reverse('accounts:reauth')}?next={quote(candidate)}")
 
 
 def _reauth_json(request):

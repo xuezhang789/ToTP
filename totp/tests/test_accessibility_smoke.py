@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from totp.models import TOTPEntry
+from totp.models import TOTPEntry, Team, TeamMembership
 from totp.utils import encrypt_str
 
 
@@ -59,3 +59,18 @@ class AccessibilitySmokeTests(TestCase):
         self.assertIn('id="addGroupModal"', html)
         self.assertIn('aria-labelledby="addGroupModalLabel"', html)
         self.assertIn('id="addGroupModalLabel"', html)
+
+    def test_teams_page_has_single_rename_modal(self):
+        self.client.force_login(self.user)
+        team = Team.objects.create(owner=self.user, name="Alpha Team")
+        TeamMembership.objects.create(team=team, user=self.user, role=TeamMembership.Role.OWNER)
+
+        response = self.client.get(reverse("totp:teams"))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertIn('id="renameTeamModal"', html)
+        self.assertIn('aria-labelledby="renameTeamModalLabel"', html)
+        self.assertIn('data-team-rename-trigger="1"', html)
+        self.assertIn('id="teamTabs-', html)
+        self.assertIn('teamTab-', html)
+        self.assertIn('teamPane-', html)
