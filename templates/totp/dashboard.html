@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block title %}2FA在线工具,TOTP管理平台,动态验证码助手{% endblock %}
+{% block title %}TOTP 管理平台 - 个人与团队 2FA 密钥管理{% endblock %}
 {% block head %}
 {{ block.super }}
 <meta name="keywords"
-      content="2FA,2fa,2fa在线工具,2FA Auth,2FA live,2FA Code,双重验证工具,2FA在线工具"/>
+      content="TOTP,2FA,双重验证,动态验证码,密钥管理,团队协作,一次性链接,审计,加密导出"/>
 <meta name="description"
-      content="免费的TOTP管理平台,动态验证码助手OTP管理平台,2FA在线工具"/>
+      content="支持个人与团队空间的 TOTP 密钥管理：加密保存、一次性分享链接、审计追踪、回收站恢复与加密导出备份。"/>
 {% endblock %}
 {% block content %}
 {% if request.user.is_authenticated %}
@@ -17,7 +17,12 @@
         <div class="card-body d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3">
             <div>
                 <h1 class="h3 fw-semibold mb-2">欢迎回来，{{ request.user.username }}</h1>
-                <p class="mb-0 text-muted small">统一查看验证码、管理团队密钥，并通过审计时间线掌握一切重要操作。</p>
+                <p class="mb-2 text-muted small">集中管理个人与团队验证码：支持分组、回收站、一键分享链接与审计追踪。</p>
+                <div class="d-flex flex-wrap gap-2 small">
+                    <span class="badge rounded-pill bg-light text-muted fw-semibold">敏感操作需确认密码</span>
+                    <span class="badge rounded-pill bg-light text-muted fw-semibold">建议优先使用加密导出</span>
+                    <span class="badge rounded-pill bg-light text-muted fw-semibold">团队支持配额与审计</span>
+                </div>
             </div>
             <div class="d-flex flex-wrap gap-2">
                 <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#addModal">
@@ -26,7 +31,9 @@
                 <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#importModal">
                     <i class="bi bi-arrow-bar-up me-1"></i> 批量导入
                 </button>
-                <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}"><i class="bi bi-grid me-1"></i> 我的密钥</a>
+                <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}"><i class="bi bi-grid me-1"></i> 打开列表</a>
+                <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}?modal=export_encrypted"><i class="bi bi-file-earmark-lock me-1"></i> 加密备份</a>
+                <a class="btn btn-outline-secondary" href="{% url 'totp:teams' %}"><i class="bi bi-people me-1"></i> 团队空间</a>
             </div>
         </div>
     </div>
@@ -92,7 +99,6 @@
                             <div class="metric-label">验证码刷新</div>
                             {% with remain=stats.current_cycle_remaining|default:0 total=stats.current_cycle_total|default:30 %}
                             {% if total > 0 %}
-                            {% widthratio remain total 100 as pct %}
                             <div class="metric-value"><span id="cycle-remaining-main">{{ remain|default:0 }}</span>s</div>
                             {% else %}
                             <div class="metric-value">--</div>
@@ -105,9 +111,8 @@
                     </div>
                     {% with remain=stats.current_cycle_remaining|default:0 total=stats.current_cycle_total|default:30 %}
                     {% if total > 0 %}
-                    {% widthratio remain total 100 as pct %}
                     <div class="progress progress-thin" role="progressbar" aria-label="当前周期剩余" aria-valuemin="0" aria-valuemax="100">
-                        <div id="cycle-progress" class="progress-bar bg-warning" style="width:{{ pct }}%" aria-valuenow="{{ pct }}"></div>
+                        <div id="cycle-progress" class="progress-bar bg-warning" style="width:0%" aria-valuenow="0"></div>
                     </div>
                     <p class="text-muted small mb-0 mt-1">周期 {{ total }}s · 剩余 <span id="cycle-remaining">{{ remain }}</span>s</p>
                     {% else %}
@@ -125,36 +130,36 @@
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
                     <div class="d-flex align-items-center justify-content-between mb-3">
-                        <h2 class="h6 mb-0"><i class="bi bi-lightning-charge me-1 text-primary"></i> 快速上手</h2>
-                        <a href="{% url 'totp:list' %}" class="btn btn-sm btn-outline-secondary">我的密钥</a>
+                        <h2 class="h6 mb-0"><i class="bi bi-lightning-charge me-1 text-primary"></i> 常用操作</h2>
+                        <a href="{% url 'totp:list' %}" class="btn btn-sm btn-outline-secondary">打开列表</a>
                     </div>
                     <ul class="list-unstyled mb-0 quick-start-list">
                         <li class="d-flex align-items-start gap-3 mb-3">
                             <span class="quick-start-step">1</span>
                             <div>
-                                <strong>选择操作空间</strong>
-                                <p class="mb-0 text-muted small">先通过顶部空间切换器定位到个人或团队空间，确保操作权限正确。</p>
+                                <strong>选定空间与分组</strong>
+                                <p class="mb-0 text-muted small">在列表页通过“空间筛选”切换个人/团队，并用分组管理保持条目清晰。</p>
                             </div>
                         </li>
                         <li class="d-flex align-items-start gap-3 mb-3">
                             <span class="quick-start-step">2</span>
                             <div>
-                                <strong>写入或导入密钥</strong>
-                                <p class="mb-0 text-muted small">使用“添加密钥”或“批量导入”，导入预览会提示重复项并可指定团队。</p>
+                                <strong>添加或批量导入</strong>
+                                <p class="mb-0 text-muted small">支持 otpauth://、二维码识别与常见导出格式；预览会提示重复项与目标空间。</p>
                             </div>
                         </li>
                         <li class="d-flex align-items-start gap-3 mb-3">
                             <span class="quick-start-step">3</span>
                             <div>
-                                <strong>日常管理与分享</strong>
-                                <p class="mb-0 text-muted small">在列表页复制验证码、调整分组；生成一次性链接可安全分享给同事。</p>
+                                <strong>分享与备份</strong>
+                                <p class="mb-0 text-muted small">临时协作用一次性访问链接；需要备份时建议“加密导出”，并妥善保管口令。</p>
                             </div>
                         </li>
                         <li class="d-flex align-items-start gap-3">
                             <span class="quick-start-step">4</span>
                             <div>
-                                <strong>备份与合规</strong>
-                                <p class="mb-0 text-muted small">导出或生成离线包后请妥善加密保存，回收站与审计时间线便于追踪与恢复。</p>
+                                <strong>追踪与恢复</strong>
+                                <p class="mb-0 text-muted small">回收站可恢复误删；审计时间线会记录导入、删除、分享等关键操作。</p>
                             </div>
                         </li>
                     </ul>
@@ -167,7 +172,7 @@
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-header bg-transparent border-0 d-flex align-items-center justify-content-between">
                         <h2 class="h6 mb-0">最近活动</h2>
-                        <i class="bi bi-activity text-muted"></i>
+                        <a href="{% url 'totp:list' %}" class="btn btn-sm btn-outline-secondary">查看列表</a>
                     </div>
                     <div class="card-body pt-0">
                         {% if recent_entries %}
@@ -189,14 +194,20 @@
                             {% endfor %}
                         </ul>
                         {% else %}
-                        <div class="text-muted small">暂无最近活动记录</div>
+                        <div class="text-muted small">
+                            还没有活动记录。可以先添加一条密钥，或从其它工具批量导入。
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 mt-3">
+                            <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addModal">添加密钥</button>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#importModal">批量导入</button>
+                        </div>
                         {% endif %}
                     </div>
                 </div>
                 <div class="card border-0 shadow-sm">
                     <div class="card-header bg-transparent border-0 d-flex align-items-center justify-content-between">
                         <h2 class="h6 mb-0">密钥审计时间线</h2>
-                        <i class="bi bi-journal-text text-muted"></i>
+                        <a href="{% url 'totp:list' %}" class="btn btn-sm btn-outline-secondary">去操作</a>
                     </div>
                     <div class="card-body pt-0">
                         {% if recent_audits %}
@@ -225,7 +236,7 @@
                             {% endfor %}
                         </ul>
                         {% else %}
-                        <div class="text-muted small">暂无新的审计记录。</div>
+                        <div class="text-muted small">暂无新的审计记录。导入、删除、分享链接等操作都会记录在这里。</div>
                         {% endif %}
                     </div>
                 </div>
@@ -236,16 +247,130 @@
 {% include 'totp/add_modal.html' %}
 {% include 'totp/import_modal.html' %}
 {% else %}
-<div class="container py-5 text-center">
-    <i class="bi bi-shield-lock display-4 text-primary mb-3"></i>
-    <h1 class="display-5 mb-3">安全高效的 TOTP 管理中心</h1>
-    <p class="lead text-muted mb-4">统一管理动态验证码，轻松完成双重验证(2FA)和团队协作。</p><br />
-    <div class="d-flex flex-column flex-md-row justify-content-center align-items-center gap-3">
-        <a href="{% url 'accounts:login' %}" class="btn btn-primary btn-lg px-4">立即登录</a>
-        <a href="{% url 'accounts:signup' %}" class="btn btn-outline-primary btn-lg px-4">免费注册</a>
-        <a href="{% url 'totp:external_totp_tool' %}" class="btn btn-outline-secondary btn-lg px-4">
-            在线验证码工具
-        </a>
+<div class="py-4 py-lg-5">
+    <div class="card border-0 shadow-sm dashboard-hero mb-4">
+        <div class="card-body p-4 p-lg-5">
+            <div class="row align-items-center g-4">
+                <div class="col-12 col-lg-7">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="rounded-4 bg-white shadow-sm d-inline-flex align-items-center justify-content-center" style="width:52px;height:52px;">
+                            <i class="bi bi-shield-lock-fill text-primary fs-4"></i>
+                        </div>
+                        <div class="text-muted small">
+                            面向个人与团队的 2FA / TOTP 管理平台
+                        </div>
+                    </div>
+                    <h1 class="display-6 fw-semibold mb-3">把验证码管理做得更安全、更顺手</h1>
+                    <p class="lead text-muted mb-4">
+                        密钥加密保存，支持团队权限与审计追踪；需要分享时可生成一次性访问链接；备份可使用加密导出与离线包。
+                    </p>
+                    <div class="d-flex flex-column flex-sm-row gap-2">
+                        <a href="{% url 'accounts:login' %}" class="btn btn-primary btn-lg px-4">登录开始</a>
+                        <a href="{% url 'accounts:signup' %}" class="btn btn-outline-primary btn-lg px-4">免费注册</a>
+                        <a href="{% url 'totp:external_totp_tool' %}" class="btn btn-outline-secondary btn-lg px-4">快速生成验证码</a>
+                    </div>
+                    <div class="text-muted small mt-3">
+                        敏感操作会要求确认密码；导出明文存在风险，建议优先使用“加密导出”。
+                    </div>
+                </div>
+                <div class="col-12 col-lg-5">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="card metric-card border-0 shadow-sm">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-start gap-3">
+                                        <div class="metric-icon metric-icon--primary flex-shrink-0">
+                                            <i class="bi bi-collection"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold mb-1">个人空间</div>
+                                            <div class="text-muted small">分组管理、回收站恢复，日常操作更清晰。</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="card metric-card border-0 shadow-sm">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-start gap-3">
+                                        <div class="metric-icon metric-icon--info flex-shrink-0">
+                                            <i class="bi bi-people"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold mb-1">团队协作</div>
+                                            <div class="text-muted small">邀请成员、角色权限、团队审计，协作更安心。</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="card metric-card border-0 shadow-sm">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-start gap-3">
+                                        <div class="metric-icon metric-icon--warning flex-shrink-0">
+                                            <i class="bi bi-lock"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold mb-1">分享与备份</div>
+                                            <div class="text-muted small">一次性访问链接、加密导出、离线包，多重兜底。</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 g-md-4">
+        <div class="col-12 col-lg-7">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body p-4">
+                    <h2 class="h5 fw-semibold mb-3">从 0 到上手，只需要 2 分钟</h2>
+                    <ul class="list-unstyled mb-0 quick-start-list">
+                        <li class="d-flex align-items-start gap-3 mb-3">
+                            <span class="quick-start-step">1</span>
+                            <div>
+                                <strong>登录后添加或导入</strong>
+                                <p class="mb-0 text-muted small">支持 otpauth:// 与常见导出格式，导入预览会提示重复项。</p>
+                            </div>
+                        </li>
+                        <li class="d-flex align-items-start gap-3 mb-3">
+                            <span class="quick-start-step">2</span>
+                            <div>
+                                <strong>分组与团队权限</strong>
+                                <p class="mb-0 text-muted small">个人空间用分组整理；团队空间按角色分配管理权限。</p>
+                            </div>
+                        </li>
+                        <li class="d-flex align-items-start gap-3">
+                            <span class="quick-start-step">3</span>
+                            <div>
+                                <strong>分享、备份与审计</strong>
+                                <p class="mb-0 text-muted small">一次性链接便于临时协作；导出建议加密；审计记录帮助追踪关键操作。</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-5">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body p-4">
+                    <h2 class="h6 fw-semibold mb-3">无需登录也可以</h2>
+                    <p class="text-muted small mb-3">如果你只是临时需要生成验证码，可以使用“快速生成验证码”。</p>
+                    <a href="{% url 'totp:external_totp_tool' %}" class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-lightning-charge me-1"></i> 打开快速工具
+                    </a>
+                    <div class="border-top pt-3 mt-3 text-muted small">
+                        提醒：不要在不可信设备上输入长期使用的密钥；建议优先在账号内加密保存。
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endif %}
