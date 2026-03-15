@@ -110,6 +110,11 @@
                         <i class="bi bi-box-arrow-up-right me-1"></i> 查看空间
                     </a>
                     {% endwith %}
+                    {% if membership and membership.can_manage_entries %}
+                    <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#renameTeamModal-{{ team.id }}">
+                        <i class="bi bi-pencil-square me-1"></i> 修改名称
+                    </button>
+                    {% endif %}
                 </div>
             </div>
 
@@ -249,6 +254,31 @@
                 </div>
             </div>
         </div>
+        {% if membership and membership.can_manage_entries %}
+        <div class="modal fade" id="renameTeamModal-{{ team.id }}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 rounded-3 shadow">
+                    <form method="post" action="{% url 'totp:team_rename' team.id %}">
+                        {% csrf_token %}
+                        <div class="modal-header">
+                            <h5 class="modal-title">修改团队名称</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label" for="renameTeamNameInput-{{ team.id }}">团队名称</label>
+                                <input type="text" id="renameTeamNameInput-{{ team.id }}" name="name" class="form-control" maxlength="80" required value="{{ team.name }}">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                            <button class="btn btn-primary" type="submit">保存</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
         {% endwith %}
     {% endfor %}
 {% else %}

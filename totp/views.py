@@ -406,6 +406,39 @@ def team_create(request):
 
 @login_required
 @require_POST
+def team_rename(request, team_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    team = membership.team
+
+    name = (request.POST.get("name") or "").strip()
+    if not name:
+        messages.error(request, "团队名称不能为空")
+        return redirect("totp:teams")
+    if len(name) > 80:
+        messages.error(request, "团队名称过长")
+        return redirect("totp:teams")
+
+    if Team.objects.filter(owner=team.owner, name=name).exclude(pk=team.pk).exists():
+        messages.error(request, "已存在同名团队，请更换名称")
+        return redirect("totp:teams")
+
+    if team.name == name:
+        messages.info(request, "团队名称未发生变化")
+        return redirect("totp:teams")
+
+    team.name = name
+    try:
+        team.save(update_fields=["name"])
+    except IntegrityError:
+        messages.error(request, "已存在同名团队，请更换名称")
+        return redirect("totp:teams")
+
+    messages.success(request, "团队名称已更新")
+    return redirect("totp:teams")
+
+
+@login_required
+@require_POST
 def team_add_member(request, team_id: int):
     """向团队添加成员或更新成员角色。"""
 

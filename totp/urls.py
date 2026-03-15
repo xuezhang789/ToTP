@@ -6,6 +6,7 @@ urlpatterns = [
     path("list/", views.list_view, name="list"),
     path("teams/", views.teams_overview, name="teams"),
     path("teams/create/", views.team_create, name="team_create"),
+    path("teams/<int:team_id>/rename/", views.team_rename, name="team_rename"),
     path(
         "teams/<int:team_id>/members/add/",
         views.team_add_member,
