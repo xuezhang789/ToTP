@@ -1,5 +1,5 @@
 <div class="modal fade" id="addGroupModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
         <div class="modal-content border-0 rounded-3 shadow">
             <form method="post" action="{% url 'totp:add_group' %}">
                 {% csrf_token %}
@@ -31,13 +31,13 @@
                                  data-rename-url="{% url 'totp:rename_group' pk=g.id %}"
                                  data-delete-url="{% url 'totp:delete_group' pk=g.id %}">
                                 <div class="flex-grow-1 min-width-0">
-                                    <input type="text" class="form-control form-control-sm group-name-input" value="{{ g.name }}"
+                                    <input type="text" class="form-control group-name-input" value="{{ g.name }}"
                                            maxlength="40" aria-label="分组名称">
                                 </div>
                                 <div class="text-muted small text-nowrap">
                                     {{ g.entry_count|default:0 }} 条
                                 </div>
-                                <div class="btn-group btn-group-sm">
+                                <div class="d-flex flex-wrap gap-2">
                                     <button type="button" class="btn btn-outline-secondary group-save-btn">保存</button>
                                     <button type="button" class="btn btn-outline-danger group-delete-btn">删除</button>
                                 </div>

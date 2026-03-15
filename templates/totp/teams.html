@@ -188,8 +188,9 @@
                         </div>
                     </div>
                     {% endif %}
-                    <div class="table-responsive team-member-table-wrapper">
-                        <table class="table table-hover align-middle mb-0 team-member-table">
+                    <div class="table-responsive">
+                        <div class="team-member-table-wrapper">
+                            <table class="table table-hover align-middle mb-0 team-member-table">
                             <thead>
                             <tr>
                                 <th scope="col">成员</th>
@@ -273,14 +274,15 @@
                             </tr>
                             {% endfor %}
                             </tbody>
-                        </table>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         {% if membership and membership.can_manage_entries %}
         <div class="modal fade" id="renameTeamModal-{{ team.id }}" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
                 <div class="modal-content border-0 rounded-3 shadow">
                     <form method="post" action="{% url 'totp:team_rename' team.id %}">
                         {% csrf_token %}
@@ -351,8 +353,9 @@
                         <h3 class="team-card-subtitle mb-0">成员</h3>
                         <span class="text-muted small">当前共 {{ member_count|default:0 }} 人 · {{ entry_count|default:0 }} 个密钥</span>
                     </div>
-                    <div class="table-responsive team-member-table-wrapper">
-                        <table class="table table-hover align-middle mb-0 team-member-table">
+                    <div class="table-responsive">
+                        <div class="team-member-table-wrapper">
+                            <table class="table table-hover align-middle mb-0 team-member-table">
                             <thead>
                             <tr>
                                 <th scope="col">成员</th>
@@ -402,7 +405,8 @@
                             </tr>
                             {% endfor %}
                             </tbody>
-                        </table>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -434,7 +438,7 @@
 
 <!-- Create team modal -->
 <div class="modal fade" id="createTeamModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
         <div class="modal-content border-0 rounded-3 shadow">
             <form method="post" action="{% url 'totp:team_create' %}">
                 {% csrf_token %}

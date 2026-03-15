@@ -84,24 +84,37 @@
                 {% endif %}
                 {% if selected_space == 'personal' %}
                 <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importModal"
-                        type="button">批量导入
-                </button>
-                <a class="btn btn-outline-secondary" href="{% url 'totp:export' %}" id="exportPlainBtn">
-                    导出密钥
-                </a>
-                <a class="btn btn-outline-success" href="{% url 'totp:export_offline' %}" id="exportOfflineBtn">
-                    离线导出
-                </a>
-                <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#addGroupModal"
-                        type="button">添加分组
-                </button>
-                {% else %}
-                <a class="btn btn-outline-secondary" href="{% url 'totp:teams' %}">团队管理</a>
-                <input type="hidden" name="group" value="">
+                        type="button">批量导入</button>
                 {% endif %}
-                <a class="btn btn-outline-secondary" href="{% url 'totp:one_time_audit' %}">
-                    链接审计
-                </a>
+
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        更多
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow">
+                        {% if selected_space == 'personal' %}
+                        <li>
+                            <a class="dropdown-item" href="{% url 'totp:export' %}" id="exportPlainBtn">导出密钥</a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'totp:export_offline' %}" id="exportOfflineBtn">离线导出</a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#addGroupModal" type="button">添加分组</button>
+                        </li>
+                        {% else %}
+                        <li>
+                            <a class="dropdown-item" href="{% url 'totp:teams' %}">团队管理</a>
+                        </li>
+                        {% endif %}
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'totp:one_time_audit' %}">链接审计</a>
+                        </li>
+                    </ul>
+                </div>
+
                 <a class="btn btn-outline-danger" href="{% url 'totp:trash' %}">回收站</a>
             </div>
         </div>

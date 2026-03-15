@@ -64,12 +64,12 @@
                             <div class="text-muted small">最近：{{ link.last_viewed_at|date:"Y-m-d H:i" }}</div>
                         {% endif %}
                     </td>
-                    <td class="text-nowrap">
+                    <td style="max-width: 260px;">
                         {% if link.last_view_ip %}
                             <div>IP：{{ link.last_view_ip }}</div>
                         {% endif %}
                         {% if link.last_view_user_agent %}
-                            <div class="text-muted small">
+                            <div class="text-muted small text-truncate">
                                 UA：{{ link.last_view_user_agent }}
                             </div>
                         {% endif %}
