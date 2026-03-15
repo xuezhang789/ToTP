@@ -9,7 +9,7 @@
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="nav">
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0 flex-wrap">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                 {% if request.user.is_authenticated %}
                 {% with current=request.resolver_match.url_name %}
                 <li class="nav-item me-2">
@@ -27,9 +27,9 @@
                 {% endwith %}
                 {% endif %}
             </ul>
-            <div class="d-flex flex-column flex-lg-row gap-2 w-100 w-lg-auto">
+            <div class="navbar-actions d-flex flex-column flex-lg-row gap-2 align-items-stretch align-items-lg-center mt-2 mt-lg-0">
                 {% if request.user.is_authenticated %}
-                <span class="navbar-text small text-muted d-none d-md-inline">Hi, {{ request.user.username }}</span>
+                <span class="navbar-text small text-muted d-none d-lg-inline">Hi, {{ request.user.username }}</span>
                 <a class="btn btn-outline-primary {% if request.resolver_match and request.resolver_match.url_name == 'profile' %}active{% endif %}"
                    href="{% url 'accounts:profile' %}">个人资料</a>
                 <form method="post" action="{% url 'accounts:logout' %}">
