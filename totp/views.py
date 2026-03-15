@@ -1,6 +1,9 @@
 import hashlib
 import json
 import secrets
+import csv
+import base64
+import os
 from datetime import timedelta
 from urllib.parse import quote
 
@@ -18,16 +21,22 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
 from . import importers
 from .models import (
     Group,
     OneTimeLink,
     Team,
+    TeamAudit,
     TeamInvitation,
     TeamMembership,
     TOTPEntry,
     TOTPEntryAudit,
     log_entry_audit,
+    log_team_audit,
 )
 
 UserModel = get_user_model()
@@ -43,6 +52,8 @@ from .utils import (
 EXTERNAL_TOTP_RATE_LIMIT = 20
 EXTERNAL_TOTP_RATE_WINDOW_SECONDS = 60
 EXPORT_REAUTH_MAX_AGE_SECONDS = 5 * 60
+TEAM_ONE_TIME_LINK_ACTIVE_LIMIT = 50
+TEAM_ONE_TIME_LINK_MAX_DURATION_MINUTES = 30
 
 TEAM_MANAGER_ROLES = (
     TeamMembership.Role.OWNER,
@@ -365,6 +376,16 @@ def teams_overview(request):
     for invite in pending_invites:
         invites_by_team.setdefault(invite.team_id, []).append(invite)
 
+    team_ids = [team.id for team in teams]
+    share_links_by_team = {}
+    if team_ids:
+        share_links_by_team = {
+            row["entry__team_id"]: row["cnt"]
+            for row in OneTimeLink.active.filter(entry__team_id__in=team_ids)
+            .values("entry__team_id")
+            .annotate(cnt=Count("id"))
+        }
+
     team_blocks = [
         {
             "team": team,
@@ -373,6 +394,7 @@ def teams_overview(request):
             "entry_count": team.entry_count,
             "pending_invites": invites_by_team.get(team.id, []),
             "can_manage": bool(membership_map.get(team.id) and membership_map.get(team.id).can_manage_entries),
+            "active_share_links": share_links_by_team.get(team.id, 0),
         }
         for team in teams
     ]
@@ -436,6 +458,14 @@ def team_create(request):
             user=request.user,
             role=TeamMembership.Role.OWNER,
         )
+        log_team_audit(
+            team,
+            request.user,
+            TeamAudit.Action.TEAM_CREATED,
+            old_value="",
+            new_value=team.name,
+            metadata={"team_id": team.id},
+        )
 
     messages.success(request, "团队已创建")
     return redirect("totp:teams")
@@ -463,6 +493,7 @@ def team_rename(request, team_id: int):
         messages.info(request, "团队名称未发生变化")
         return redirect("totp:teams")
 
+    old_name = team.name
     team.name = name
     try:
         team.save(update_fields=["name"])
@@ -470,6 +501,14 @@ def team_rename(request, team_id: int):
         messages.error(request, "已存在同名团队，请更换名称")
         return redirect("totp:teams")
 
+    log_team_audit(
+        team,
+        request.user,
+        TeamAudit.Action.TEAM_RENAMED,
+        old_value=old_name,
+        new_value=name,
+        metadata={"team_id": team.id},
+    )
     messages.success(request, "团队名称已更新")
     return redirect("totp:teams")
 
@@ -515,19 +554,38 @@ def team_add_member(request, team_id: int):
     ).first()
     if pending_invite:
         if membership.role == TeamMembership.Role.OWNER and pending_invite.role != desired_role:
+            old_role = pending_invite.role
             pending_invite.role = desired_role
             pending_invite.inviter = request.user
             pending_invite.save(update_fields=["role", "inviter"])
+            log_team_audit(
+                team,
+                request.user,
+                TeamAudit.Action.INVITE_UPDATED,
+                target_user=target_user,
+                old_value=old_role,
+                new_value=desired_role,
+                metadata={"invitation_id": pending_invite.id},
+            )
             messages.success(request, f"已更新对 {target_user} 的邀请角色")
         else:
             messages.info(request, f"已存在发送给 {target_user} 的待确认邀请")
         return redirect("totp:teams")
 
-    TeamInvitation.objects.create(
+    invitation = TeamInvitation.objects.create(
         team=team,
         inviter=request.user,
         invitee=target_user,
         role=desired_role,
+    )
+    log_team_audit(
+        team,
+        request.user,
+        TeamAudit.Action.INVITE_SENT,
+        target_user=target_user,
+        old_value="",
+        new_value=desired_role,
+        metadata={"invitation_id": invitation.id},
     )
     messages.success(request, f"已向 {target_user} 发送团队邀请，等待对方确认")
     return redirect("totp:teams")
@@ -563,8 +621,18 @@ def team_update_member_role(request, team_id: int, member_id: int):
         messages.info(request, "角色未发生变化")
         return redirect("totp:teams")
 
+    old_role = target.role
     target.role = new_role
     target.save(update_fields=["role"])
+    log_team_audit(
+        membership.team,
+        request.user,
+        TeamAudit.Action.MEMBER_ROLE_CHANGED,
+        target_user=target.user,
+        old_value=old_role,
+        new_value=new_role,
+        metadata={"membership_id": target.id},
+    )
     messages.success(request, f"{target.user} 的角色已更新")
     return redirect("totp:teams")
 
@@ -587,6 +655,13 @@ def team_remove_member(request, team_id: int, member_id: int):
 
     if target.user_id == request.user.id:
         # 允许管理员或成员退出团队
+        log_team_audit(
+            membership.team,
+            request.user,
+            TeamAudit.Action.MEMBER_LEFT,
+            target_user=request.user,
+            metadata={"membership_id": target.id},
+        )
         target.delete()
         messages.success(request, "已退出团队")
         return redirect("totp:teams")
@@ -599,6 +674,14 @@ def team_remove_member(request, team_id: int, member_id: int):
         messages.error(request, "管理员只能移除普通成员")
         return redirect("totp:teams")
 
+    log_team_audit(
+        membership.team,
+        request.user,
+        TeamAudit.Action.MEMBER_REMOVED,
+        target_user=target.user,
+        old_value=target.role,
+        metadata={"membership_id": target.id},
+    )
     target.delete()
     messages.success(request, f"{target.user} 已被移出团队")
     return redirect("totp:teams")
@@ -627,6 +710,14 @@ def team_invitation_accept(request, invitation_id: int):
         invitation.responded_at = timezone.now()
         invitation.save(update_fields=["status", "responded_at"])
 
+    log_team_audit(
+        invitation.team,
+        request.user,
+        TeamAudit.Action.INVITE_ACCEPTED,
+        target_user=request.user,
+        new_value=invitation.role,
+        metadata={"invitation_id": invitation.id},
+    )
     messages.success(request, f"已加入 {invitation.team.name}")
     return redirect("totp:teams")
 
@@ -643,6 +734,14 @@ def team_invitation_decline(request, invitation_id: int):
     invitation.status = TeamInvitation.Status.DECLINED
     invitation.responded_at = timezone.now()
     invitation.save(update_fields=["status", "responded_at"])
+    log_team_audit(
+        invitation.team,
+        request.user,
+        TeamAudit.Action.INVITE_DECLINED,
+        target_user=request.user,
+        new_value=invitation.role,
+        metadata={"invitation_id": invitation.id},
+    )
     messages.info(request, f"已拒绝加入 {invitation.team.name}")
     return redirect("totp:teams")
 
@@ -661,7 +760,171 @@ def team_invitation_cancel(request, invitation_id: int):
     invitation.status = TeamInvitation.Status.CANCELLED
     invitation.responded_at = timezone.now()
     invitation.save(update_fields=["status", "responded_at"])
+    log_team_audit(
+        invitation.team,
+        request.user,
+        TeamAudit.Action.INVITE_CANCELLED,
+        target_user=invitation.invitee,
+        new_value=invitation.role,
+        metadata={"invitation_id": invitation.id},
+    )
     messages.success(request, "已取消邀请")
+    return redirect("totp:teams")
+
+
+@login_required
+def team_audit(request, team_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    team = membership.team
+
+    action = (request.GET.get("action") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+    actor_raw = (request.GET.get("actor") or "").strip()
+    target_raw = (request.GET.get("target") or "").strip()
+
+    queryset = TeamAudit.objects.filter(team=team).select_related(
+        "actor", "target_user"
+    )
+    if action and action in dict(TeamAudit.Action.choices):
+        queryset = queryset.filter(action=action)
+    if actor_raw:
+        try:
+            queryset = queryset.filter(actor_id=int(actor_raw))
+        except (TypeError, ValueError):
+            pass
+    if target_raw:
+        try:
+            queryset = queryset.filter(target_user_id=int(target_raw))
+        except (TypeError, ValueError):
+            pass
+    if q:
+        queryset = queryset.filter(
+            Q(actor__username__icontains=q)
+            | Q(actor__email__icontains=q)
+            | Q(target_user__username__icontains=q)
+            | Q(target_user__email__icontains=q)
+            | Q(old_value__icontains=q)
+            | Q(new_value__icontains=q)
+        )
+
+    paginator = Paginator(queryset, 30)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+    actor_options = (
+        TeamAudit.objects.filter(team=team, actor__isnull=False)
+        .values("actor_id", "actor__username")
+        .distinct()
+        .order_by("actor__username")
+    )
+    target_options = (
+        TeamAudit.objects.filter(team=team, target_user__isnull=False)
+        .values("target_user_id", "target_user__username")
+        .distinct()
+        .order_by("target_user__username")
+    )
+    return render(
+        request,
+        "totp/team_audit.html",
+        {
+            "team": team,
+            "membership": membership,
+            "page_obj": page_obj,
+            "records": page_obj.object_list,
+            "action_choices": TeamAudit.Action.choices,
+            "selected_action": action,
+            "q": q,
+            "actor_options": actor_options,
+            "target_options": target_options,
+            "selected_actor": actor_raw,
+            "selected_target": target_raw,
+        },
+    )
+
+
+@login_required
+def team_audit_export(request, team_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    team = membership.team
+
+    action = (request.GET.get("action") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+    actor_raw = (request.GET.get("actor") or "").strip()
+    target_raw = (request.GET.get("target") or "").strip()
+
+    queryset = TeamAudit.objects.filter(team=team).select_related(
+        "actor", "target_user"
+    )
+    if action and action in dict(TeamAudit.Action.choices):
+        queryset = queryset.filter(action=action)
+    if actor_raw:
+        try:
+            queryset = queryset.filter(actor_id=int(actor_raw))
+        except (TypeError, ValueError):
+            pass
+    if target_raw:
+        try:
+            queryset = queryset.filter(target_user_id=int(target_raw))
+        except (TypeError, ValueError):
+            pass
+    if q:
+        queryset = queryset.filter(
+            Q(actor__username__icontains=q)
+            | Q(actor__email__icontains=q)
+            | Q(target_user__username__icontains=q)
+            | Q(target_user__email__icontains=q)
+            | Q(old_value__icontains=q)
+            | Q(new_value__icontains=q)
+        )
+
+    filename = timezone.now().strftime(f"team-audit-{team.id}-%Y%m%d-%H%M%S.csv")
+    quoted = quote(filename)
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = (
+        f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
+    )
+    response.write("\ufeff")
+    writer = csv.writer(response)
+    writer.writerow(["时间", "动作", "操作人", "目标用户", "旧值", "新值", "详情"])
+    for record in queryset.order_by("-created_at")[:20000]:
+        actor_label = record.actor.username if record.actor_id else "系统"
+        target_label = record.target_user.username if record.target_user_id else ""
+        writer.writerow(
+            [
+                record.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                record.get_action_display(),
+                actor_label,
+                target_label,
+                record.old_value,
+                record.new_value,
+                json.dumps(record.metadata or {}, ensure_ascii=False),
+            ]
+        )
+    return response
+
+
+@login_required
+@require_POST
+def team_revoke_all_share_links(request, team_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    team = membership.team
+    if not _has_recent_reauth(request):
+        messages.info(request, "为保障安全，请先确认密码后再执行此操作")
+        return _reauth_redirect(request)
+
+    now = timezone.now()
+    queryset = OneTimeLink.active.filter(entry__team=team)
+    count = queryset.count()
+    if not count:
+        messages.info(request, "当前没有需要撤销的有效分享链接")
+        return redirect("totp:teams")
+    queryset.update(revoked_at=now)
+    log_team_audit(
+        team,
+        request.user,
+        TeamAudit.Action.LINKS_REVOKED_ALL,
+        metadata={"count": count},
+    )
+    messages.success(request, f"已撤销 {count} 条有效分享链接")
     return redirect("totp:teams")
 
 
@@ -813,6 +1076,9 @@ def delete_group(request, pk: int):
 @require_POST
 def delete_entry(request, pk: int):
     """删除指定的 TOTP 条目。"""
+    if not _has_recent_reauth(request):
+        messages.info(request, "为保障安全，请先确认密码后再删除")
+        return _reauth_redirect(request)
     e = _get_entry_for_user(request.user, pk, require_manage=True)
     # 改为软删除：仅做标记并记录删除时间，数据进入回收站。
     e.is_deleted = True
@@ -875,6 +1141,10 @@ def trash_view(request):
 @require_POST
 def trash_bulk_action(request):
     """针对回收站条目执行批量操作。"""
+
+    if not _has_recent_reauth(request):
+        messages.info(request, "为保障安全，请先确认密码后再执行此操作")
+        return _reauth_redirect(request)
 
     action = (request.POST.get("action") or "").strip()
     raw_ids = request.POST.getlist("selected")
@@ -1006,6 +1276,10 @@ def restore_entry(request, pk: int):
     if request.method != "POST":
         messages.error(request, "请求方式不正确")
         return redirect("totp:trash")
+
+    if not _has_recent_reauth(request):
+        messages.info(request, "为保障安全，请先确认密码后再恢复")
+        return _reauth_redirect(request)
 
     entry = _get_entry_for_user(
         request.user, pk, include_deleted=True, require_manage=True
@@ -1153,6 +1427,9 @@ def batch_import_apply(request):
         payload = json.loads(request.body.decode("utf-8"))
     except (TypeError, ValueError):
         return JsonResponse({"ok": False, "error": "请求格式无效"}, status=400)
+
+    if not _has_recent_reauth(request):
+        return _reauth_json(request)
 
     try:
         space, target_team, target_label = _resolve_import_target(
@@ -1395,6 +1672,92 @@ def export_entries(request):
     quoted = quote(filename)
 
     response = HttpResponse(content, content_type="text/plain; charset=utf-8")
+    response["Content-Disposition"] = (
+        f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
+    )
+    if audit_rows:
+        TOTPEntryAudit.objects.bulk_create(audit_rows)
+    return response
+
+
+@login_required
+@require_POST
+def export_encrypted_package(request):
+    if not _has_recent_reauth(request):
+        messages.info(request, "为保障安全，请先确认密码后再导出")
+        return _reauth_redirect(request)
+
+    passphrase = (request.POST.get("passphrase") or "").strip()
+    passphrase2 = (request.POST.get("passphrase2") or "").strip()
+    if not passphrase or len(passphrase) < 8:
+        messages.error(request, "口令长度至少 8 位")
+        return redirect(f"{reverse('totp:list')}?modal=export_encrypted")
+    if passphrase != passphrase2:
+        messages.error(request, "两次输入的口令不一致")
+        return redirect(f"{reverse('totp:list')}?modal=export_encrypted")
+
+    queryset = TOTPEntry.objects.filter(
+        user=request.user,
+        team__isnull=True,
+        is_deleted=False,
+    ).select_related("group").order_by("name")
+    entries = list(queryset)
+    if not entries:
+        messages.info(request, "当前没有可以导出的密钥")
+        return redirect("totp:list")
+
+    lines = []
+    audit_rows = []
+    for entry in entries:
+        secret = decrypt_str(entry.secret_encrypted)
+        parts = [secret, entry.name]
+        if entry.group:
+            parts.append(entry.group.name)
+        lines.append("|".join(parts))
+        audit_rows.append(
+            TOTPEntryAudit(
+                entry=entry,
+                actor=request.user,
+                action=TOTPEntryAudit.Action.ENCRYPTED_EXPORTED,
+                old_value=entry.name,
+                metadata={"space": "personal"},
+            )
+        )
+
+    plaintext = "\n".join(lines).encode("utf-8")
+    iterations = 200000
+    salt = os.urandom(16)
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=iterations,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(passphrase.encode("utf-8")))
+    token = Fernet(key).encrypt(plaintext).decode("utf-8")
+    payload = {
+        "version": 1,
+        "kdf": {
+            "name": "pbkdf2-sha256",
+            "iterations": iterations,
+            "salt": base64.urlsafe_b64encode(salt).decode("utf-8"),
+        },
+        "cipher": {
+            "name": "fernet",
+            "token": token,
+        },
+        "meta": {
+            "generated_at": timezone.now().isoformat(),
+            "count": len(entries),
+        },
+    }
+
+    filename = timezone.now().strftime("totp-export-encrypted-%Y%m%d-%H%M%S.json")
+    quoted = quote(filename)
+    response = HttpResponse(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        content_type="application/json; charset=utf-8",
+    )
     response["Content-Disposition"] = (
         f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
     )
@@ -1658,7 +2021,8 @@ def create_one_time_link(request, pk: int):
         duration_minutes = int(request.POST.get("duration") or 10)
     except (TypeError, ValueError):
         duration_minutes = 10
-    duration_minutes = max(1, min(duration_minutes, 60))
+    max_duration = TEAM_ONE_TIME_LINK_MAX_DURATION_MINUTES if entry.team_id else 60
+    duration_minutes = max(1, min(duration_minutes, max_duration))
 
     try:
         max_views = int(request.POST.get("max_views") or 3)
@@ -1677,6 +2041,17 @@ def create_one_time_link(request, pk: int):
             },
             status=400,
         )
+    if entry.team_id:
+        team_active_links = OneTimeLink.active.filter(entry__team=entry.team).count()
+        if team_active_links >= TEAM_ONE_TIME_LINK_ACTIVE_LIMIT:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": "team_link_limit_reached",
+                    "message": "团队当前有效分享链接过多，请先撤销旧链接后再试。",
+                },
+                status=400,
+            )
 
     expires_at = now + timedelta(minutes=duration_minutes)
 

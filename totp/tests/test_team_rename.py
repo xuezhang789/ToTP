@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from totp.models import Team, TeamMembership
+from totp.models import Team, TeamAudit, TeamMembership
 
 
 class TeamRenameTests(TestCase):
@@ -38,6 +38,13 @@ class TeamRenameTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.team.refresh_from_db()
         self.assertEqual(self.team.name, "New Team Name")
+        self.assertTrue(
+            TeamAudit.objects.filter(
+                team=self.team,
+                action=TeamAudit.Action.TEAM_RENAMED,
+                actor=self.owner,
+            ).exists()
+        )
 
     def test_admin_can_rename_team(self):
         self.client.force_login(self.admin)
@@ -48,6 +55,13 @@ class TeamRenameTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.team.refresh_from_db()
         self.assertEqual(self.team.name, "Admin Renamed")
+        self.assertTrue(
+            TeamAudit.objects.filter(
+                team=self.team,
+                action=TeamAudit.Action.TEAM_RENAMED,
+                actor=self.admin,
+            ).exists()
+        )
 
     def test_member_cannot_rename_team(self):
         self.client.force_login(self.member)
@@ -75,4 +89,3 @@ class TeamRenameTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.team.refresh_from_db()
         self.assertEqual(self.team.name, "Alpha Team")
-

@@ -3,6 +3,7 @@ import json
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from totp.models import Group, Team, TeamMembership, TOTPEntry
 from totp.utils import decrypt_str, encrypt_str
@@ -14,6 +15,9 @@ class BatchImportTests(TestCase):
             username="alice", password="password"
         )
         self.client.force_login(self.user)
+        session = self.client.session
+        session["reauth_at"] = int(timezone.now().timestamp())
+        session.save()
 
     def _preview_manual(self, text: str, space: str | None = None):
         url = reverse("totp:batch_import_preview")

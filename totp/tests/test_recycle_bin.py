@@ -15,6 +15,9 @@ class RecycleBinTests(TestCase):
             username="bob", password="password"
         )
         self.client.force_login(self.user)
+        session = self.client.session
+        session["reauth_at"] = int(timezone.now().timestamp())
+        session.save()
         self.secret = encrypt_str("JBSWY3DPEHPK3PXP")
 
     def test_delete_moves_entry_to_trash_and_restore(self):

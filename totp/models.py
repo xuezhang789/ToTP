@@ -144,6 +144,75 @@ class TeamInvitation(models.Model):
     def is_pending(self) -> bool:
         return self.status == self.Status.PENDING
 
+
+class TeamAudit(models.Model):
+    """记录团队空间的关键操作，便于审计与追踪。"""
+
+    class Action(models.TextChoices):
+        TEAM_CREATED = "team_created", "创建团队"
+        TEAM_RENAMED = "team_renamed", "修改团队名称"
+        INVITE_SENT = "invite_sent", "发送邀请"
+        INVITE_UPDATED = "invite_updated", "更新邀请"
+        INVITE_CANCELLED = "invite_cancelled", "取消邀请"
+        INVITE_ACCEPTED = "invite_accepted", "接受邀请"
+        INVITE_DECLINED = "invite_declined", "拒绝邀请"
+        MEMBER_ROLE_CHANGED = "member_role_changed", "成员角色调整"
+        MEMBER_REMOVED = "member_removed", "移除成员"
+        MEMBER_LEFT = "member_left", "成员退出"
+        LINKS_REVOKED_ALL = "links_revoked_all", "撤销全部分享链接"
+
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.CASCADE,
+        related_name="audits",
+    )
+    actor = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="totp_team_audits",
+    )
+    action = models.CharField(max_length=32, choices=Action.choices, db_index=True)
+    target_user = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="totp_team_audits_target",
+    )
+    old_value = models.CharField(max_length=200, blank=True)
+    new_value = models.CharField(max_length=200, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["team", "created_at"]),
+            models.Index(fields=["team", "action", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.team} {self.get_action_display()} by {self.actor or '系统'}"
+
+
+def log_team_audit(team: Team, actor, action: str, *, target_user=None, old_value="", new_value="", metadata=None):
+    metadata = metadata or {}
+    actor_obj = None
+    if actor and getattr(actor, "is_authenticated", False):
+        actor_obj = actor
+    TeamAudit.objects.create(
+        team=team,
+        actor=actor_obj,
+        action=action,
+        target_user=target_user,
+        old_value=old_value or "",
+        new_value=new_value or "",
+        metadata=metadata,
+    )
+
+
 class Group(models.Model):
     """用户自定义的分组，用于管理多个 TOTP 条目。"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="totp_groups")
@@ -314,6 +383,7 @@ class TOTPEntryAudit(models.Model):
         DELETED = "deleted", "永久删除"
         EXPORTED = "exported", "导出"
         OFFLINE_EXPORTED = "offline_exported", "离线包导出"
+        ENCRYPTED_EXPORTED = "encrypted_exported", "加密导出"
         ONE_TIME_LINK_CREATED = "one_time_link_created", "创建一次性链接"
         ONE_TIME_LINK_REVOKED = "one_time_link_revoked", "撤销一次性链接"
 

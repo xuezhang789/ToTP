@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% block title %}团队审计 - {{ team.name }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+        <h1 class="h4 mb-1">团队审计</h1>
+        <div class="text-muted small">{{ team.name }} · {{ membership.get_role_display }}</div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'totp:teams' %}">返回团队列表</a>
+        <a class="btn btn-outline-primary" href="{% url 'totp:list' %}?space=team:{{ team.id }}">进入团队空间</a>
+    </div>
+</div>
+
+<div class="card app-panel border-0 shadow-sm mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-12 col-md-3">
+                <label class="form-label small text-muted mb-1">动作</label>
+                <select class="form-select" name="action">
+                    <option value="">全部</option>
+                    {% for value,label in action_choices %}
+                    <option value="{{ value }}" {% if selected_action == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label small text-muted mb-1">操作人</label>
+                <select class="form-select" name="actor">
+                    <option value="">全部</option>
+                    {% for row in actor_options %}
+                    <option value="{{ row.actor_id }}" {% if selected_actor == row.actor_id|stringformat:'s' %}selected{% endif %}>
+                        {{ row.actor__username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label small text-muted mb-1">目标用户</label>
+                <select class="form-select" name="target">
+                    <option value="">全部</option>
+                    {% for row in target_options %}
+                    <option value="{{ row.target_user_id }}" {% if selected_target == row.target_user_id|stringformat:'s' %}selected{% endif %}>
+                        {{ row.target_user__username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md">
+                <label class="form-label small text-muted mb-1">搜索</label>
+                <input class="form-control" name="q" value="{{ q|default_if_none:'' }}" placeholder="用户名/邮箱/旧值/新值" maxlength="80">
+            </div>
+            <div class="col-12 col-md-auto">
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-primary" type="submit">筛选</button>
+                    <a class="btn btn-outline-secondary" href="{% url 'totp:team_audit' team.id %}">重置</a>
+                    <a class="btn btn-outline-success"
+                       href="{% url 'totp:team_audit_export' team.id %}?{% if selected_action %}action={{ selected_action|urlencode }}&amp;{% endif %}{% if selected_actor %}actor={{ selected_actor|urlencode }}&amp;{% endif %}{% if selected_target %}target={{ selected_target|urlencode }}&amp;{% endif %}{% if q %}q={{ q|urlencode }}{% endif %}">
+                        导出 CSV
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card app-table-card">
+    <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle mb-0">
+            <thead>
+            <tr>
+                <th class="text-nowrap">时间</th>
+                <th class="text-nowrap">动作</th>
+                <th class="text-nowrap">操作人</th>
+                <th class="text-nowrap">目标用户</th>
+                <th>旧值</th>
+                <th>新值</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for record in records %}
+            <tr>
+                <td class="text-nowrap">{{ record.created_at|date:"Y-m-d H:i" }}</td>
+                <td class="text-nowrap">
+                    <span class="badge rounded-pill bg-light text-muted fw-semibold">{{ record.get_action_display }}</span>
+                </td>
+                <td class="text-nowrap">
+                    {% if record.actor %}{{ record.actor.username }}{% else %}系统{% endif %}
+                </td>
+                <td class="text-nowrap">
+                    {% if record.target_user %}{{ record.target_user.username }}{% endif %}
+                </td>
+                <td class="text-muted small">{{ record.old_value }}</td>
+                <td class="fw-semibold">{{ record.new_value }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" class="text-center text-muted py-5">暂无审计记录</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj and page_obj.has_other_pages %}
+    <div class="card-footer">
+        <nav aria-label="团队审计分页">
+            <ul class="pagination justify-content-center mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}&amp;{% if selected_action %}action={{ selected_action|urlencode }}&amp;{% endif %}{% if selected_actor %}actor={{ selected_actor|urlencode }}&amp;{% endif %}{% if selected_target %}target={{ selected_target|urlencode }}&amp;{% endif %}{% if q %}q={{ q|urlencode }}{% endif %}" aria-label="上一页">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                {% endif %}
+
+                {% for num in page_obj.paginator.page_range %}
+                {% if num == page_obj.number %}
+                <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
+                {% else %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ num }}&amp;{% if selected_action %}action={{ selected_action|urlencode }}&amp;{% endif %}{% if selected_actor %}actor={{ selected_actor|urlencode }}&amp;{% endif %}{% if selected_target %}target={{ selected_target|urlencode }}&amp;{% endif %}{% if q %}q={{ q|urlencode }}{% endif %}">{{ num }}</a>
+                </li>
+                {% endif %}
+                {% endfor %}
+
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}&amp;{% if selected_action %}action={{ selected_action|urlencode }}&amp;{% endif %}{% if selected_actor %}actor={{ selected_actor|urlencode }}&amp;{% endif %}{% if selected_target %}target={{ selected_target|urlencode }}&amp;{% endif %}{% if q %}q={{ q|urlencode }}{% endif %}" aria-label="下一页">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

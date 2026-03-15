@@ -7,6 +7,17 @@ urlpatterns = [
     path("teams/", views.teams_overview, name="teams"),
     path("teams/create/", views.team_create, name="team_create"),
     path("teams/<int:team_id>/rename/", views.team_rename, name="team_rename"),
+    path("teams/<int:team_id>/audit/", views.team_audit, name="team_audit"),
+    path(
+        "teams/<int:team_id>/audit/export/",
+        views.team_audit_export,
+        name="team_audit_export",
+    ),
+    path(
+        "teams/<int:team_id>/share/revoke-all/",
+        views.team_revoke_all_share_links,
+        name="team_revoke_all_share_links",
+    ),
     path(
         "teams/<int:team_id>/members/add/",
         views.team_add_member,
@@ -50,6 +61,7 @@ urlpatterns = [
     path("import/preview/", views.batch_import_preview, name="batch_import_preview"),
     path("import/apply/", views.batch_import_apply, name="batch_import_apply"),
     path("export/", views.export_entries, name="export"),
+    path("export/encrypted/", views.export_encrypted_package, name="export_encrypted"),
     path("export/offline/", views.export_offline_package, name="export_offline"),
     path(
         "share/one-time/audit/",

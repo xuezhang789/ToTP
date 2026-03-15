@@ -99,6 +99,9 @@
                         <li>
                             <a class="dropdown-item" href="{% url 'totp:export_offline' %}" id="exportOfflineBtn">离线导出</a>
                         </li>
+                        <li>
+                            <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#exportEncryptedModal" type="button">加密导出</button>
+                        </li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#addGroupModal" type="button">添加分组</button>
@@ -258,7 +261,9 @@
                                 <option value="5">5 分钟</option>
                                 <option value="10" selected>10 分钟</option>
                                 <option value="30">30 分钟</option>
+                                {% if not selected_team %}
                                 <option value="60">60 分钟</option>
+                                {% endif %}
                             </select>
                         </div>
                         <div class="col-sm-6">
@@ -336,6 +341,37 @@
 {% include 'totp/add_modal.html' %}
 {% include 'totp/import_modal.html' %}
 {% include 'totp/add_group_modal.html' %}
+<div class="modal fade" id="exportEncryptedModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
+        <div class="modal-content border-0 rounded-3 shadow">
+            <form method="post" action="{% url 'totp:export_encrypted' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">加密导出</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning bg-warning-subtle border-0">
+                        导出文件将使用你输入的口令加密。请妥善保管口令，遗失后无法恢复。
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">口令</label>
+                        <input class="form-control" type="password" name="passphrase" minlength="8" autocomplete="new-password" required>
+                        <div class="form-text">至少 8 位，建议使用长口令。</div>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label">确认口令</label>
+                        <input class="form-control" type="password" name="passphrase2" minlength="8" autocomplete="new-password" required>
+                    </div>
+                </div>
+                <div class="modal-footer d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">下载加密包</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -1382,8 +1418,8 @@
 
   const params = new URLSearchParams(window.location.search);
   const modal = params.get('modal');
-  if (modal === 'add' || modal === 'import') {
-    const id = modal === 'add' ? 'addModal' : 'importModal';
+  if (modal === 'add' || modal === 'import' || modal === 'export_encrypted') {
+    const id = modal === 'add' ? 'addModal' : (modal === 'import' ? 'importModal' : 'exportEncryptedModal');
     const element = document.getElementById(id);
     if (element && window.bootstrap && typeof window.bootstrap.Modal === 'function') {
       new window.bootstrap.Modal(element).show();

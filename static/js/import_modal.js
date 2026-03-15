@@ -340,6 +340,10 @@
       })
         .then(async (resp) => {
           const data = await resp.json().catch(() => ({}));
+          if (data && data.error === 'reauth_required' && data.redirect) {
+            window.location.href = data.redirect;
+            return;
+          }
           if (!resp.ok || !data.ok) {
             const message = data.error || DEFAULT_TEXTS.applyError;
             throw new Error(message);

@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from totp.models import Team, TeamInvitation, TeamMembership
+from totp.models import Team, TeamAudit, TeamInvitation, TeamMembership
 
 
 class TeamInvitationTests(TestCase):
@@ -30,6 +30,14 @@ class TeamInvitationTests(TestCase):
         )
         invitation = TeamInvitation.objects.get(team=self.team, invitee=self.invitee)
         self.assertEqual(invitation.status, TeamInvitation.Status.PENDING)
+        self.assertTrue(
+            TeamAudit.objects.filter(
+                team=self.team,
+                action=TeamAudit.Action.INVITE_SENT,
+                actor=self.owner,
+                target_user=self.invitee,
+            ).exists()
+        )
 
     def test_invitee_can_accept_invitation(self):
         invitation = TeamInvitation.objects.create(
@@ -47,6 +55,14 @@ class TeamInvitationTests(TestCase):
         self.assertEqual(invitation.status, TeamInvitation.Status.ACCEPTED)
         self.assertTrue(
             TeamMembership.objects.filter(team=self.team, user=self.invitee).exists()
+        )
+        self.assertTrue(
+            TeamAudit.objects.filter(
+                team=self.team,
+                action=TeamAudit.Action.INVITE_ACCEPTED,
+                actor=self.invitee,
+                target_user=self.invitee,
+            ).exists()
         )
 
     def test_invitee_can_decline_invitation(self):
@@ -66,6 +82,14 @@ class TeamInvitationTests(TestCase):
         self.assertFalse(
             TeamMembership.objects.filter(team=self.team, user=self.invitee).exists()
         )
+        self.assertTrue(
+            TeamAudit.objects.filter(
+                team=self.team,
+                action=TeamAudit.Action.INVITE_DECLINED,
+                actor=self.invitee,
+                target_user=self.invitee,
+            ).exists()
+        )
 
     def test_owner_can_cancel_invitation(self):
         invitation = TeamInvitation.objects.create(
@@ -81,3 +105,11 @@ class TeamInvitationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         invitation.refresh_from_db()
         self.assertEqual(invitation.status, TeamInvitation.Status.CANCELLED)
+        self.assertTrue(
+            TeamAudit.objects.filter(
+                team=self.team,
+                action=TeamAudit.Action.INVITE_CANCELLED,
+                actor=self.owner,
+                target_user=self.invitee,
+            ).exists()
+        )

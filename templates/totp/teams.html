@@ -119,6 +119,7 @@
                         <div class="team-card-meta">
                             <span class="team-card-meta-item"><i class="bi bi-people me-1"></i>成员 {{ member_count|default:0 }}</span>
                             <span class="team-card-meta-item"><i class="bi bi-key me-1"></i>密钥 {{ entry_count|default:0 }}</span>
+                            <span class="team-card-meta-item"><i class="bi bi-link-45deg me-1"></i>分享链接 {{ block.active_share_links|default:0 }}</span>
                             <span class="team-card-meta-item text-muted"><i class="bi bi-clock-history me-1"></i>{{ team.created_at|date:"Y-m-d" }}</span>
                         </div>
                     </div>
@@ -133,6 +134,9 @@
                     <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#renameTeamModal-{{ team.id }}">
                         <i class="bi bi-pencil-square me-1"></i> 修改名称
                     </button>
+                    <a class="btn btn-outline-secondary" href="{% url 'totp:team_audit' team.id %}">
+                        <i class="bi bi-journal-text me-1"></i> 审计
+                    </a>
                     {% endif %}
                     <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#teamDetails-{{ team.id }}" aria-expanded="false" aria-controls="teamDetails-{{ team.id }}">
                         <i class="bi bi-sliders me-1"></i> 成员与邀请
@@ -141,6 +145,15 @@
             </div>
 
             <div id="teamDetails-{{ team.id }}" class="collapse team-details-collapse">
+                {% if membership and membership.can_manage_entries %}
+                <div class="alert alert-info bg-info-subtle border-0 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div class="small mb-0">当前有效分享链接：{{ block.active_share_links|default:0 }} 条</div>
+                    <form method="post" action="{% url 'totp:team_revoke_all_share_links' team.id %}" onsubmit="return confirm('确定撤销该团队下所有有效分享链接吗？');">
+                        {% csrf_token %}
+                        <button class="btn btn-outline-danger" type="submit">一键撤销</button>
+                    </form>
+                </div>
+                {% endif %}
                 {% if membership.role == 'owner' or membership.role == 'admin' %}
                 <div class="team-card-invite">
                     <h3 class="team-card-subtitle">邀请成员</h3>
