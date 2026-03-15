@@ -326,8 +326,10 @@ def list_view(request):
 def teams_overview(request):
     """展示团队列表及成员信息。"""
 
+    q = (request.GET.get("q") or "").strip()
     teams = (
         Team.objects.filter(memberships__user=request.user)
+        .filter(Q(name__icontains=q) if q else Q())
         .annotate(
             member_count=Count("memberships", distinct=True),
             entry_count=Count(
@@ -370,9 +372,13 @@ def teams_overview(request):
             "member_count": team.member_count,
             "entry_count": team.entry_count,
             "pending_invites": invites_by_team.get(team.id, []),
+            "can_manage": bool(membership_map.get(team.id) and membership_map.get(team.id).can_manage_entries),
         }
         for team in teams
     ]
+    team_blocks.sort(key=lambda b: (not b["can_manage"], (b["team"].name or "").lower()))
+    manageable_blocks = [b for b in team_blocks if b["can_manage"]]
+    readonly_blocks = [b for b in team_blocks if not b["can_manage"]]
     summary = {
         "team_total": len(team_blocks),
         "member_total": sum(block["member_count"] or 0 for block in team_blocks),
@@ -402,6 +408,9 @@ def teams_overview(request):
             "available_roles": available_roles,
             "team_summary": summary,
             "incoming_invitations": inbound_invitations,
+            "q": q,
+            "manageable_blocks": manageable_blocks,
+            "readonly_blocks": readonly_blocks,
         },
     )
 

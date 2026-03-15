@@ -409,6 +409,8 @@ main.app-main {
 .team-card-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
 
 .team-card-actions .btn {
