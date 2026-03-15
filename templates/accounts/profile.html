@@ -112,15 +112,21 @@
                         {{ password_form.non_field_errors|join:" " }}
                     </div>
                     {% endif %}
-                    <div class="mb-3">
-                        <label class="form-label" for="{{ password_form.old_password.id_for_label }}">{{ password_form.old_password.label }}</label>
-                        {{ password_form.old_password }}
-                        {% if password_form.old_password.errors %}
-                        <div class="invalid-feedback d-block">
-                            {{ password_form.old_password.errors|join:", " }}
+                    {% if password_requires_old %}
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ password_form.old_password.id_for_label }}">{{ password_form.old_password.label }}</label>
+                            {{ password_form.old_password }}
+                            {% if password_form.old_password.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ password_form.old_password.errors|join:", " }}
+                            </div>
+                            {% endif %}
                         </div>
-                        {% endif %}
-                    </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            该账号尚未设置本地密码，请先设置密码以便后续执行导出、分享等敏感操作的确认。
+                        </div>
+                    {% endif %}
                     <div class="mb-3">
                         <label class="form-label" for="{{ password_form.new_password1.id_for_label }}">{{ password_form.new_password1.label }}</label>
                         {{ password_form.new_password1 }}

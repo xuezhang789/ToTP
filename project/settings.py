@@ -2,9 +2,38 @@ from pathlib import Path
 import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY","dev-secret-key-change-me")
-DEBUG = True
-ALLOWED_HOSTS = ["*"]
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-secret-key-change-me")
+DEBUG = _env_bool("DJANGO_DEBUG", True)
+
+_hosts_raw = os.environ.get("DJANGO_ALLOWED_HOSTS", "")
+if _hosts_raw.strip():
+    ALLOWED_HOSTS = [h.strip() for h in _hosts_raw.split(",") if h.strip()]
+else:
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "testserver"]
+
+TOTP_ENC_KEYS: list[str] = []
+_enc_key = os.environ.get("TOTP_ENC_KEY", "").strip()
+if _enc_key:
+    TOTP_ENC_KEYS.append(_enc_key)
+_enc_keys = os.environ.get("TOTP_ENC_KEYS", "").strip()
+if _enc_keys:
+    TOTP_ENC_KEYS.extend([k.strip() for k in _enc_keys.split(",") if k.strip()])
+
+if not DEBUG:
+    if SECRET_KEY.strip() == "dev-secret-key-change-me":
+        raise RuntimeError("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is false")
+    if "*" in ALLOWED_HOSTS:
+        raise RuntimeError("DJANGO_ALLOWED_HOSTS must not contain '*' in production")
+    if not TOTP_ENC_KEYS:
+        raise RuntimeError("TOTP_ENC_KEY or TOTP_ENC_KEYS must be set when DJANGO_DEBUG is false")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -67,6 +96,19 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "/auth/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/auth/login/"
+
+SECURE_SSL_REDIRECT = _env_bool("DJANGO_SECURE_SSL_REDIRECT", not DEBUG)
+SESSION_COOKIE_SECURE = _env_bool("DJANGO_SESSION_COOKIE_SECURE", not DEBUG)
+CSRF_COOKIE_SECURE = _env_bool("DJANGO_CSRF_COOKIE_SECURE", not DEBUG)
+SESSION_COOKIE_SAMESITE = os.environ.get("DJANGO_SESSION_COOKIE_SAMESITE", "Lax")
+CSRF_COOKIE_SAMESITE = os.environ.get("DJANGO_CSRF_COOKIE_SAMESITE", "Lax")
+SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "0" if DEBUG else "31536000"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS", not DEBUG)
+SECURE_HSTS_PRELOAD = _env_bool("DJANGO_HSTS_PRELOAD", not DEBUG)
+SECURE_REFERRER_POLICY = os.environ.get("DJANGO_SECURE_REFERRER_POLICY", "same-origin")
+SECURE_BROWSER_XSS_FILTER = _env_bool("DJANGO_SECURE_BROWSER_XSS_FILTER", True)
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("DJANGO_DATA_UPLOAD_MAX_MEMORY_SIZE", str(2 * 1024 * 1024)))
+FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("DJANGO_FILE_UPLOAD_MAX_MEMORY_SIZE", str(2 * 1024 * 1024)))
 
 # Google One Tap
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com")

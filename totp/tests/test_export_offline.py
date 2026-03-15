@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from totp.models import TOTPEntry
 from totp.utils import encrypt_str
@@ -23,7 +24,10 @@ class OfflineExportTests(TestCase):
 
     def test_export_html_contains_entries(self):
         self.client.force_login(self.user)
-        TOTPEntry.objects.create(
+        session = self.client.session
+        session["reauth_at"] = int(timezone.now().timestamp())
+        session.save()
+        entry = TOTPEntry.objects.create(
             user=self.user,
             name="GitLab",
             secret_encrypted=encrypt_str("JBSWY3DPEHPK3PXP"),
@@ -36,9 +40,13 @@ class OfflineExportTests(TestCase):
         content = response.content.decode("utf-8")
         self.assertIn("GitLab", content)
         self.assertIn("离线验证码包", content)
+        self.assertTrue(entry.audits.filter(action="offline_exported").exists())
 
     def test_export_with_no_entries_redirects(self):
         self.client.force_login(self.user)
+        session = self.client.session
+        session["reauth_at"] = int(timezone.now().timestamp())
+        session.save()
         response = self.client.get(self.url, follow=True)
         self.assertEqual(response.resolver_match.view_name, "totp:list")
         messages = list(response.context["messages"])

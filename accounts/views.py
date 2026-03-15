@@ -13,11 +13,12 @@ from django.contrib.auth import (
     update_session_auth_hash,
 )
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.views.decorators.http import require_http_methods
 
 from django.db.models import Count, Q
@@ -26,8 +27,31 @@ from google.oauth2 import id_token
 
 User = get_user_model()
 
-from .forms import PasswordUpdateForm, ProfileForm, password_strength_errors
+from .forms import PasswordSetForm, PasswordUpdateForm, ProfileForm, password_strength_errors
 from totp.models import OneTimeLink, TOTPEntry
+
+LOGIN_RATE_LIMIT = 10
+LOGIN_RATE_WINDOW_SECONDS = 300
+SIGNUP_RATE_LIMIT = 5
+SIGNUP_RATE_WINDOW_SECONDS = 600
+
+
+def _client_ip(request) -> str:
+    forward = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forward:
+        return forward.split(",")[0].strip() or "unknown"
+    return request.META.get("REMOTE_ADDR") or "unknown"
+
+
+def _rate_limit_allow(cache_key: str, *, limit: int, window_seconds: int) -> bool:
+    if cache.add(cache_key, 1, window_seconds):
+        return True
+    try:
+        count = cache.incr(cache_key)
+    except ValueError:
+        cache.set(cache_key, 1, window_seconds)
+        return True
+    return count <= limit
 
 
 def _next_url(request, fallback="/"):
@@ -50,8 +74,18 @@ def login_view(request):
     if request.method == "POST":
         username = (request.POST.get("username") or "").strip()
         password = (request.POST.get("password") or "").strip()
+        ip = _client_ip(request)
+        rl_key = f"auth:login:v1:{ip}:{username.lower()}"
+        if not _rate_limit_allow(
+            rl_key,
+            limit=LOGIN_RATE_LIMIT,
+            window_seconds=LOGIN_RATE_WINDOW_SECONDS,
+        ):
+            messages.error(request, "尝试次数过多，请稍后再试")
+            return render(request, "accounts/login.html", {}, status=429)
         user = authenticate(request, username=username, password=password)
         if user:
+            cache.delete(rl_key)
             login(request, user)
             return redirect(_next_url(request))
         messages.error(request, "用户名或密码错误")
@@ -65,6 +99,15 @@ def signup_view(request):
         return redirect("/")
     context = {}
     if request.method == "POST":
+        ip = _client_ip(request)
+        rl_key = f"auth:signup:v1:{ip}"
+        if not _rate_limit_allow(
+            rl_key,
+            limit=SIGNUP_RATE_LIMIT,
+            window_seconds=SIGNUP_RATE_WINDOW_SECONDS,
+        ):
+            messages.error(request, "请求过于频繁，请稍后再试")
+            return render(request, "accounts/signup.html", context, status=429)
         username = (request.POST.get("username") or "").strip()
         email = (request.POST.get("email") or "").strip()
         password = (request.POST.get("password") or "").strip()
@@ -74,6 +117,9 @@ def signup_view(request):
             return render(request, "accounts/signup.html", context, status=400)
         if User.objects.filter(username=username).exists():
             messages.error(request, "用户名已存在")
+            return render(request, "accounts/signup.html", context, status=400)
+        if email and User.objects.filter(email__iexact=email).exists():
+            messages.error(request, "邮箱已存在")
             return render(request, "accounts/signup.html", context, status=400)
 
         strength_errors = password_strength_errors(password, username=username)
@@ -88,6 +134,7 @@ def signup_view(request):
     return render(request, "accounts/signup.html", context)
 
 
+@require_POST
 def logout_view(request):
     """注销当前用户并跳转。"""
     logout(request)
@@ -96,22 +143,74 @@ def logout_view(request):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+def reauth_view(request):
+    nxt = _next_url(request, fallback="/")
+    if request.method == "POST":
+        password = (request.POST.get("password") or "").strip()
+        user = authenticate(request, username=request.user.username, password=password)
+        if user:
+            request.session["reauth_at"] = int(timezone.now().timestamp())
+            return redirect(nxt)
+        messages.error(request, "密码错误")
+    return render(
+        request,
+        "accounts/reauth.html",
+        {"next": nxt, "has_password": request.user.has_usable_password()},
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def reauth_google(request):
+    try:
+        data = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return _json({"ok": False, "error": "invalid_json"}, 400)
+    cred = (data.get("credential") or "").strip()
+    if not cred:
+        return _json({"ok": False, "error": "missing_credential"}, 400)
+    try:
+        idinfo = id_token.verify_oauth2_token(
+            cred, grequests.Request(), settings.GOOGLE_CLIENT_ID
+        )
+        email = idinfo.get("email") or ""
+        email_verified = idinfo.get("email_verified", False)
+        if not email or not email_verified:
+            return _json({"ok": False, "error": "email_not_verified"}, 400)
+        if not request.user.email or request.user.email.lower() != email.lower():
+            return _json({"ok": False, "error": "email_mismatch"}, 403)
+        request.session["reauth_at"] = int(timezone.now().timestamp())
+        return _json({"ok": True})
+    except ValueError:
+        return _json({"ok": False, "error": "invalid_token"}, 400)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
 def profile_view(request):
     """展示并更新当前用户的个人资料。"""
 
     user = request.user
+    password_requires_old = user.has_usable_password()
     if request.method == "POST" and "password_submit" in request.POST:
         form = ProfileForm(instance=user)
-        password_form = PasswordUpdateForm(user=user, data=request.POST)
+        if password_requires_old:
+            password_form = PasswordUpdateForm(user=user, data=request.POST)
+        else:
+            password_form = PasswordSetForm(user=user, data=request.POST)
         if password_form.is_valid():
             password_form.save()
-            update_session_auth_hash(request, password_form.user)
+            update_session_auth_hash(request, user)
             messages.success(request, "密码已更新")
             return redirect("accounts:profile")
         messages.error(request, "密码更新失败，请检查提示")
     elif request.method == "POST":
         form = ProfileForm(request.POST, instance=user)
-        password_form = PasswordUpdateForm(user=user)
+        password_form = (
+            PasswordUpdateForm(user=user)
+            if password_requires_old
+            else PasswordSetForm(user=user)
+        )
         if form.is_valid():
             form.save()
             messages.success(request, "个人资料已更新")
@@ -119,7 +218,11 @@ def profile_view(request):
         messages.error(request, "请检查填写内容")
     else:
         form = ProfileForm(instance=user)
-        password_form = PasswordUpdateForm(user=user)
+        password_form = (
+            PasswordUpdateForm(user=user)
+            if password_requires_old
+            else PasswordSetForm(user=user)
+        )
 
     now = timezone.now()
     security_alerts: list[str] = []
@@ -156,13 +259,13 @@ def profile_view(request):
         "form": form,
         "user_obj": user,
         "password_form": password_form,
+        "password_requires_old": password_requires_old,
         "security_alerts": security_alerts,
         "security_summary": security_summary,
     }
     return render(request, "accounts/profile.html", context)
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 def google_onetap(request):
     """处理 Google One Tap 登录回调。"""
@@ -184,7 +287,10 @@ def google_onetap(request):
         sub = idinfo.get("sub") or ""
         if not email or not email_verified:
             return _json({"ok": False, "error": "email_not_verified"}, 400)
-        user = User.objects.filter(email__iexact=email).first()
+        matched = User.objects.filter(email__iexact=email)
+        if matched.count() > 1:
+            return _json({"ok": False, "error": "email_not_unique"}, 400)
+        user = matched.first()
         created = False
         if not user:
             username = _username_from_email(email)

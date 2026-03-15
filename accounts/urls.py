@@ -7,6 +7,8 @@ urlpatterns = [
     path("login/", views.login_view, name="login"),
     path("signup/", views.signup_view, name="signup"),
     path("logout/", views.logout_view, name="logout"),
+    path("reauth/", views.reauth_view, name="reauth"),
+    path("reauth/google", views.reauth_google, name="reauth_google"),
     path("profile/", views.profile_view, name="profile"),
     path("google/onetap", views.google_onetap, name="google_onetap"),
 ]

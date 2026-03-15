@@ -309,6 +309,10 @@ class TOTPEntryAudit(models.Model):
         TRASHED = "trashed", "移入回收站"
         RESTORED = "restored", "恢复"
         DELETED = "deleted", "永久删除"
+        EXPORTED = "exported", "导出"
+        OFFLINE_EXPORTED = "offline_exported", "离线包导出"
+        ONE_TIME_LINK_CREATED = "one_time_link_created", "创建一次性链接"
+        ONE_TIME_LINK_REVOKED = "one_time_link_revoked", "撤销一次性链接"
 
     entry = models.ForeignKey(
         TOTPEntry,

@@ -27,6 +27,9 @@ class OneTimeLinkTests(TestCase):
 
     def _create_link(self, **payload):
         self.client.force_login(self.user)
+        session = self.client.session
+        session["reauth_at"] = int(timezone.now().timestamp())
+        session.save()
         response = self.client.post(
             reverse("totp:one_time_create", args=[self.entry.pk]),
             payload or {"duration": 5, "max_views": 2},
@@ -44,6 +47,7 @@ class OneTimeLinkTests(TestCase):
         self.assertEqual(link.max_views, 3)
         self.assertTrue(link.expires_at)
         self.assertEqual(link.view_count, 0)
+        self.assertTrue(self.entry.audits.filter(action="one_time_link_created").exists())
 
     def test_view_consumes_quota(self):
         data = self._create_link(max_views=1)
@@ -67,11 +71,15 @@ class OneTimeLinkTests(TestCase):
         token = data["url"].rstrip("/").split("/")[-1]
 
         self.client.force_login(self.user)
+        session = self.client.session
+        session["reauth_at"] = int(timezone.now().timestamp())
+        session.save()
         resp = self.client.post(
             reverse("totp:one_time_invalidate", args=[link_id])
         )
         self.assertEqual(resp.status_code, 200)
         self.client.logout()
+        self.assertTrue(self.entry.audits.filter(action="one_time_link_revoked").exists())
 
         view_resp = self.client.get(reverse("totp:one_time_view", args=[token]))
         self.assertEqual(view_resp.status_code, 410)

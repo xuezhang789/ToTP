@@ -42,6 +42,7 @@ from .utils import (
 
 EXTERNAL_TOTP_RATE_LIMIT = 20
 EXTERNAL_TOTP_RATE_WINDOW_SECONDS = 60
+EXPORT_REAUTH_MAX_AGE_SECONDS = 5 * 60
 
 TEAM_MANAGER_ROLES = (
     TeamMembership.Role.OWNER,
@@ -68,6 +69,33 @@ def _team_memberships_for_user(user):
         TeamMembership.objects.filter(user=user)
         .select_related("team")
         .order_by("team__name")
+    )
+
+
+def _has_recent_reauth(request) -> bool:
+    ts = request.session.get("reauth_at")
+    if not ts:
+        return False
+    try:
+        value = int(ts)
+    except (TypeError, ValueError):
+        return False
+    now_ts = int(timezone.now().timestamp())
+    return now_ts - value <= EXPORT_REAUTH_MAX_AGE_SECONDS
+
+
+def _reauth_redirect(request):
+    return redirect(f"{reverse('accounts:reauth')}?next={quote(request.get_full_path())}")
+
+
+def _reauth_json(request):
+    return JsonResponse(
+        {
+            "ok": False,
+            "error": "reauth_required",
+            "redirect": f"{reverse('accounts:reauth')}?next={quote(reverse('totp:list'))}",
+        },
+        status=403,
     )
 
 
@@ -773,6 +801,7 @@ def delete_group(request, pk: int):
 
 
 @login_required
+@require_POST
 def delete_entry(request, pk: int):
     """删除指定的 TOTP 条目。"""
     e = _get_entry_for_user(request.user, pk, require_manage=True)
@@ -1170,10 +1199,72 @@ def _apply_import_entries(user, entries, *, team=None):
     if not entries:
         return created, skipped
 
-    if team is not None:
+    with transaction.atomic():
+        if team is not None:
+            existing_names = set(
+                TOTPEntry.objects.filter(
+                    team=team,
+                    name__in=[entry.name for entry in entries],
+                    is_deleted=False,
+                ).values_list("name", flat=True)
+            )
+
+            to_create = []
+            for entry in entries:
+                if entry.name in existing_names:
+                    skipped += 1
+                    continue
+                to_create.append(
+                    TOTPEntry(
+                        user=user,
+                        team=team,
+                        name=entry.name,
+                        secret_encrypted=encrypt_str(entry.secret),
+                    )
+                )
+                existing_names.add(entry.name)
+
+            if to_create:
+                created_entries = TOTPEntry.objects.bulk_create(to_create)
+                created = len(created_entries)
+                if created_entries:
+                    actor_obj = user if getattr(user, "is_authenticated", False) else None
+                    TOTPEntryAudit.objects.bulk_create(
+                        [
+                            TOTPEntryAudit(
+                                entry=created_entry,
+                                actor=actor_obj,
+                                action=TOTPEntryAudit.Action.CREATED,
+                                new_value=created_entry.name,
+                                metadata={"space": "team", "import": True},
+                            )
+                            for created_entry in created_entries
+                        ]
+                    )
+
+            return created, skipped
+
+        group_names = sorted({entry.group for entry in entries if entry.group})
+        groups = {
+            g.name: g
+            for g in Group.objects.filter(user=user, name__in=group_names)
+        }
+        missing = [
+            Group(user=user, name=name) for name in group_names if name not in groups
+        ]
+        if missing:
+            Group.objects.bulk_create(missing)
+            groups.update(
+                {
+                    g.name: g
+                    for g in Group.objects.filter(user=user, name__in=group_names)
+                }
+            )
+
         existing_names = set(
             TOTPEntry.objects.filter(
-                team=team,
+                user=user,
+                team__isnull=True,
                 name__in=[entry.name for entry in entries],
                 is_deleted=False,
             ).values_list("name", flat=True)
@@ -1184,11 +1275,12 @@ def _apply_import_entries(user, entries, *, team=None):
             if entry.name in existing_names:
                 skipped += 1
                 continue
+            group = groups.get(entry.group) if entry.group else None
             to_create.append(
                 TOTPEntry(
                     user=user,
-                    team=team,
                     name=entry.name,
+                    group=group,
                     secret_encrypted=encrypt_str(entry.secret),
                 )
             )
@@ -1206,77 +1298,11 @@ def _apply_import_entries(user, entries, *, team=None):
                             actor=actor_obj,
                             action=TOTPEntryAudit.Action.CREATED,
                             new_value=created_entry.name,
-                            metadata={"space": "team", "import": True},
+                            metadata={"space": "personal", "import": True},
                         )
                         for created_entry in created_entries
                     ]
                 )
-
-        return created, skipped
-
-    # 一次性查出需要的分组，缺失的分组批量创建
-    group_names = sorted({entry.group for entry in entries if entry.group})
-    # 预拉取已有分组，缺失的分组统一创建，避免逐条查询
-    groups = {
-        g.name: g
-        for g in Group.objects.filter(user=user, name__in=group_names)
-    }
-    missing = [
-        Group(user=user, name=name) for name in group_names if name not in groups
-    ]
-    if missing:
-        Group.objects.bulk_create(missing)
-        groups.update(
-            {
-                g.name: g
-                for g in Group.objects.filter(user=user, name__in=group_names)
-            }
-        )
-
-    existing_names = set(
-        # 先查出当前数据库中已有的名称，导入时直接过滤重复
-        TOTPEntry.objects.filter(
-            user=user,
-            team__isnull=True,
-            name__in=[entry.name for entry in entries],
-            is_deleted=False,
-        ).values_list("name", flat=True)
-    )
-
-    to_create = []
-    for entry in entries:
-        if entry.name in existing_names:
-            skipped += 1
-            continue
-        group = groups.get(entry.group) if entry.group else None
-        to_create.append(
-            # 使用 bulk_create 批量写入以提升导入性能
-            TOTPEntry(
-                user=user,
-                name=entry.name,
-                group=group,
-                secret_encrypted=encrypt_str(entry.secret),
-            )
-        )
-        existing_names.add(entry.name)  # 防止本次导入中出现重复名称
-
-    if to_create:
-        created_entries = TOTPEntry.objects.bulk_create(to_create)
-        created = len(created_entries)
-        if created_entries:
-            actor_obj = user if getattr(user, "is_authenticated", False) else None
-            TOTPEntryAudit.objects.bulk_create(
-                [
-                    TOTPEntryAudit(
-                        entry=created_entry,
-                        actor=actor_obj,
-                        action=TOTPEntryAudit.Action.CREATED,
-                        new_value=created_entry.name,
-                        metadata={"space": "personal", "import": True},
-                    )
-                    for created_entry in created_entries
-                ]
-            )
 
     return created, skipped
 
@@ -1296,6 +1322,10 @@ def _secret_preview(secret: str) -> str:
 def export_entries(request):
     """导出当前用户的全部密钥，以文本形式下载。"""
 
+    if not _has_recent_reauth(request):
+        messages.info(request, "为保障安全，请先确认密码后再导出")
+        return _reauth_redirect(request)
+
     queryset = TOTPEntry.objects.filter(
         user=request.user,
         team__isnull=True,
@@ -1308,12 +1338,22 @@ def export_entries(request):
         return redirect("totp:list")
 
     lines = []
+    audit_rows = []
     for entry in entries:
         secret = decrypt_str(entry.secret_encrypted)
         parts = [secret, entry.name]
         if entry.group:
             parts.append(entry.group.name)
         lines.append("|".join(parts))
+        audit_rows.append(
+            TOTPEntryAudit(
+                entry=entry,
+                actor=request.user,
+                action=TOTPEntryAudit.Action.EXPORTED,
+                old_value=entry.name,
+                metadata={"space": "personal"},
+            )
+        )
 
     content = "\n".join(lines)
     filename = timezone.now().strftime("totp-export-%Y%m%d-%H%M%S.txt")
@@ -1323,12 +1363,18 @@ def export_entries(request):
     response["Content-Disposition"] = (
         f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
     )
+    if audit_rows:
+        TOTPEntryAudit.objects.bulk_create(audit_rows)
     return response
 
 
 @login_required
 def export_offline_package(request):
     """生成离线只读 HTML，便于无网络环境查看验证码。"""
+
+    if not _has_recent_reauth(request):
+        messages.info(request, "为保障安全，请先确认密码后再导出")
+        return _reauth_redirect(request)
 
     queryset = (
         TOTPEntry.objects.filter(
@@ -1346,6 +1392,7 @@ def export_offline_package(request):
         return redirect("totp:list")
 
     entries_payload = []
+    audit_rows = []
     for entry in entries:
         secret = decrypt_str(entry.secret_encrypted)
         issuer = entry.group.name if entry.group else request.user.username
@@ -1359,6 +1406,15 @@ def export_offline_package(request):
                 "issuer": issuer,
             }
         )
+        audit_rows.append(
+            TOTPEntryAudit(
+                entry=entry,
+                actor=request.user,
+                action=TOTPEntryAudit.Action.OFFLINE_EXPORTED,
+                old_value=entry.name,
+                metadata={"space": "personal"},
+            )
+        )
 
     generated_at = timezone.now()
     filename = generated_at.strftime("totp-offline-%Y%m%d-%H%M%S.html")
@@ -1367,7 +1423,7 @@ def export_offline_package(request):
     context = {
         "generated_at": generated_at,
         "owner": request.user,
-        "entries_json": json.dumps(entries_payload, ensure_ascii=False),
+        "entries_payload": entries_payload,
         "entry_count": len(entries_payload),
     }
 
@@ -1376,6 +1432,8 @@ def export_offline_package(request):
     response["Content-Disposition"] = (
         f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
     )
+    if audit_rows:
+        TOTPEntryAudit.objects.bulk_create(audit_rows)
     return response
 
 
@@ -1551,6 +1609,9 @@ def one_time_link_audit(request):
 def create_one_time_link(request, pk: int):
     """为指定密钥生成一次性只读访问链接。"""
 
+    if not _has_recent_reauth(request):
+        return _reauth_json(request)
+
     entry = _get_entry_for_user(request.user, pk, require_manage=True)
     if entry.is_deleted:
         return JsonResponse(
@@ -1613,6 +1674,18 @@ def create_one_time_link(request, pk: int):
         # 如果缺少 Origin 头（例如旧浏览器），使用请求 scheme + host 拼装访问前缀
         origin = f"{request.scheme}://{request.get_host()}"
     url = f"{origin}{path}"
+    log_entry_audit(
+        entry,
+        request.user,
+        TOTPEntryAudit.Action.ONE_TIME_LINK_CREATED,
+        old_value=entry.name,
+        metadata={
+            "space": "team" if entry.team_id else "personal",
+            "one_time_link_id": link.id,
+            "expires_at": expires_at.isoformat(),
+            "max_views": link.max_views,
+        },
+    )
     return JsonResponse(
         {
             "ok": True,
@@ -1631,33 +1704,60 @@ def create_one_time_link(request, pk: int):
 def invalidate_one_time_link(request, pk: int):
     """立即失效指定的一次性访问链接。"""
 
+    if not _has_recent_reauth(request):
+        return _reauth_json(request)
+
     link = get_object_or_404(OneTimeLink, pk=pk, created_by=request.user)
+    entry = link.entry
+    log_entry_audit(
+        entry,
+        request.user,
+        TOTPEntryAudit.Action.ONE_TIME_LINK_REVOKED,
+        old_value=entry.name,
+        metadata={
+            "space": "team" if entry.team_id else "personal",
+            "one_time_link_id": link.id,
+        },
+    )
     link.invalidate()
     return JsonResponse({"ok": True})
 
 
 @never_cache
-@require_GET
+@require_POST
 def external_totp(request):
     """根据链接参数返回动态验证码，供未登录场景使用。"""
 
     if not _external_totp_rate_limit_allow(request):
-        return _external_totp_response(
-            request,
-            ok=False,
-            message="请求过于频繁，请稍后再试",
-            status_code=429,
+        return JsonResponse(
+            {"ok": False, "message": "请求过于频繁，请稍后再试"},
+            status=429,
         )
 
-    secret_raw = (request.GET.get("secret") or "").strip()
+    if request.GET.get("secret"):
+        return JsonResponse(
+            {"ok": False, "message": "请使用 POST 方式提交 secret"},
+            status=400,
+        )
+
+    data = None
+    if (request.content_type or "").startswith("application/json"):
+        try:
+            data = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            data = None
+    if not isinstance(data, dict):
+        data = request.POST
+
+    secret_raw = (data.get("secret") or "").strip()
     if not secret_raw:
-        return _external_totp_response(request, ok=False, message="缺少 secret 参数")
+        return JsonResponse({"ok": False, "message": "缺少 secret 参数"}, status=400)
 
     secret = normalize_google_secret(secret_raw)
     if not secret:
-        return _external_totp_response(request, ok=False, message="密钥格式无效")
+        return JsonResponse({"ok": False, "message": "密钥格式无效"}, status=400)
 
-    digits = request.GET.get("digits") or "6"
+    digits = data.get("digits") or "6"
     try:
         digits_int = int(digits)
     except (TypeError, ValueError):
@@ -1665,7 +1765,7 @@ def external_totp(request):
     # 限制验证码长度在合理范围内，避免异常参数导致计算失败
     digits_int = min(max(digits_int, 4), 8)
 
-    period = request.GET.get("period") or "30"
+    period = data.get("period") or "30"
     try:
         period_int = int(period)
     except (TypeError, ValueError):
@@ -1691,7 +1791,7 @@ def external_totp(request):
         "secret_preview": _secret_preview(secret),
     }
 
-    return _external_totp_response(request, **payload)
+    return JsonResponse(payload, status=200)
 
 
 @never_cache

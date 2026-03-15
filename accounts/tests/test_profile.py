@@ -124,3 +124,22 @@ class ProfileViewTests(TestCase):
         password_form = response.context["password_form"]
         self.assertTrue(password_form.errors)
         self.assertIn("密码需至少包含", password_form.errors.get("new_password2", [""])[0])
+
+    def test_passwordless_account_can_set_password(self):
+        user = self.user_model.objects.create_user(
+            username="google",
+            password="temp12345",
+            email="google@example.com",
+        )
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+        self.client.force_login(user)
+        payload = {
+            "password_submit": "1",
+            "new_password1": "EvenStronger456!",
+            "new_password2": "EvenStronger456!",
+        }
+        response = self.client.post(reverse("accounts:profile"), payload, follow=True)
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("EvenStronger456!"))

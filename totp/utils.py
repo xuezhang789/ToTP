@@ -4,29 +4,45 @@ from cryptography.fernet import Fernet
 from django.conf import settings
 
 _B32_ALPHABET = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
-_FERNET = None
+_FERNETS = None
 
 
-def _fernet():
-    """返回基于 ``SECRET_KEY`` 生成的缓存 ``Fernet`` 实例。"""
+def _derive_fernet_key(material: str) -> bytes:
+    digest = hashlib.sha256(material.encode()).digest()
+    return base64.urlsafe_b64encode(digest)
 
-    global _FERNET
-    if _FERNET is None:
-        # 通过 SECRET_KEY 计算出一个稳定的派生密钥，避免在配置变更后无法解密旧数据
-        digest = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
-        key = base64.urlsafe_b64encode(digest[:32])
-        _FERNET = Fernet(key)
-    return _FERNET
+
+def _fernets():
+    """返回缓存的 Fernet 实例列表，按优先级从高到低。"""
+
+    global _FERNETS
+    if _FERNETS is None:
+        materials: list[str] = []
+        enc_keys = getattr(settings, "TOTP_ENC_KEYS", None) or []
+        for k in enc_keys:
+            if k and isinstance(k, str):
+                materials.append(k)
+        materials.append(settings.SECRET_KEY)
+        _FERNETS = [Fernet(_derive_fernet_key(m)) for m in materials]
+    return _FERNETS
 
 
 def encrypt_str(s: str) -> str:
     """对字符串进行对称加密。"""
-    return _fernet().encrypt(s.encode()).decode()
+    return _fernets()[0].encrypt(s.encode()).decode()
 
 
 def decrypt_str(token: str) -> str:
     """解密 ``encrypt_str`` 生成的密文。"""
-    return _fernet().decrypt(token.encode()).decode()
+    last_exc = None
+    for f in _fernets():
+        try:
+            return f.decrypt(token.encode()).decode()
+        except Exception as exc:
+            last_exc = exc
+    if last_exc:
+        raise last_exc
+    raise ValueError("invalid token")
 
 
 def parse_otpauth(uri: str):

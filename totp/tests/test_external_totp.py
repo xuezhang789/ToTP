@@ -7,23 +7,22 @@ class ExternalTotpRateLimitTests(TestCase):
     def setUp(self):
         cache.clear()
         self.url = reverse("totp:external_totp")
-        self.params = {
+        self.payload = {
             "secret": "JBSWY3DPEHPK3PXP",
-            "format": "json",
         }
 
     def test_allows_requests_within_limit(self):
         for _ in range(20):
-            response = self.client.get(self.url, self.params)
+            response = self.client.post(self.url, self.payload)
             self.assertEqual(response.status_code, 200)
             payload = response.json()
             self.assertTrue(payload["ok"])
 
     def test_blocks_requests_over_limit(self):
         for _ in range(20):
-            self.client.get(self.url, self.params)
+            self.client.post(self.url, self.payload)
 
-        response = self.client.get(self.url, self.params)
+        response = self.client.post(self.url, self.payload)
         self.assertEqual(response.status_code, 429)
         payload = response.json()
         self.assertFalse(payload["ok"])

@@ -437,9 +437,10 @@
 
     <p class="footer-note">&copy; {{ generated_at|date:"Y" }} 离线导出 · 无网络亦可安全使用 · 主站：<strong>https://2fa.97.cx/</strong></p>
 </div>
+{{ entries_payload|json_script:"entries-data" }}
 <script>
 (function(){
-  const RAW_ENTRIES = {{ entries_json|safe }};
+  const RAW_ENTRIES = JSON.parse(document.getElementById('entries-data').textContent || '[]');
   const uaInfo = document.getElementById('uaInfo');
   if (uaInfo) {
     try {

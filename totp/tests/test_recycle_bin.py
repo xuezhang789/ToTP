@@ -24,7 +24,7 @@ class RecycleBinTests(TestCase):
             secret_encrypted=self.secret,
         )
 
-        response = self.client.get(reverse("totp:delete", args=[entry.pk]), follow=True)
+        response = self.client.post(reverse("totp:delete", args=[entry.pk]), follow=True)
         self.assertEqual(response.status_code, 200)
 
         trash_entry = TOTPEntry.all_objects.get(pk=entry.pk)
@@ -75,7 +75,7 @@ class RecycleBinTests(TestCase):
             name="Sample",
             secret_encrypted=self.secret,
         )
-        resp1 = self.client.get(reverse("totp:delete", args=[first.pk]), follow=True)
+        resp1 = self.client.post(reverse("totp:delete", args=[first.pk]), follow=True)
         self.assertEqual(resp1.status_code, 200)
 
         second = TOTPEntry.objects.create(
@@ -84,7 +84,7 @@ class RecycleBinTests(TestCase):
             secret_encrypted=self.secret,
         )
 
-        resp2 = self.client.get(reverse("totp:delete", args=[second.pk]), follow=True)
+        resp2 = self.client.post(reverse("totp:delete", args=[second.pk]), follow=True)
         self.assertEqual(resp2.status_code, 200)
 
         trashed = TOTPEntry.all_objects.filter(

@@ -32,6 +32,7 @@ class ParseResult:
 
 MAX_NAME_LEN = 64
 MAX_GROUP_LEN = 40
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 
 
 def parse_manual_text(text: str) -> ParseResult:
@@ -77,6 +78,8 @@ def parse_import_payload(*, manual_text: str | None = None, uploaded_file=None) 
     raw_bytes = uploaded_file.read()
     if not raw_bytes:
         return ParseResult(entries=[], warnings=[], errors=["上传文件为空"])
+    if len(raw_bytes) > MAX_UPLOAD_BYTES:
+        return ParseResult(entries=[], warnings=[], errors=["上传文件过大"])
 
     # 默认尝试 UTF-8 并移除 BOM
     text = raw_bytes.decode("utf-8-sig", errors="ignore")

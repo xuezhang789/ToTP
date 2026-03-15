@@ -165,23 +165,24 @@
     resetTimer(payload.remaining);
   }
 
-  function buildParams() {
-    const params = new URLSearchParams();
-    params.set('secret', secretInput.value.trim());
-    params.set('digits', digitsInput.value);
-    params.set('period', periodInput.value);
-    params.set('format', 'json');
-    return params;
+  function buildPayload() {
+    return {
+      secret: secretInput.value.trim(),
+      digits: digitsInput.value,
+      period: periodInput.value
+    };
   }
 
   function refreshCode() {
     if (!endpoint) return;
-    const params = buildParams();
     refreshBtn?.setAttribute('disabled', 'disabled');
-    fetch(`${endpoint}?${params.toString()}`, {
+    fetch(endpoint, {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'Accept': 'application/json'
-      }
+      },
+      body: JSON.stringify(buildPayload())
     })
       .then((resp) => resp.json())
       .then(renderPayload)

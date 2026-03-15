@@ -46,10 +46,16 @@
 {% endblock %}
 {% block scripts %}
 <script>
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+      return '';
+    }
     async function onetapLogin(credential){
       const r = await fetch("{% url 'accounts:google_onetap' %}", {
         method: "POST",
-        headers: {"Content-Type":"application/json"},
+        headers: {"Content-Type":"application/json","X-CSRFToken": getCookie("csrftoken")},
         body: JSON.stringify({credential})
       });
       if(r.ok){

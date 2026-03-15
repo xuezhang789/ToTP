@@ -2,7 +2,7 @@ import re
 
 from django import forms
 from django.contrib.auth import get_user_model
-from django.contrib.auth.forms import PasswordChangeForm
+from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
 
 
 User = get_user_model()
@@ -113,6 +113,34 @@ class PasswordUpdateForm(PasswordChangeForm):
                 attrs["autocomplete"] = "current-password"
             else:
                 attrs["autocomplete"] = "new-password"
+            field.widget.attrs.update(attrs)
+            if label:
+                field.label = label
+
+    def clean_new_password2(self):
+        password = super().clean_new_password2()
+        errors = password_strength_errors(password, username=self.user.username)
+        if errors:
+            raise forms.ValidationError(errors)
+        return password
+
+
+class PasswordSetForm(SetPasswordForm):
+    """为无本地密码的账号设置密码，并做本地强度校验。"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        field_configs = {
+            "new_password1": ("新密码", "至少 8 位，包含多种字符"),
+            "new_password2": ("确认新密码", "再次输入新密码"),
+        }
+        for name, field in self.fields.items():
+            label, placeholder = field_configs.get(name, ("", ""))
+            attrs = {
+                "class": "form-control",
+                "placeholder": placeholder,
+                "autocomplete": "new-password",
+            }
             field.widget.attrs.update(attrs)
             if label:
                 field.label = label

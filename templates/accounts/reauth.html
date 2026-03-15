@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% block title %}确认密码 - TOTP管理平台{% endblock %}
+{% block head %}
+{{ block.super }}
+<meta name="google-signin-client_id" content="{{ GOOGLE_CLIENT_ID }}">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-6 col-lg-5">
+        <div class="card shadow-sm border-0 rounded-4">
+            <div class="card-body p-4">
+                <div class="text-center mb-3">
+                    <i class="bi bi-shield-check text-primary fs-1"></i>
+                </div>
+                <h1 class="h4 mb-3 text-center">确认密码</h1>
+                {% if has_password %}
+                    <form method="post" action="{% url 'accounts:reauth' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ next }}">
+                        <div class="mb-3">
+                            <label class="form-label">当前密码</label>
+                            <input type="password" class="form-control" name="password" autocomplete="current-password" required>
+                        </div>
+                        <button class="btn btn-primary w-100" type="submit">继续</button>
+                    </form>
+                {% else %}
+                    <p class="text-muted small mb-3">该账号未设置本地密码，请使用 Google 再次确认后继续。</p>
+                    <div id="g_id_onload"
+                         data-client_id="{{ GOOGLE_CLIENT_ID }}"
+                         data-context="signin"
+                         data-ux_mode="popup"
+                         data-callback="handleReauthCredential"
+                         data-auto_prompt="true">
+                    </div>
+                    <div class="g_id_signin" data-type="standard" data-shape="rect" data-theme="outline"
+                         data-text="continue_with" data-size="large" data-logo_alignment="left"></div>
+                    <input type="hidden" id="reauth-next" value="{{ next }}">
+                {% endif %}
+                <div class="text-center mt-3 small">
+                    <a class="text-decoration-none" href="{% url 'accounts:profile' %}">返回个人资料</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ block.super }}
+<script>
+  (function () {
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+      return '';
+    }
+    window.handleReauthCredential = async function (resp) {
+      const nextValue = document.getElementById('reauth-next')?.value || '/';
+      const r = await fetch("{% url 'accounts:reauth_google' %}", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({credential: resp.credential})
+      });
+      if (r.ok) {
+        window.location.href = nextValue;
+      } else {
+        alert('确认失败，请重试。');
+      }
+    }
+  })();
+</script>
+{% endblock %}
