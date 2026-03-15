@@ -4,7 +4,7 @@ import secrets
 import csv
 import base64
 import os
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from urllib.parse import quote
 
 from django.contrib import messages
@@ -198,6 +198,11 @@ def dashboard(request):
             .distinct()
         )
         today = timezone.localdate()
+        today_start = timezone.make_aware(
+            datetime.combine(today, time.min),
+            timezone.get_current_timezone(),
+        )
+        tomorrow_start = today_start + timedelta(days=1)
         group_list = list(Group.objects.filter(user=request.user).order_by("name"))
         agg = accessible_entries.aggregate(
             total_entries=Count("id", distinct=True),
@@ -213,7 +218,7 @@ def dashboard(request):
             ),
             today_added_total=Count(
                 "id",
-                filter=Q(created_at__date=today),
+                filter=Q(created_at__gte=today_start, created_at__lt=tomorrow_start),
                 distinct=True,
             ),
         )
@@ -1730,6 +1735,8 @@ def export_entries(request):
     response["Content-Disposition"] = (
         f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
     )
+    response["Cache-Control"] = "no-store"
+    response["Pragma"] = "no-cache"
     if audit_rows:
         TOTPEntryAudit.objects.bulk_create(audit_rows)
     return response
@@ -1817,6 +1824,8 @@ def export_encrypted_package(request):
     response["Content-Disposition"] = (
         f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
     )
+    response["Cache-Control"] = "no-store"
+    response["Pragma"] = "no-cache"
     if audit_rows:
         TOTPEntryAudit.objects.bulk_create(audit_rows)
     return response
@@ -1886,6 +1895,8 @@ def export_offline_package(request):
     response["Content-Disposition"] = (
         f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
     )
+    response["Cache-Control"] = "no-store"
+    response["Pragma"] = "no-cache"
     if audit_rows:
         TOTPEntryAudit.objects.bulk_create(audit_rows)
     return response
@@ -2135,11 +2146,7 @@ def create_one_time_link(request, pk: int):
         )
 
     path = reverse("totp:one_time_view", args=[token])
-    origin = request.headers.get("Origin")
-    if not origin:
-        # 如果缺少 Origin 头（例如旧浏览器），使用请求 scheme + host 拼装访问前缀
-        origin = f"{request.scheme}://{request.get_host()}"
-    url = f"{origin}{path}"
+    url = request.build_absolute_uri(path)
     log_entry_audit(
         entry,
         request.user,

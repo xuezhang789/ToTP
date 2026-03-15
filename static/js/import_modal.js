@@ -230,16 +230,33 @@
       importPreviewBody.replaceChildren();
       entries.forEach((entry) => {
         const tr = document.createElement('tr');
-        const status = entry.exists
-          ? '<span class="badge text-bg-secondary">已存在</span>'
-          : '<span class="badge text-bg-success">新建</span>';
-        tr.innerHTML = `
-          <td>${entry.name || '—'}</td>
-          <td>${entry.group || '—'}</td>
-          <td>${entry.source || '—'}</td>
-          <td class="text-nowrap">${status}</td>
-          <td class="text-nowrap"><code>${entry.secret_preview || ''}</code></td>
-        `;
+        const nameTd = document.createElement('td');
+        nameTd.textContent = entry.name || '—';
+
+        const groupTd = document.createElement('td');
+        groupTd.textContent = entry.group || '—';
+
+        const sourceTd = document.createElement('td');
+        sourceTd.textContent = entry.source || '—';
+
+        const statusTd = document.createElement('td');
+        statusTd.className = 'text-nowrap';
+        const badge = document.createElement('span');
+        badge.className = entry.exists ? 'badge text-bg-secondary' : 'badge text-bg-success';
+        badge.textContent = entry.exists ? '已存在' : '新建';
+        statusTd.appendChild(badge);
+
+        const secretTd = document.createElement('td');
+        secretTd.className = 'text-nowrap';
+        const code = document.createElement('code');
+        code.textContent = entry.secret_preview || '';
+        secretTd.appendChild(code);
+
+        tr.appendChild(nameTd);
+        tr.appendChild(groupTd);
+        tr.appendChild(sourceTd);
+        tr.appendChild(statusTd);
+        tr.appendChild(secretTd);
         importPreviewBody.appendChild(tr);
       });
       if (importPreviewSummary) {

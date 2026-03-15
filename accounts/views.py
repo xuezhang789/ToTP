@@ -71,6 +71,7 @@ def login_view(request):
     """处理用户登录逻辑。"""
     if request.user.is_authenticated:
         return redirect(_next_url(request))
+    nxt = _next_url(request)
     if request.method == "POST":
         username = (request.POST.get("username") or "").strip()
         password = (request.POST.get("password") or "").strip()
@@ -82,14 +83,14 @@ def login_view(request):
             window_seconds=LOGIN_RATE_WINDOW_SECONDS,
         ):
             messages.error(request, "尝试次数过多，请稍后再试")
-            return render(request, "accounts/login.html", {}, status=429)
+            return render(request, "accounts/login.html", {"next": nxt}, status=429)
         user = authenticate(request, username=username, password=password)
         if user:
             cache.delete(rl_key)
             login(request, user)
             return redirect(_next_url(request))
         messages.error(request, "用户名或密码错误")
-    return render(request, "accounts/login.html", {})
+    return render(request, "accounts/login.html", {"next": nxt})
 
 
 @require_http_methods(["GET", "POST"])
@@ -97,7 +98,7 @@ def signup_view(request):
     """处理用户注册逻辑。"""
     if request.user.is_authenticated:
         return redirect("/")
-    context = {}
+    context = {"next": _next_url(request, fallback="/")}
     if request.method == "POST":
         ip = _client_ip(request)
         rl_key = f"auth:signup:v1:{ip}"

@@ -56,7 +56,7 @@
         body: JSON.stringify({credential})
       });
       if(r.ok){
-        window.location.href = "{{ request.GET.next|default:'/' }}";
+        window.location.href = "{{ next|default:'/'|escapejs }}";
       }else{
         const t = await r.text();
         console.error("Google One Tap failed:", t);
