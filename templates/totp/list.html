@@ -193,7 +193,7 @@
                 <th>名称</th>
                 <th>分组</th>
                 <th class="text-nowrap">验证码</th>
-                <th class="text-nowrap">有效期</th>
+                <th class="text-nowrap d-none d-md-table-cell">有效期</th>
                 <th class="text-nowrap">操作</th>
             </tr>
             </thead>
@@ -252,7 +252,7 @@
 </div>
 
 <div class="modal fade" id="shareLinkModal" tabindex="-1" aria-labelledby="shareLinkModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="shareLinkModalLabel">生成一次性访问链接</h5>
@@ -308,7 +308,7 @@
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button>
                 <button type="button" class="btn btn-primary" id="shareLinkSubmitBtn">
                     <span class="spinner-border spinner-border-sm me-2 d-none" id="shareLinkSpinner" role="status" aria-hidden="true"></span>
@@ -321,7 +321,7 @@
 </div>
 
 <div class="modal fade" id="renameModal" tabindex="-1" aria-labelledby="renameModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="renameModalLabel">修改密钥名称</h5>
@@ -339,7 +339,7 @@
                     </div>
                 </form>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="button" class="btn btn-primary" id="renameSubmitBtn">
                     <span class="spinner-border spinner-border-sm d-none me-2" id="renameSpinner" role="status" aria-hidden="true"></span>

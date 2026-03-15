@@ -102,6 +102,7 @@
         copyBtn: tr.querySelector('.copy-btn'),
         progressEl: tr.querySelector('.progress-bar'),
         remainEl: tr.querySelector('.remain'),
+        remainMobileEl: tr.querySelector('.remain-mobile'),
         period: Number(tr.dataset.period) || 30,
         lastCode: null,
         lastRemain: null,
@@ -222,6 +223,9 @@
     }
     if (row.remainEl && Number.isFinite(remain) && remain !== row.lastRemain) {
       row.remainEl.textContent = `${remain}s`;
+    }
+    if (row.remainMobileEl && Number.isFinite(remain) && remain !== row.lastRemain) {
+      row.remainMobileEl.textContent = `${remain}s`;
     }
     if (Number.isFinite(remain)) {
       row.lastRemain = remain;
@@ -1092,4 +1096,3 @@
     }
   }
 })();
-

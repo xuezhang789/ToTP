@@ -50,4 +50,19 @@
     .navbar .navbar-collapse .navbar-actions {
         margin-top: 0.5rem;
     }
+    .table-responsive {
+        -webkit-overflow-scrolling: touch;
+    }
+    .page-link {
+        min-height: 44px;
+        min-width: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.8rem;
+    }
+    .nav-tabs .nav-link {
+        min-height: 44px;
+        border-radius: 0.8rem 0.8rem 0 0;
+    }
 }
