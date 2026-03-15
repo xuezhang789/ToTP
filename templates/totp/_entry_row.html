@@ -33,7 +33,7 @@
     </td>
     <td class="text-nowrap">
         <span class="badge text-bg-dark code-badge code-text" data-code-placeholder="••••••">••••••</span>
-        <button class="btn btn-sm btn-outline-secondary btn-touch copy-btn ms-1" type="button" data-code="" data-label-default="复制" title="复制">
+        <button class="btn btn-sm btn-outline-secondary btn-touch copy-btn ms-1" type="button" data-code="" data-label-default="复制" title="复制" aria-label="复制验证码">
             <i class="bi bi-clipboard"></i>
         </button>
     </td>
@@ -48,7 +48,7 @@
             {% if e.can_manage %}
             <button class="btn btn-sm btn-outline-primary btn-touch share-link-btn" type="button"
                     data-entry-id="{{ e.id }}" data-entry-name="{{ e.name }}"
-                    title="生成临时访问链接">
+                    title="生成临时访问链接" aria-label="生成一次性访问链接">
                 <i class="bi bi-link-45deg"></i>
             </button>
             <form method="post" action="{% url 'totp:delete' e.id %}">

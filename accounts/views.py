@@ -287,10 +287,10 @@ def google_onetap(request):
         sub = idinfo.get("sub") or ""
         if not email or not email_verified:
             return _json({"ok": False, "error": "email_not_verified"}, 400)
-        matched = User.objects.filter(email__iexact=email)
-        if matched.count() > 1:
+        users = list(User.objects.filter(email__iexact=email)[:2])
+        if len(users) > 1:
             return _json({"ok": False, "error": "email_not_unique"}, 400)
-        user = matched.first()
+        user = users[0] if users else None
         created = False
         if not user:
             username = _username_from_email(email)

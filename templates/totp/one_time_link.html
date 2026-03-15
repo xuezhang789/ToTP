@@ -133,30 +133,11 @@
     }, 1000);
   }
 
-  function copyToClipboard(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(text);
-    }
-    const temp = document.createElement('textarea');
-    temp.value = text;
-    temp.style.position = 'fixed';
-    temp.style.opacity = '0';
-    document.body.appendChild(temp);
-    temp.focus({ preventScroll: true });
-    temp.select();
-    try {
-      document.execCommand('copy');
-    } finally {
-      document.body.removeChild(temp);
-    }
-    return Promise.resolve();
-  }
-
   copyBtn?.addEventListener('click', () => {
     if (!code) {
       return;
     }
-    copyToClipboard(code.textContent.trim())
+    (window.appCopyToClipboard ? window.appCopyToClipboard(code.textContent.trim()) : Promise.reject(new Error('copy_not_supported')))
       .then(() => {
         copyBtn.classList.remove('btn-primary');
         copyBtn.classList.add('btn-success');
@@ -166,6 +147,11 @@
           copyBtn.classList.add('btn-primary');
           copyBtn.innerHTML = '<i class="bi bi-clipboard-check me-2"></i>复制验证码';
         }, 1500);
+      })
+      .catch(() => {
+        if (window.appToast) {
+          window.appToast('danger', '复制失败，请手动复制。');
+        }
       });
   });
 

@@ -557,7 +557,25 @@
     row._data.copyBtn?.addEventListener('click', () => {
       const code = row._data.codeEl?.textContent.trim();
       if (!code) return;
-      navigator.clipboard?.writeText(code).then(() => {
+      const copy = () => {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          return navigator.clipboard.writeText(code);
+        }
+        const temp = document.createElement('textarea');
+        temp.value = code;
+        temp.style.position = 'fixed';
+        temp.style.opacity = '0';
+        document.body.appendChild(temp);
+        temp.focus({ preventScroll: true });
+        temp.select();
+        try {
+          document.execCommand('copy');
+        } finally {
+          document.body.removeChild(temp);
+        }
+        return Promise.resolve();
+      };
+      copy().then(() => {
         row._data.copyBtn.textContent = '已复制';
         row._data.copyBtn.disabled = true;
         setTimeout(() => {

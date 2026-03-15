@@ -914,18 +914,17 @@ def team_revoke_all_share_links(request, team_id: int):
 
     now = timezone.now()
     queryset = OneTimeLink.active.filter(entry__team=team)
-    count = queryset.count()
-    if not count:
+    updated = queryset.update(revoked_at=now)
+    if not updated:
         messages.info(request, "当前没有需要撤销的有效分享链接")
         return redirect("totp:teams")
-    queryset.update(revoked_at=now)
     log_team_audit(
         team,
         request.user,
         TeamAudit.Action.LINKS_REVOKED_ALL,
-        metadata={"count": count},
+        metadata={"count": updated},
     )
-    messages.success(request, f"已撤销 {count} 条有效分享链接")
+    messages.success(request, f"已撤销 {updated} 条有效分享链接")
     return redirect("totp:teams")
 
 
@@ -1176,7 +1175,6 @@ def trash_bulk_action(request):
         return redirect("totp:trash")
 
     if action == "restore":
-        restored = 0
         conflicts = []
         now = timezone.now()
         personal_names = {e.name for e in entries if not e.team_id}
@@ -1204,6 +1202,7 @@ def trash_bulk_action(request):
                 ).values_list("team_id", "name")
             )
 
+        ids_to_restore: list[int] = []
         audit_rows = []
         for entry in entries:
             if entry.team_id:
@@ -1213,13 +1212,10 @@ def trash_bulk_action(request):
             if duplicate_exists:
                 conflicts.append(entry.name)
                 continue
-            entry.is_deleted = False
-            entry.deleted_at = None
-            entry.updated_at = now
-            entry.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+            ids_to_restore.append(entry.pk)
             audit_rows.append(
                 TOTPEntryAudit(
-                    entry=entry,
+                    entry_id=entry.pk,
                     actor=request.user,
                     action=TOTPEntryAudit.Action.RESTORED,
                     new_value=entry.name,
@@ -1229,9 +1225,16 @@ def trash_bulk_action(request):
                     },
                 )
             )
-            restored += 1
-        if audit_rows:
-            TOTPEntryAudit.objects.bulk_create(audit_rows)
+
+        restored = 0
+        if ids_to_restore:
+            with transaction.atomic():
+                restored = (
+                    TOTPEntry.all_objects.filter(pk__in=ids_to_restore, is_deleted=True)
+                    .update(is_deleted=False, deleted_at=None, updated_at=now)
+                )
+                if audit_rows:
+                    TOTPEntryAudit.objects.bulk_create(audit_rows)
 
         if restored:
             messages.success(request, f"已恢复 {restored} 条密钥")
@@ -1245,10 +1248,11 @@ def trash_bulk_action(request):
         return redirect("totp:trash")
 
     if action == "delete":
-        count = len(entries)
+        ids = [entry.pk for entry in entries]
+        count = len(ids)
         audit_rows = [
             TOTPEntryAudit(
-                entry=entry,
+                entry_id=entry.pk,
                 actor=request.user,
                 action=TOTPEntryAudit.Action.DELETED,
                 old_value=entry.name,
@@ -1262,7 +1266,7 @@ def trash_bulk_action(request):
         with transaction.atomic():
             if audit_rows:
                 TOTPEntryAudit.objects.bulk_create(audit_rows)
-            TOTPEntry.all_objects.filter(pk__in=[entry.pk for entry in entries]).delete()
+            TOTPEntry.all_objects.filter(pk__in=ids).delete()
         messages.success(request, f"已永久删除 {count} 条密钥")
         return redirect("totp:trash")
 
@@ -2155,7 +2159,11 @@ def invalidate_one_time_link(request, pk: int):
     if not _has_recent_reauth(request):
         return _reauth_json(request)
 
-    link = get_object_or_404(OneTimeLink, pk=pk, created_by=request.user)
+    link = get_object_or_404(
+        OneTimeLink.objects.select_related("entry", "entry__team"),
+        pk=pk,
+        created_by=request.user,
+    )
     entry = link.entry
     log_entry_audit(
         entry,
@@ -2273,7 +2281,7 @@ def one_time_view(request, token: str):
             # select_for_update 保证同一链接在并发访问时顺序处理，避免剩余次数被同时扣减
             link = (
                 OneTimeLink.objects.select_for_update()
-                .select_related("entry", "entry__user", "entry__group")
+                .select_related("entry", "entry__user", "entry__group", "created_by")
                 .get(token_hash=token_hash)
             )
 

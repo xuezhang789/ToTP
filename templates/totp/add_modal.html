@@ -1,10 +1,10 @@
-<div class="modal fade" id="addModal" tabindex="-1">
+<div class="modal fade" id="addModal" tabindex="-1" aria-labelledby="addModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
         <div class="modal-content border-0 rounded-3 shadow">
             <form method="post" action="{% url 'totp:add' %}">
                 {% csrf_token %}
-                <div class="modal-header"><h5 class="modal-title">添加密钥</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header"><h5 class="modal-title" id="addModalLabel">添加密钥</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
                 </div>
                 <div class="modal-body">
                     <div id="addEntryAlert" class="alert alert-danger d-none" role="alert"></div>

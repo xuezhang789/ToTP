@@ -205,7 +205,11 @@
   });
 
   copyBtn?.addEventListener('click', () => {
-    navigator.clipboard.writeText(codeEl.textContent.trim()).then(() => {
+    const value = codeEl.textContent.trim();
+    const copier = window.appCopyToClipboard
+      ? window.appCopyToClipboard
+      : (text) => navigator.clipboard.writeText(text);
+    copier(value).then(() => {
       copyBtn.classList.remove('btn-outline-secondary');
       copyBtn.classList.add('btn-success');
       copyBtn.innerHTML = '<i class="bi bi-check2"></i> 已复制';

@@ -20,7 +20,7 @@
     const toastEl = document.createElement('div');
     toastEl.className = `toast align-items-center text-bg-${variant} border-0`;
     toastEl.setAttribute('role', 'alert');
-    toastEl.setAttribute('aria-live', 'assertive');
+    toastEl.setAttribute('aria-live', variant === 'danger' ? 'assertive' : 'polite');
     toastEl.setAttribute('aria-atomic', 'true');
     toastEl.innerHTML = `
       <div class="d-flex">
@@ -61,6 +61,31 @@
     }
   }
 
+  function appGetCsrfToken() {
+    const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  function appCopyToClipboard(text) {
+    const value = text == null ? '' : String(text);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(value);
+    }
+    const temp = document.createElement('textarea');
+    temp.value = value;
+    temp.style.position = 'fixed';
+    temp.style.opacity = '0';
+    document.body.appendChild(temp);
+    temp.focus({ preventScroll: true });
+    temp.select();
+    try {
+      document.execCommand('copy');
+    } finally {
+      document.body.removeChild(temp);
+    }
+    return Promise.resolve();
+  }
+
   function getConfirmElements() {
     return {
       modalEl: document.getElementById('appConfirmModal'),
@@ -78,6 +103,7 @@
     confirmText = '确认',
     confirmVariant = 'danger',
     hint = '',
+    triggerEl = null,
   } = {}) {
     const bootstrap = ensureBootstrap();
     const { modalEl, titleEl, messageEl, hintEl, okBtn, cancelBtn } = getConfirmElements();
@@ -107,10 +133,23 @@
         cancelBtn.removeEventListener('click', onCancel);
         modalEl.removeEventListener('hidden.bs.modal', onHidden);
       }
+      function restoreFocus() {
+        if (!triggerEl || !(triggerEl instanceof HTMLElement) || !triggerEl.isConnected) {
+          return;
+        }
+        try {
+          triggerEl.focus({ preventScroll: true });
+        } catch (e) {
+          triggerEl.focus();
+        }
+      }
       function settle(value) {
         if (settled) return;
         settled = true;
         cleanup();
+        if (!value) {
+          restoreFocus();
+        }
         resolve(value);
       }
       function onOk() {
@@ -186,7 +225,7 @@
     }
 
     event.preventDefault();
-    const ok = await appConfirm(getConfirmPayload(el));
+    const ok = await appConfirm({ ...getConfirmPayload(el), triggerEl: el });
     if (!ok) {
       return;
     }
@@ -200,5 +239,7 @@
   window.appToast = appToast;
   window.appInlineAlert = appInlineAlert;
   window.appNotify = appNotify;
+  window.appGetCsrfToken = appGetCsrfToken;
+  window.appCopyToClipboard = appCopyToClipboard;
   window.appConfirm = appConfirm;
 })();

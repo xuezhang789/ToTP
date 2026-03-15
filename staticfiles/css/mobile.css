@@ -1,0 +1,53 @@
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+    .app-main {
+        padding: 1rem;
+    }
+    .navbar-brand span {
+        font-size: 1rem;
+    }
+    .navbar .navbar-collapse {
+        padding-top: 0.75rem;
+        padding-bottom: 0.5rem;
+    }
+    .navbar .navbar-nav .nav-link {
+        padding: 0.75rem 1rem;
+        border-radius: 0.9rem;
+    }
+    .navbar .navbar-toggler {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    .btn,
+    .btn-sm {
+        min-height: 44px;
+        padding: 0.65rem 0.95rem;
+        font-size: 1rem;
+        border-radius: 0.8rem;
+    }
+    .btn-touch {
+        min-width: 44px;
+        min-height: 44px;
+    }
+    .form-control,
+    .form-select,
+    .input-group-text,
+    textarea {
+        min-height: 44px;
+        font-size: 16px;
+        border-radius: 0.8rem;
+    }
+    .team-card-actions .btn {
+        min-width: auto;
+    }
+    .navbar .navbar-collapse .btn,
+    .navbar .navbar-collapse form {
+        width: 100%;
+    }
+    .navbar .navbar-collapse .btn {
+        justify-content: center;
+    }
+    .navbar .navbar-collapse .navbar-actions {
+        margin-top: 0.5rem;
+    }
+}
