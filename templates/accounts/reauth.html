@@ -3,6 +3,8 @@
 {% block head %}
 {{ block.super }}
 <meta name="google-signin-client_id" content="{{ GOOGLE_CLIENT_ID }}">
+<link rel="preconnect" href="https://accounts.google.com" crossorigin>
+<link rel="dns-prefetch" href="https://accounts.google.com">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 {% endblock %}
 {% block content %}

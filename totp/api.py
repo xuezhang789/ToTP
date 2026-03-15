@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.http import JsonResponse
 from django.utils import timezone
 
@@ -17,6 +18,7 @@ def api_tokens(request):
     queryset = TOTPEntry.objects.for_user(request.user).only("id", "secret_encrypted")
 
     ids_raw = (request.GET.get("ids") or "").strip()
+    cache_key = None
     if ids_raw:
         ids: list[int] = []
         seen = set()
@@ -34,8 +36,15 @@ def api_tokens(request):
             seen.add(value)
         if ids:
             queryset = queryset.filter(id__in=ids)
+            cache_key = f"totp:api_tokens:v2:{request.user.id}:{timestamp}:{','.join(str(i) for i in ids)}"
         else:
             return JsonResponse({"remaining": remaining, "items": []})
+    else:
+        cache_key = f"totp:api_tokens:v2:{request.user.id}:{timestamp}:all"
+
+    cached = cache.get(cache_key) if cache_key else None
+    if cached is not None:
+        return JsonResponse(cached)
 
     for entry in queryset.iterator(chunk_size=200):
         secret = decrypt_str(entry.secret_encrypted)
@@ -54,4 +63,7 @@ def api_tokens(request):
             }
         )
 
-    return JsonResponse({"remaining": remaining, "items": items})
+    payload = {"remaining": remaining, "items": items}
+    if cache_key:
+        cache.set(cache_key, payload, 2)
+    return JsonResponse(payload)

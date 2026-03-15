@@ -36,6 +36,9 @@ class Team(models.Model):
         if not user or not getattr(user, "is_authenticated", False):
             return None
         memberships = getattr(self, "_prefetched_memberships", None)
+        if memberships is None:
+            cache = getattr(self, "_prefetched_objects_cache", None) or {}
+            memberships = cache.get("memberships")
         if memberships is not None:
             for membership in memberships:
                 if membership.user_id == user.id:

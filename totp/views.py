@@ -887,19 +887,18 @@ def trash_bulk_action(request):
         messages.info(request, "请先选择至少一条记录")
         return redirect("totp:trash")
 
-    entries = []
-    for entry_id in selected_ids:
-        try:
-            entry = _get_entry_for_user(
-                request.user,
-                entry_id,
-                include_deleted=True,
-                require_manage=True,
+    entries = list(
+        TOTPEntry.all_objects.filter(is_deleted=True, pk__in=selected_ids)
+        .filter(
+            Q(user=request.user)
+            | Q(
+                team__memberships__user=request.user,
+                team__memberships__role__in=TEAM_MANAGER_ROLES,
             )
-        except Http404:
-            continue
-        if entry.is_deleted:
-            entries.append(entry)
+        )
+        .select_related("team")
+        .distinct()
+    )
 
     if not entries:
         messages.info(request, "所选记录不存在或已处理")
@@ -908,38 +907,60 @@ def trash_bulk_action(request):
     if action == "restore":
         restored = 0
         conflicts = []
-        for entry in entries:
-            if entry.is_team_entry:
-                duplicate_exists = TOTPEntry.objects.filter(
-                    team=entry.team,
-                    name=entry.name,
-                    is_deleted=False,
-                ).exclude(pk=entry.pk).exists()
-            else:
-                duplicate_exists = TOTPEntry.objects.filter(
+        now = timezone.now()
+        personal_names = {e.name for e in entries if not e.team_id}
+        team_names: set[str] = {e.name for e in entries if e.team_id}
+        team_ids: set[int] = {e.team_id for e in entries if e.team_id}
+
+        personal_conflicts: set[str] = set()
+        if personal_names:
+            personal_conflicts = set(
+                TOTPEntry.objects.filter(
                     user=request.user,
                     team__isnull=True,
-                    name=entry.name,
                     is_deleted=False,
-                ).exclude(pk=entry.pk).exists()
+                    name__in=personal_names,
+                ).values_list("name", flat=True)
+            )
 
+        team_conflicts: set[tuple[int, str]] = set()
+        if team_ids and team_names:
+            team_conflicts = set(
+                TOTPEntry.objects.filter(
+                    team_id__in=team_ids,
+                    is_deleted=False,
+                    name__in=team_names,
+                ).values_list("team_id", "name")
+            )
+
+        audit_rows = []
+        for entry in entries:
+            if entry.team_id:
+                duplicate_exists = (entry.team_id, entry.name) in team_conflicts
+            else:
+                duplicate_exists = entry.name in personal_conflicts
             if duplicate_exists:
                 conflicts.append(entry.name)
                 continue
             entry.is_deleted = False
             entry.deleted_at = None
+            entry.updated_at = now
             entry.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
-            log_entry_audit(
-                entry,
-                request.user,
-                TOTPEntryAudit.Action.RESTORED,
-                new_value=entry.name,
-                metadata={
-                    "space": "team" if entry.team_id else "personal",
-                    "bulk": True,
-                },
+            audit_rows.append(
+                TOTPEntryAudit(
+                    entry=entry,
+                    actor=request.user,
+                    action=TOTPEntryAudit.Action.RESTORED,
+                    new_value=entry.name,
+                    metadata={
+                        "space": "team" if entry.team_id else "personal",
+                        "bulk": True,
+                    },
+                )
             )
             restored += 1
+        if audit_rows:
+            TOTPEntryAudit.objects.bulk_create(audit_rows)
 
         if restored:
             messages.success(request, f"已恢复 {restored} 条密钥")
@@ -954,18 +975,23 @@ def trash_bulk_action(request):
 
     if action == "delete":
         count = len(entries)
-        for entry in entries:
-            log_entry_audit(
-                entry,
-                request.user,
-                TOTPEntryAudit.Action.DELETED,
+        audit_rows = [
+            TOTPEntryAudit(
+                entry=entry,
+                actor=request.user,
+                action=TOTPEntryAudit.Action.DELETED,
                 old_value=entry.name,
                 metadata={
                     "space": "team" if entry.team_id else "personal",
                     "bulk": True,
                 },
             )
-        TOTPEntry.all_objects.filter(pk__in=[entry.pk for entry in entries]).delete()
+            for entry in entries
+        ]
+        with transaction.atomic():
+            if audit_rows:
+                TOTPEntryAudit.objects.bulk_create(audit_rows)
+            TOTPEntry.all_objects.filter(pk__in=[entry.pk for entry in entries]).delete()
         messages.success(request, f"已永久删除 {count} 条密钥")
         return redirect("totp:trash")
 

@@ -395,10 +395,21 @@
   let renameSubmitUrl = '';
 
   function initRows() {
-    state.clear();
+    const currentIds = new Set();
     tbody.querySelectorAll('tr[data-id]').forEach((tr) => {
       const id = Number(tr.dataset.id);
       if (!Number.isFinite(id)) {
+        return;
+      }
+      currentIds.add(id);
+      const existing = state.get(id);
+      if (existing) {
+        existing.tr = tr;
+        existing.codeEl = tr.querySelector('.code-text');
+        existing.copyBtn = tr.querySelector('.copy-btn');
+        existing.progressEl = tr.querySelector('.progress-bar');
+        existing.remainEl = tr.querySelector('.remain');
+        existing.period = Number(tr.dataset.period) || existing.period || 30;
         return;
       }
       state.set(id, {
@@ -411,6 +422,11 @@
         lastCode: null,
         lastRemain: null,
       });
+    });
+    Array.from(state.keys()).forEach((id) => {
+      if (!currentIds.has(id)) {
+        state.delete(id);
+      }
     });
   }
 
@@ -548,6 +564,7 @@
     if (pendingRequest) {
       return pendingRequest;
     }
+    initRows();
     const ids = Array.from(state.keys()).filter((id) => Number.isFinite(id) && id > 0);
     if (!ids.length) {
       setCountdown(30);
