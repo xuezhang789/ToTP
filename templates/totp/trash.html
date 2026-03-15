@@ -35,8 +35,8 @@
                 </div>
             </div>
         </div>
-        <div class="table-responsive">
-            <table class="table table-hover table-striped mb-0 align-middle">
+        <div class="table-responsive table-cardify-wrapper">
+            <table class="table table-hover table-striped mb-0 align-middle table-cardify">
                 <thead>
                 <tr>
                     <th scope="col" style="width: 36px;"></th>
@@ -50,10 +50,10 @@
                 <tbody>
                 {% for e in entries %}
                 <tr>
-                    <td>
+                    <td class="trash-cell-select">
                         <input class="form-check-input trash-checkbox" type="checkbox" name="selected" value="{{ e.id }}" aria-label="选择 {{ e.name }}">
                     </td>
-                    <td>
+                    <td class="trash-cell-name">
                         <div class="d-flex align-items-center gap-2">
                             {% if e.team %}
                             <span class="badge rounded-pill bg-light text-muted fw-semibold">{{ e.team.name }}</span>
@@ -61,22 +61,22 @@
                             <span class="fw-semibold">{{ e.name }}</span>
                         </div>
                     </td>
-                    <td>
+                    <td class="trash-cell-group">
                         {% if e.team %}
                         <span class="badge rounded-pill bg-secondary-subtle text-secondary">团队共享</span>
                         {% else %}
                         {{ e.group.name|default:'未分组' }}
                         {% endif %}
                     </td>
-                    <td>{{ e.deleted_at|date:'Y-m-d H:i' }}</td>
-                    <td>
+                    <td class="trash-cell-deleted">{{ e.deleted_at|date:'Y-m-d H:i' }}</td>
+                    <td class="trash-cell-remaining">
                         {% if e.recycle_remaining_days is not None %}
                         约 {{ e.recycle_remaining_days }} 天
                         {% else %}
                         --
                         {% endif %}
                     </td>
-                    <td class="text-nowrap">
+                    <td class="text-nowrap trash-cell-actions">
                         <div class="d-flex flex-wrap gap-2">
                             <button type="button" class="btn btn-sm btn-outline-primary restore-single-btn" data-entry-id="{{ e.id }}">
                                 恢复

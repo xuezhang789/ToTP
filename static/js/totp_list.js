@@ -93,6 +93,7 @@
         existing.copyBtn = tr.querySelector('.copy-btn');
         existing.progressEl = tr.querySelector('.progress-bar');
         existing.remainEl = tr.querySelector('.remain');
+        existing.remainMobileEl = tr.querySelector('.remain-mobile');
         existing.period = Number(tr.dataset.period) || existing.period || 30;
         return;
       }

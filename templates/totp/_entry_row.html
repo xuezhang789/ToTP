@@ -1,7 +1,7 @@
 <tr data-id="{{ e.id }}" data-period="30"
     data-update-url="{% url 'totp:update_group' e.id %}"
     data-rename-url="{% url 'totp:rename_entry' e.id %}">
-    <td>
+    <td class="entry-cell-name">
         <div class="d-flex align-items-center gap-2 w-100" style="min-width:0;">
             {% if e.team %}
             <span class="badge rounded-pill bg-primary-subtle text-primary fw-semibold flex-shrink-0">
@@ -18,7 +18,7 @@
             {% endif %}
         </div>
     </td>
-    <td>
+    <td class="entry-cell-group">
         {% if e.team %}
         <span class="badge rounded-pill bg-light text-muted fw-semibold">团队共享</span>
         {% else %}
@@ -31,20 +31,20 @@
         </select>
         {% endif %}
     </td>
-    <td class="text-nowrap">
+    <td class="text-nowrap entry-cell-code">
         <span class="badge text-bg-dark code-badge code-text" data-code-placeholder="••••••">••••••</span>
         <button class="btn btn-sm btn-outline-secondary btn-touch copy-btn ms-1" type="button" data-code="" data-label-default="复制" title="复制" aria-label="复制验证码">
             <i class="bi bi-clipboard"></i>
         </button>
         <div class="d-md-none text-muted small mt-1">剩余 <span class="remain-mobile">--s</span></div>
     </td>
-    <td class="d-none d-md-table-cell">
+    <td class="d-none d-md-table-cell entry-cell-expiry">
         <div class="progress small" role="progressbar">
             <div class="progress-bar" style="width:0%"></div>
         </div>
         <small class="text-muted remain">--s</small>
     </td>
-    <td class="text-nowrap">
+    <td class="text-nowrap entry-cell-actions">
         <div class="d-flex flex-wrap gap-2">
             {% if e.can_manage %}
             <button class="btn btn-sm btn-outline-primary btn-touch share-link-btn" type="button"

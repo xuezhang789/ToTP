@@ -65,4 +65,103 @@
         min-height: 44px;
         border-radius: 0.8rem 0.8rem 0 0;
     }
+    .table-cardify-wrapper {
+        overflow-x: visible;
+    }
+    table.table-cardify thead {
+        display: none;
+    }
+    table.table-cardify tbody,
+    table.table-cardify tr,
+    table.table-cardify td {
+        display: block;
+        width: 100%;
+    }
+    table.table-cardify tr {
+        background: #ffffff;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 1rem;
+        padding: 0.75rem 0.85rem;
+        margin: 0.75rem 0.75rem;
+    }
+    table.table-cardify tr.no-data {
+        background: transparent;
+        border: 0;
+        padding: 0;
+        margin: 0;
+    }
+    table.table-cardify tr.no-data td {
+        padding: 1.5rem 0.75rem;
+    }
+    table.table-cardify td {
+        padding: 0.35rem 0;
+        border-top: 0;
+    }
+    table.table-cardify td.entry-cell-name {
+        padding-top: 0;
+    }
+    table.table-cardify td.entry-cell-actions {
+        padding-bottom: 0;
+    }
+    table.table-cardify td.entry-cell-group::before {
+        content: "分组";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.entry-cell-code::before {
+        content: "验证码";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.entry-cell-actions::before {
+        content: "操作";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.entry-cell-actions .btn,
+    table.table-cardify td.entry-cell-actions .btn-sm {
+        flex: 1 1 auto;
+    }
+    table.table-cardify td.trash-cell-group::before {
+        content: "分组";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.trash-cell-deleted::before {
+        content: "删除时间";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.trash-cell-remaining::before {
+        content: "剩余天数";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.trash-cell-actions::before {
+        content: "操作";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.trash-cell-select {
+        padding-top: 0;
+        padding-bottom: 0.25rem;
+    }
+    table.table-cardify td.trash-cell-actions .btn,
+    table.table-cardify td.trash-cell-actions .btn-sm {
+        flex: 1 1 auto;
+    }
 }
