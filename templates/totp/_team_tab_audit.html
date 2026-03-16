@@ -1,0 +1,17 @@
+<div class="team-card-section">
+    <div class="team-card-section-header">
+        <h3 class="team-card-subtitle mb-0">审计</h3>
+        <span class="text-muted small">查看成员变更、邀请与链接操作记录</span>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'totp:team_audit' team.id %}">
+            <i class="bi bi-journal-text me-1"></i> 打开审计
+        </a>
+        {% if membership and membership.can_manage_entries %}
+        <a class="btn btn-outline-secondary" href="{% url 'totp:team_audit_export' team.id %}">
+            <i class="bi bi-download me-1"></i> 导出审计
+        </a>
+        {% endif %}
+    </div>
+</div>
+

@@ -421,6 +421,258 @@ def teams_overview(request):
 
 
 @login_required
+@require_GET
+def team_home(request, team_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=False)
+    team = membership.team
+    member_count = TeamMembership.objects.filter(team=team).count()
+    entry_count = TOTPEntry.objects.filter(team=team, is_deleted=False).count()
+    can_manage = membership.can_manage_entries
+    active_share_links = OneTimeLink.active.filter(entry__team=team).count() if can_manage else 0
+    unassigned_entries_count = TOTPEntry.objects.filter(team=team, is_deleted=False, asset__isnull=True).count()
+    assigned_entries_count = max(entry_count - unassigned_entries_count, 0)
+    asset_total = TeamAsset.objects.filter(team=team).count()
+    pending_invites_count = (
+        TeamInvitation.objects.filter(team=team, status=TeamInvitation.Status.PENDING).count()
+        if can_manage
+        else 0
+    )
+    return render(
+        request,
+        "totp/team_home.html",
+        {
+            "team": team,
+            "membership": membership,
+            "can_manage": can_manage,
+            "member_count": member_count,
+            "entry_count": entry_count,
+            "active_share_links": active_share_links,
+            "unassigned_entries_count": unassigned_entries_count,
+            "assigned_entries_count": assigned_entries_count,
+            "asset_total": asset_total,
+            "pending_invites_count": pending_invites_count,
+        },
+    )
+
+
+def _build_team_member_rows(*, team: Team, viewer: TeamMembership, current_user):
+    memberships = (
+        TeamMembership.objects.filter(team=team)
+        .select_related("user")
+        .order_by("role", "user__username")
+    )
+    member_rows = []
+    for row in memberships:
+        is_self = row.user_id == current_user.id
+        can_leave = is_self and row.role != TeamMembership.Role.OWNER
+        can_remove = False
+        if viewer.role == TeamMembership.Role.OWNER:
+            can_remove = row.role != TeamMembership.Role.OWNER and not is_self
+        elif viewer.role == TeamMembership.Role.ADMIN:
+            can_remove = row.role == TeamMembership.Role.MEMBER
+        can_set_admin = (
+            viewer.role == TeamMembership.Role.OWNER
+            and row.role != TeamMembership.Role.OWNER
+            and row.role != TeamMembership.Role.ADMIN
+        )
+        can_set_member = (
+            viewer.role == TeamMembership.Role.OWNER
+            and row.role != TeamMembership.Role.OWNER
+            and row.role != TeamMembership.Role.MEMBER
+        )
+        can_show_actions = can_leave or can_remove or can_set_admin or can_set_member
+        member_rows.append(
+            {
+                "member": row,
+                "can_leave": can_leave,
+                "can_remove": can_remove,
+                "can_set_admin": can_set_admin,
+                "can_set_member": can_set_member,
+                "can_show_actions": can_show_actions,
+            }
+        )
+    return member_rows
+
+
+def _build_team_member_row(*, row: TeamMembership, viewer: TeamMembership, current_user):
+    is_self = row.user_id == current_user.id
+    can_leave = is_self and row.role != TeamMembership.Role.OWNER
+    can_remove = False
+    if viewer.role == TeamMembership.Role.OWNER:
+        can_remove = row.role != TeamMembership.Role.OWNER and not is_self
+    elif viewer.role == TeamMembership.Role.ADMIN:
+        can_remove = row.role == TeamMembership.Role.MEMBER
+    can_set_admin = (
+        viewer.role == TeamMembership.Role.OWNER
+        and row.role != TeamMembership.Role.OWNER
+        and row.role != TeamMembership.Role.ADMIN
+    )
+    can_set_member = (
+        viewer.role == TeamMembership.Role.OWNER
+        and row.role != TeamMembership.Role.OWNER
+        and row.role != TeamMembership.Role.MEMBER
+    )
+    can_show_actions = can_leave or can_remove or can_set_admin or can_set_member
+    return {
+        "member": row,
+        "can_leave": can_leave,
+        "can_remove": can_remove,
+        "can_set_admin": can_set_admin,
+        "can_set_member": can_set_member,
+        "can_show_actions": can_show_actions,
+    }
+
+
+def _team_audit_ui_meta(action: str):
+    if action in {
+        TeamAudit.Action.LINKS_REVOKED_ALL,
+        TeamAudit.Action.LINKS_REVOKE_REMINDER_SENT,
+    }:
+        return {"group": "链接", "variant": "danger", "priority": "high", "icon": "bi-link-45deg"}
+    if action in {
+        TeamAudit.Action.MEMBER_ROLE_CHANGED,
+        TeamAudit.Action.MEMBER_REMOVED,
+        TeamAudit.Action.MEMBER_LEFT,
+    }:
+        return {"group": "成员", "variant": "warning", "priority": "high", "icon": "bi-people"}
+    if action in {
+        TeamAudit.Action.INVITE_SENT,
+        TeamAudit.Action.INVITE_UPDATED,
+        TeamAudit.Action.INVITE_CANCELLED,
+        TeamAudit.Action.INVITE_ACCEPTED,
+        TeamAudit.Action.INVITE_DECLINED,
+    }:
+        return {"group": "邀请", "variant": "info", "priority": "normal", "icon": "bi-envelope"}
+    if action in {TeamAudit.Action.TEAM_CREATED, TeamAudit.Action.TEAM_RENAMED}:
+        return {"group": "团队", "variant": "secondary", "priority": "normal", "icon": "bi-building"}
+    return {"group": "其他", "variant": "secondary", "priority": "normal", "icon": "bi-info-circle"}
+
+
+@login_required
+@require_GET
+def team_tab_fragment(request, team_id: int, tab: str):
+    membership = _get_team_membership(request.user, team_id, require_manage=False)
+    team = membership.team
+    if tab not in {"members", "security", "audit"}:
+        raise Http404()
+
+    member_count = TeamMembership.objects.filter(team=team).count()
+    entry_count = TOTPEntry.objects.filter(team=team, is_deleted=False).count()
+    active_share_links = (
+        OneTimeLink.active.filter(entry__team=team).count()
+        if membership.can_manage_entries
+        else 0
+    )
+    pending_invites = list(
+        TeamInvitation.objects.filter(team=team, status=TeamInvitation.Status.PENDING)
+        .select_related("invitee")
+        .order_by("-created_at")
+    )
+    role_labels = dict(TeamMembership.Role.choices)
+    available_roles = [
+        (TeamMembership.Role.MEMBER, role_labels[TeamMembership.Role.MEMBER]),
+        (TeamMembership.Role.ADMIN, role_labels[TeamMembership.Role.ADMIN]),
+    ]
+
+    context = {
+        "team": team,
+        "membership": membership,
+        "can_manage": membership.can_manage_entries,
+        "member_count": member_count,
+        "entry_count": entry_count,
+        "pending_invites": pending_invites,
+        "active_share_links": active_share_links,
+        "available_roles": available_roles,
+    }
+    if tab == "members":
+        q = (request.GET.get("q") or "").strip()
+        membership_qs = TeamMembership.objects.filter(team=team).select_related("user").order_by(
+            "role", "user__username"
+        )
+        if q:
+            membership_qs = membership_qs.filter(
+                Q(user__username__icontains=q) | Q(user__email__icontains=q)
+            )
+        paginator = Paginator(membership_qs, 20)
+        page_obj = paginator.get_page(request.GET.get("page"))
+        context["q"] = q
+        context["page_obj"] = page_obj
+        context["member_rows"] = [
+            _build_team_member_row(row=row, viewer=membership, current_user=request.user)
+            for row in page_obj.object_list
+        ]
+        return render(request, "totp/_team_tab_members.html", context)
+    if tab == "security":
+        return render(request, "totp/_team_tab_security.html", context)
+    return render(request, "totp/_team_tab_audit.html", context)
+
+
+@login_required
+@require_GET
+def team_actions_panel(request, team_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=False)
+    team = membership.team
+    panel_context = (request.GET.get("context") or "").strip() or "teams"
+    can_manage = membership.can_manage_entries
+    active_share_links = OneTimeLink.active.filter(entry__team=team).count() if can_manage else 0
+    link_creators = []
+    latest_link_created_at = None
+    latest_link_viewed_at = None
+    has_link_views = False
+    if can_manage and active_share_links:
+        active_links = OneTimeLink.active.filter(entry__team=team)
+        latest_link_created_at = active_links.order_by("-created_at").values_list("created_at", flat=True).first()
+        latest_link_viewed_at = active_links.order_by("-last_viewed_at").values_list("last_viewed_at", flat=True).first()
+        has_link_views = active_links.filter(last_viewed_at__isnull=False).exists()
+        link_creators = list(
+            active_links
+            .values("created_by__username")
+            .annotate(cnt=Count("id"))
+            .order_by("-cnt", "created_by__username")[:5]
+        )
+    pending_invites_count = (
+        TeamInvitation.objects.filter(team=team, status=TeamInvitation.Status.PENDING).count()
+        if can_manage
+        else 0
+    )
+    unassigned_entries_count = TOTPEntry.objects.filter(
+        team=team, is_deleted=False, asset__isnull=True
+    ).count()
+    risk_empty = (active_share_links == 0 and pending_invites_count == 0 and unassigned_entries_count == 0)
+    audits = list(
+        TeamAudit.objects.filter(team=team)
+        .select_related("actor", "target_user")
+        .order_by("-created_at")[:30]
+    )
+    for audit in audits:
+        meta = _team_audit_ui_meta(audit.action)
+        audit.ui_meta = meta
+        audit.is_high_risk = meta.get("priority") == "high"
+    recent_high_risk = [a for a in audits if getattr(a, "is_high_risk", False)][:4]
+    recent_normal = [a for a in audits if not getattr(a, "is_high_risk", False)][:6]
+    return render(
+        request,
+        "totp/_team_actions_panel.html",
+        {
+            "team": team,
+            "membership": membership,
+            "panel_context": panel_context,
+            "can_manage": can_manage,
+            "active_share_links": active_share_links,
+            "link_creators": link_creators,
+            "latest_link_created_at": latest_link_created_at,
+            "latest_link_viewed_at": latest_link_viewed_at,
+            "has_link_views": has_link_views,
+            "pending_invites_count": pending_invites_count,
+            "unassigned_entries_count": unassigned_entries_count,
+            "risk_empty": risk_empty,
+            "recent_high_risk": recent_high_risk,
+            "recent_audits": recent_normal,
+        },
+    )
+
+
+@login_required
 @require_POST
 def team_create(request):
     """创建新的团队空间。"""

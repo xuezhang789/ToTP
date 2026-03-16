@@ -27,15 +27,13 @@ class TeamTeamsPageInteractionsTests(TestCase):
             role=TeamMembership.Role.MEMBER,
         )
 
-    def test_teams_page_renders_tab_sections(self):
+    def test_teams_page_renders_team_entries(self):
         self.client.force_login(self.owner)
         response = self.client.get(reverse("totp:teams"))
         self.assertEqual(response.status_code, 200)
         html = response.content.decode("utf-8")
-        self.assertIn(f'id="teamTabs-{self.team.id}"', html)
-        self.assertIn(f'id="teamPane-{self.team.id}-members"', html)
-        self.assertIn(f'id="teamPane-{self.team.id}-security"', html)
-        self.assertIn(f'id="teamPane-{self.team.id}-audit"', html)
+        self.assertIn(reverse("totp:team_home", args=[self.team.id]), html)
+        self.assertIn('id="teamActionsOffcanvas"', html)
 
     def test_cancel_invitation_endpoint_still_works(self):
         self.client.force_login(self.owner)

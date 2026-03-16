@@ -63,9 +63,7 @@ def teams_queryset_for_overview(*, user, q: str):
         .prefetch_related(
             Prefetch(
                 "memberships",
-                queryset=TeamMembership.objects.select_related("user").order_by(
-                    "role", "user__username"
-                ),
+                queryset=TeamMembership.objects.filter(user=user).select_related("user"),
             )
         )
         .order_by("name")

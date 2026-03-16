@@ -1,0 +1,25 @@
+<div class="team-card-section">
+    <div class="team-card-section-header">
+        <h3 class="team-card-subtitle mb-0">安全操作</h3>
+        <span class="text-muted small">高风险操作会要求二次确认</span>
+    </div>
+    {% if membership and membership.can_manage_entries %}
+    <div class="alert alert-info bg-info-subtle border-0 d-flex flex-wrap align-items-center justify-content-between gap-2 mb-0">
+        <div class="small mb-0">当前有效分享链接：<span id="activeShareLinksCountInline-{{ team.id }}">{{ active_share_links|default:0 }}</span> 条</div>
+        <form method="post" action="{% url 'totp:team_revoke_all_share_links' team.id %}">
+            {% csrf_token %}
+            <button class="btn btn-outline-danger" type="submit"
+                    data-confirm="确定撤销该团队下所有有效分享链接吗？"
+                    data-confirm-title="撤销全部链接"
+                    data-confirm-ok="撤销"
+                    data-confirm-variant="danger"
+                    data-confirm-hint="下一步会跳转到密码确认页，确认后返回团队页继续执行。">
+                撤销全部链接
+            </button>
+        </form>
+    </div>
+    {% else %}
+    <div class="text-muted small">你没有该团队的管理权限。</div>
+    {% endif %}
+</div>
+

@@ -158,15 +158,6 @@
                     <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}?space={{ selected_space|urlencode }}">重置</a>
                     {% endif %}
                 </div>
-                {% if selected_team %}
-                <select class="form-select w-100 w-md-auto" id="asset" name="asset" aria-label="按资产筛选">
-                    <option value="" {% if not asset_id %}selected{% endif %}>全部资产</option>
-                    <option value="0" {% if asset_id == '0' %}selected{% endif %}>未归属</option>
-                    {% for a in team_assets %}
-                        <option value="{{ a.id }}" {% if asset_id == a.id|stringformat:"s" %}selected{% endif %}>{{ a.name }}</option>
-                    {% endfor %}
-                </select>
-                {% endif %}
             </form>
         </div>
     </div>

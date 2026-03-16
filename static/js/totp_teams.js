@@ -8,6 +8,9 @@
   const renameModalEl = document.getElementById('renameTeamModal');
   const renameForm = document.getElementById('renameTeamForm');
   const renameInput = document.getElementById('renameTeamNameInput');
+  const actionsOffcanvasEl = document.getElementById('teamActionsOffcanvas');
+  const actionsOffcanvasBody = document.getElementById('teamActionsOffcanvasBody');
+  const actionsOffcanvasTitle = document.getElementById('teamActionsOffcanvasLabel');
 
   function getAllCollapses() {
     return Array.from(document.querySelectorAll('.team-details-collapse'));
@@ -17,12 +20,107 @@
     return el.classList.contains('show');
   }
 
+  function updateGlobalToggle() {
+    if (!toggleBtn) {
+      return;
+    }
+    const items = getAllCollapses();
+    if (!items.length) {
+      toggleBtn.disabled = true;
+      return;
+    }
+    const allShown = items.every((el) => isShown(el));
+    toggleBtn.textContent = allShown ? '全部收起' : '全部展开';
+    toggleBtn.setAttribute('aria-pressed', allShown ? 'true' : 'false');
+    toggleBtn.disabled = false;
+  }
+
+  function updateDetailsToggleForCollapse(collapseEl) {
+    const id = collapseEl?.id || '';
+    if (!id) {
+      return;
+    }
+    const btn = document.querySelector(`[aria-controls="${CSS.escape(id)}"]`);
+    if (!btn) {
+      return;
+    }
+    const labelEl = btn.querySelector('[data-team-details-toggle]');
+    if (!labelEl) {
+      return;
+    }
+    const expanded = isShown(collapseEl);
+    const collapsedText = labelEl.dataset.collapsedText || '展开详情';
+    const expandedText = labelEl.dataset.expandedText || '收起详情';
+    labelEl.textContent = expanded ? expandedText : collapsedText;
+    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    const icon = btn.querySelector('i');
+    if (icon) {
+      icon.classList.toggle('bi-chevron-down', !expanded);
+      icon.classList.toggle('bi-chevron-up', expanded);
+    }
+  }
+
+  function setOffcanvasLoading(titleText) {
+    if (actionsOffcanvasTitle && titleText) {
+      actionsOffcanvasTitle.textContent = titleText;
+    }
+    if (actionsOffcanvasBody) {
+      actionsOffcanvasBody.innerHTML = '<div class="text-muted small">加载中…</div>';
+    }
+  }
+
+  function loadOffcanvasPanel({ teamId, teamName, url }) {
+    if (!actionsOffcanvasEl || !actionsOffcanvasBody || !url) {
+      return;
+    }
+    setOffcanvasLoading(teamName ? `团队操作 · ${teamName}` : '团队操作');
+    const panelUrl = new URL(url, window.location.origin);
+    panelUrl.searchParams.set(
+      'context',
+      document.getElementById('teamSidebarPanel') ? 'home' : 'teams',
+    );
+    fetch(panelUrl.toString(), { headers: { 'X-Requested-With': 'fetch' }, credentials: 'same-origin' })
+      .then((resp) => {
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        return resp.text();
+      })
+      .then((html) => {
+        actionsOffcanvasBody.innerHTML = html;
+        actionsOffcanvasBody.dataset.teamId = String(teamId || '');
+      })
+      .catch(() => {
+        actionsOffcanvasBody.innerHTML = '<div class="text-muted small">加载失败，请稍后重试。</div>';
+      });
+  }
+
+  function ensureTeamDetailsOpen(teamId) {
+    const collapseEl = document.getElementById(`teamDetails-${teamId}`);
+    if (!collapseEl) {
+      return null;
+    }
+    const instance = bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
+    instance.show();
+    return collapseEl;
+  }
+
+  function showTeamTab(teamId, tabKey) {
+    const btn = document.getElementById(`teamTab-${teamId}-${tabKey}`);
+    if (!btn) {
+      return;
+    }
+    const tab = bootstrap.Tab.getOrCreateInstance(btn);
+    tab.show();
+  }
+
   toggleBtn?.addEventListener('click', () => {
     const items = getAllCollapses();
     if (!items.length) {
       return;
     }
-    const shouldExpand = items.some((el) => !isShown(el));
+    const allShown = items.every((el) => isShown(el));
+    const shouldExpand = !allShown;
     items.forEach((el) => {
       const instance = bootstrap.Collapse.getOrCreateInstance(el, { toggle: false });
       if (shouldExpand) {
@@ -31,6 +129,7 @@
         instance.hide();
       }
     });
+    updateGlobalToggle();
   });
 
   document.addEventListener('click', (event) => {
@@ -51,6 +150,19 @@
     modal.show();
   });
 
+  document.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    const btn = target.closest('[data-team-actions-trigger]');
+    if (!btn) {
+      return;
+    }
+    const teamId = btn.getAttribute('data-team-id') || '';
+    const teamName = btn.getAttribute('data-team-name') || '';
+    const url = btn.getAttribute('data-team-panel-url') || '';
+    loadOffcanvasPanel({ teamId, teamName, url });
+  });
+
   renameModalEl?.addEventListener('shown.bs.modal', () => {
     renameInput?.focus({ preventScroll: true });
     renameInput?.select();
@@ -62,10 +174,71 @@
       window.appNotify({ alertEl: el, variant, message });
       return;
     }
-    if (el) {
-      el.textContent = message;
-      el.classList.toggle('d-none', !message);
+    if (window.appInlineAlert) {
+      window.appInlineAlert(el, variant, message);
     }
+  }
+
+  function renderPaneLoading(pane) {
+    if (!pane) {
+      return;
+    }
+    pane.innerHTML = '<div class="text-muted small py-4">加载中…</div>';
+  }
+
+  function loadTabPane(pane) {
+    if (!pane || pane.dataset.loaded === '1') {
+      return;
+    }
+    const url = pane.dataset.loadUrl || '';
+    if (!url) {
+      return;
+    }
+    pane.dataset.loaded = '1';
+    renderPaneLoading(pane);
+    fetch(url, { headers: { 'X-Requested-With': 'fetch' }, credentials: 'same-origin' })
+      .then((resp) => {
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        return resp.text();
+      })
+      .then((html) => {
+        pane.innerHTML = html;
+      })
+      .catch(() => {
+        pane.dataset.loaded = '0';
+        pane.innerHTML = '<div class="text-muted small py-4">加载失败，请稍后重试。</div>';
+      });
+  }
+
+  function loadIntoPane(pane, url) {
+    if (!pane || !url) {
+      return;
+    }
+    renderPaneLoading(pane);
+    fetch(url, { headers: { 'X-Requested-With': 'fetch' }, credentials: 'same-origin' })
+      .then((resp) => {
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        return resp.text();
+      })
+      .then((html) => {
+        pane.dataset.loaded = '1';
+        pane.innerHTML = html;
+      })
+      .catch(() => {
+        pane.innerHTML = '<div class="text-muted small py-4">加载失败，请稍后重试。</div>';
+      });
+  }
+
+  function findMembersPane(teamId) {
+    const pane = document.getElementById(`teamPane-${teamId}-members`);
+    if (!(pane instanceof HTMLElement)) {
+      return null;
+    }
+    return pane;
   }
 
   async function postForm(form) {
@@ -172,5 +345,181 @@
           notify(teamId, 'danger', '更新失败，请稍后重试。');
         });
     }
+  });
+
+  document.addEventListener('submit', (event) => {
+    const form = event.target instanceof HTMLFormElement ? event.target : null;
+    if (!form) return;
+    if (!form.hasAttribute('data-team-members-search')) {
+      return;
+    }
+    event.preventDefault();
+    const teamId = form.getAttribute('data-team-id') || '';
+    const baseUrl = form.getAttribute('data-load-url') || '';
+    if (!teamId || !baseUrl) {
+      return;
+    }
+    const params = new URLSearchParams(new FormData(form));
+    const url = `${baseUrl}?${params.toString()}`;
+    const pane = findMembersPane(teamId);
+    loadIntoPane(pane, url);
+  });
+
+  document.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    const resetBtn = target.closest('[data-team-members-reset]');
+    if (!resetBtn) {
+      return;
+    }
+    const form = resetBtn.closest('form[data-team-members-search]');
+    if (!form) {
+      return;
+    }
+    const teamId = form.getAttribute('data-team-id') || '';
+    const baseUrl = form.getAttribute('data-load-url') || '';
+    if (!teamId || !baseUrl) {
+      return;
+    }
+    const input = form.querySelector('input[name="q"]');
+    if (input) {
+      input.value = '';
+    }
+    const url = `${baseUrl}?q=`;
+    const pane = findMembersPane(teamId);
+    loadIntoPane(pane, url);
+  });
+
+  document.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+    const link = target.closest('a[data-team-fragment-link]');
+    if (!link) {
+      return;
+    }
+    const teamId = link.getAttribute('data-team-id') || '';
+    const href = link.getAttribute('href') || '';
+    if (!teamId || !href) {
+      return;
+    }
+    const pane = findMembersPane(teamId);
+    if (!pane) {
+      return;
+    }
+    event.preventDefault();
+    loadIntoPane(pane, href);
+  });
+
+  document.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+
+    const showRevokeBtn = target.closest('[data-show-revoke-summary]');
+    if (showRevokeBtn) {
+      const scope =
+        showRevokeBtn.closest('#teamActionsOffcanvasBody') ||
+        showRevokeBtn.closest('#teamSidebarPanel') ||
+        showRevokeBtn.parentElement;
+      const summary = scope?.querySelector?.('[data-revoke-summary]') || null;
+      if (summary) {
+        summary.classList.remove('d-none');
+        summary.scrollIntoView({ block: 'nearest' });
+      }
+      return;
+    }
+
+    const hideRevokeBtn = target.closest('[data-hide-revoke-summary]');
+    if (hideRevokeBtn) {
+      const scope =
+        hideRevokeBtn.closest('#teamActionsOffcanvasBody') ||
+        hideRevokeBtn.closest('#teamSidebarPanel') ||
+        hideRevokeBtn.parentElement;
+      const summary = scope?.querySelector?.('[data-revoke-summary]') || null;
+      if (summary) {
+        summary.classList.add('d-none');
+      }
+      return;
+    }
+
+    const btn = target.closest('[data-open-team-tab]');
+    if (!btn) {
+      return;
+    }
+    const tabKey = btn.getAttribute('data-open-team-tab') || '';
+    const teamId =
+      btn.getAttribute('data-team-id') ||
+      actionsOffcanvasBody?.dataset.teamId ||
+      '';
+    if (!teamId || !tabKey) {
+      return;
+    }
+    ensureTeamDetailsOpen(teamId);
+    showTeamTab(teamId, tabKey);
+    if (btn.closest('#teamActionsOffcanvas')) {
+      const instance = bootstrap.Offcanvas.getInstance(actionsOffcanvasEl);
+      instance?.hide();
+    }
+  });
+
+  const collapses = getAllCollapses();
+  collapses.forEach((el) => {
+    updateDetailsToggleForCollapse(el);
+    el.addEventListener('shown.bs.collapse', () => {
+      updateDetailsToggleForCollapse(el);
+      updateGlobalToggle();
+    });
+    el.addEventListener('hidden.bs.collapse', () => {
+      updateDetailsToggleForCollapse(el);
+      updateGlobalToggle();
+    });
+  });
+  updateGlobalToggle();
+
+  const sidebarPanel = document.getElementById('teamSidebarPanel');
+  if (sidebarPanel) {
+    const url = sidebarPanel.getAttribute('data-team-panel-url') || '';
+    if (url) {
+      sidebarPanel.innerHTML = '<div class="text-muted small">加载中…</div>';
+      const panelUrl = new URL(url, window.location.origin);
+      panelUrl.searchParams.set('context', 'home');
+      fetch(panelUrl.toString(), { headers: { 'X-Requested-With': 'fetch' }, credentials: 'same-origin' })
+        .then((resp) => {
+          if (!resp.ok) {
+            throw new Error(`HTTP ${resp.status}`);
+          }
+          return resp.text();
+        })
+        .then((html) => {
+          sidebarPanel.innerHTML = html;
+        })
+        .catch(() => {
+          sidebarPanel.innerHTML = '<div class="text-muted small">加载失败，请稍后重试。</div>';
+        });
+    }
+  }
+
+  const tabParam = new URLSearchParams(window.location.search).get('tab') || '';
+  if (tabParam && ['overview', 'members', 'assets', 'security', 'audit'].includes(tabParam)) {
+    const tabsEl = document.querySelector('[id^="teamTabs-"]');
+    if (tabsEl) {
+      const raw = tabsEl.getAttribute('id') || '';
+      const teamId = raw.replace('teamTabs-', '');
+      if (teamId) {
+        showTeamTab(teamId, tabParam);
+      }
+    }
+  }
+
+  document.querySelectorAll('button[data-bs-toggle="tab"]').forEach((btn) => {
+    btn.addEventListener('shown.bs.tab', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      const selector = target.getAttribute('data-bs-target') || '';
+      if (!selector) return;
+      const pane = document.querySelector(selector);
+      if (!(pane instanceof HTMLElement)) return;
+      if (!pane.dataset.teamTabPane) return;
+      loadTabPane(pane);
+    });
   });
 })();

@@ -7,7 +7,18 @@ urlpatterns = [
     path("teams/", views.teams_overview, name="teams"),
     path("teams/create/", views.team_create, name="team_create"),
     path("teams/<int:team_id>/rename/", views.team_rename, name="team_rename"),
+    path("teams/<int:team_id>/", views.team_home, name="team_home"),
     path("teams/<int:team_id>/audit/", views.team_audit, name="team_audit"),
+    path(
+        "teams/<int:team_id>/tab/<slug:tab>/",
+        views.team_tab_fragment,
+        name="team_tab_fragment",
+    ),
+    path(
+        "teams/<int:team_id>/panel/",
+        views.team_actions_panel,
+        name="team_actions_panel",
+    ),
     path("teams/<int:team_id>/assets/", views.team_assets, name="team_assets"),
     path(
         "teams/<int:team_id>/assets/options/",

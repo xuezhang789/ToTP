@@ -29,10 +29,9 @@
                         <i class="bi bi-search"></i>
                     </span>
                     <input class="form-control" name="q" value="{{ q|default_if_none:'' }}" placeholder="搜索团队名称" maxlength="80">
+                    <button class="btn btn-primary" type="submit">搜索</button>
                     {% if q %}
                     <a class="btn btn-outline-secondary" href="{% url 'totp:teams' %}">重置</a>
-                    {% else %}
-                    <button class="btn btn-primary" type="submit">搜索</button>
                     {% endif %}
                 </div>
             </div>
@@ -82,38 +81,68 @@
 {% endif %}
 
 {% if team_blocks %}
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-        <h2 class="h6 text-muted mb-0">{% if q %}搜索结果{% else %}我的团队{% endif %}</h2>
-        <div class="d-flex flex-wrap gap-2">
-            <button class="btn btn-outline-secondary btn-sm" type="button" id="toggleTeamDetailsBtn">
-                全部展开/收起
-            </button>
+    <div class="card app-panel border-0 shadow-sm">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div class="fw-semibold">{% if q %}搜索结果{% else %}我的团队{% endif %}</div>
+            <div class="text-muted small">点击进入团队后可进行成员、资产、安全与审计管理。</div>
+        </div>
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead class="table-light">
+                <tr>
+                    <th scope="col">团队</th>
+                    <th scope="col" class="text-nowrap">统计</th>
+                    <th scope="col" class="text-end text-nowrap">操作</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for block in team_blocks %}
+                <tr>
+                    <td class="min-width-0">
+                        <div class="fw-semibold text-truncate">{{ block.team.name }}</div>
+                        <div class="d-flex flex-wrap gap-2 mt-1">
+                            <span class="badge rounded-pill bg-light text-muted fw-semibold">{{ block.membership.get_role_display }}</span>
+                            {% if block.can_manage %}
+                            <span class="badge rounded-pill bg-primary-subtle text-primary fw-semibold">可管理</span>
+                            {% else %}
+                            <span class="badge rounded-pill bg-secondary-subtle text-secondary fw-semibold">只读</span>
+                            {% endif %}
+                            {% if block.pending_invites and block.can_manage %}
+                            <span class="badge rounded-pill bg-warning-subtle text-warning fw-semibold">待确认 {{ block.pending_invites|length }}</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="text-nowrap">
+                        <span class="badge rounded-pill bg-light text-muted fw-semibold">成员 {{ block.member_count|default:0 }}</span>
+                        <span class="badge rounded-pill bg-light text-muted fw-semibold">密钥 {{ block.entry_count|default:0 }}</span>
+                        {% if block.can_manage %}
+                        <span class="badge rounded-pill bg-light text-muted fw-semibold">链接 {{ block.active_share_links|default:0 }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end text-nowrap">
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'totp:team_home' block.team.id %}">
+                            进入团队
+                        </a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'totp:list' %}?space=team:{{ block.team.id }}">
+                            密钥
+                        </a>
+                        <button class="btn btn-sm btn-outline-secondary" type="button"
+                                data-bs-toggle="offcanvas"
+                                data-bs-target="#teamActionsOffcanvas"
+                                aria-controls="teamActionsOffcanvas"
+                                data-team-actions-trigger="1"
+                                data-team-id="{{ block.team.id }}"
+                                data-team-name="{{ block.team.name }}"
+                                data-team-panel-url="{% url 'totp:team_actions_panel' block.team.id %}">
+                            操作
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
-
-    {% if manageable_blocks %}
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-        <h3 class="h6 mb-0">可管理团队</h3>
-        <span class="text-muted small">你可以邀请成员、调整角色和管理共享密钥</span>
-    </div>
-    {% for block in manageable_blocks %}
-        {% with team=block.team membership=block.membership member_count=block.member_count entry_count=block.entry_count pending_invites=block.pending_invites active_share_links=block.active_share_links can_manage=block.can_manage %}
-            {% include 'totp/_team_card.html' %}
-        {% endwith %}
-    {% endfor %}
-    {% endif %}
-
-    {% if readonly_blocks %}
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2 mt-2">
-        <h3 class="h6 mb-0">我加入的团队</h3>
-        <span class="text-muted small">你当前为只读成员，可查看共享密钥</span>
-    </div>
-    {% for block in readonly_blocks %}
-        {% with team=block.team membership=block.membership member_count=block.member_count entry_count=block.entry_count pending_invites=block.pending_invites active_share_links=block.active_share_links can_manage=block.can_manage %}
-            {% include 'totp/_team_card.html' %}
-        {% endwith %}
-    {% endfor %}
-    {% endif %}
 {% else %}
     <div class="card app-panel">
         <div class="card-body text-center py-5">
@@ -183,6 +212,16 @@
                 </div>
             </form>
         </div>
+    </div>
+</div>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="teamActionsOffcanvas" aria-labelledby="teamActionsOffcanvasLabel">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="teamActionsOffcanvasLabel">团队操作</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="关闭"></button>
+    </div>
+    <div class="offcanvas-body" id="teamActionsOffcanvasBody">
+        <div class="text-muted small">请选择一个团队。</div>
     </div>
 </div>
 {% endblock %}

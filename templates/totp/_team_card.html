@@ -28,35 +28,39 @@
             </div>
         </div>
         <div class="team-card-actions">
+            <a class="btn btn-outline-primary" href="{% url 'totp:team_home' team.id %}">
+                <i class="bi bi-box-arrow-up-right me-1"></i> 进入团队
+            </a>
             {% with team_id_str=team.id|stringformat:'s' %}
-            <a class="btn btn-outline-primary" href="{% url 'totp:list' %}?space=team:{{ team_id_str }}">
-                <i class="bi bi-box-arrow-up-right me-1"></i> 查看空间
+            <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}?space=team:{{ team_id_str }}">
+                打开密钥
             </a>
             {% endwith %}
+            <button class="btn btn-outline-secondary" type="button"
+                    data-bs-toggle="offcanvas"
+                    data-bs-target="#teamActionsOffcanvas"
+                    aria-controls="teamActionsOffcanvas"
+                    data-team-actions-trigger="1"
+                    data-team-id="{{ team.id }}"
+                    data-team-name="{{ team.name }}"
+                    data-team-panel-url="{% url 'totp:team_actions_panel' team.id %}">
+                <i class="bi bi-lightning-charge me-1"></i> 操作
+            </button>
             {% if membership and membership.can_manage_entries %}
-            <div class="btn-group">
-                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="bi bi-three-dots me-1"></i> 管理
-                </button>
-                <div class="dropdown-menu dropdown-menu-end">
-                    <button class="dropdown-item" type="button"
-                            data-team-rename-trigger="1"
-                            data-team-id="{{ team.id }}"
-                            data-team-name="{{ team.name }}"
-                            data-team-rename-url="{% url 'totp:team_rename' team.id %}">
-                        修改名称
-                    </button>
-                    <a class="dropdown-item" href="{% url 'totp:team_audit' team.id %}">查看审计</a>
-                    <a class="dropdown-item" href="{% url 'totp:team_assets' team.id %}">资产目录</a>
-                </div>
-            </div>
+            <button class="d-none" type="button"
+                    data-team-rename-trigger="1"
+                    data-team-id="{{ team.id }}"
+                    data-team-name="{{ team.name }}"
+                    data-team-rename-url="{% url 'totp:team_rename' team.id %}">
+                修改名称
+            </button>
             {% endif %}
             <button class="btn btn-outline-secondary" type="button"
                     data-bs-toggle="collapse"
                     data-bs-target="#teamDetails-{{ team.id }}"
                     aria-expanded="false"
                     aria-controls="teamDetails-{{ team.id }}">
-                <i class="bi bi-sliders me-1"></i> 打开详情
+                <i class="bi bi-chevron-down me-1"></i><span data-team-details-toggle data-collapsed-text="展开详情" data-expanded-text="收起详情">展开详情</span>
             </button>
         </div>
     </div>
@@ -106,248 +110,26 @@
                         <h3 class="team-card-subtitle mb-0">概览</h3>
                         <span class="text-muted small">成员 {{ member_count|default:0 }} · 密钥 {{ entry_count|default:0 }}</span>
                     </div>
-                    <div class="d-flex flex-wrap gap-2">
-                        {% if membership and membership.can_manage_entries %}
-                        <button class="btn btn-outline-secondary" type="button"
-                                data-team-rename-trigger="1"
-                                data-team-id="{{ team.id }}"
-                                data-team-name="{{ team.name }}"
-                                data-team-rename-url="{% url 'totp:team_rename' team.id %}">
-                            修改团队名称
-                        </button>
-                        {% endif %}
-                        {% with team_id_str=team.id|stringformat:'s' %}
-                        <a class="btn btn-outline-primary" href="{% url 'totp:list' %}?space=team:{{ team_id_str }}">
-                            打开团队空间
-                        </a>
-                        {% endwith %}
-                        <a class="btn btn-outline-secondary" href="{% url 'totp:team_assets' team.id %}">
-                            资产目录
-                        </a>
-                        <a class="btn btn-outline-secondary" href="{% url 'totp:team_audit' team.id %}">
-                            查看审计
-                        </a>
-                    </div>
+                    <div class="text-muted small">成员/审计/安全操作会在切换到对应标签页后加载。</div>
                 </div>
             </div>
 
-            <div class="tab-pane fade" id="teamPane-{{ team.id }}-members" role="tabpanel" aria-labelledby="teamTab-{{ team.id }}-members" tabindex="0">
-                {% if membership.role == 'owner' or membership.role == 'admin' %}
-                <div class="team-card-invite">
-                    <h3 class="team-card-subtitle">邀请成员</h3>
-                    <form method="post" action="{% url 'totp:team_add_member' team.id %}" class="row g-2 align-items-center team-invite-form">
-                        {% csrf_token %}
-                        <div class="col-12 col-md">
-                            <label class="visually-hidden" for="identifier-{{ team.id }}">邀请成员</label>
-                            <input id="identifier-{{ team.id }}" name="identifier" class="form-control" placeholder="输入用户名或邮箱" required autocomplete="off">
-                        </div>
-                        {% if membership.role == 'owner' %}
-                        <div class="col-12 col-sm-6 col-md-auto">
-                            <select name="role" class="form-select" aria-label="选择角色">
-                                {% for value,label in available_roles %}
-                                <option value="{{ value }}">{{ label }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        {% endif %}
-                        <div class="col-12 col-sm-auto">
-                            <button class="btn btn-primary w-100" type="submit">发送邀请</button>
-                        </div>
-                        <div class="col-12">
-                            <div class="form-text">管理员可管理团队条目；成员可查看与使用团队验证码。</div>
-                        </div>
-                    </form>
-                </div>
-                {% endif %}
-
-                <div class="team-card-section">
-                    <div class="team-card-section-header">
-                        <h3 class="team-card-subtitle mb-0">{% if can_manage %}成员管理{% else %}成员{% endif %}</h3>
-                        <span class="text-muted small">当前共 <span id="memberCount-{{ team.id }}">{{ member_count|default:0 }}</span> 人 · {{ entry_count|default:0 }} 个密钥</span>
-                    </div>
-                    {% if pending_invites and membership and membership.can_manage_entries %}
-                    <div id="pendingInvitesAlert-{{ team.id }}" class="alert alert-warning bg-warning-subtle border-0 d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                        <div class="small mb-0"><i class="bi bi-hourglass-split me-1"></i> <span id="pendingInvitesCountText-{{ team.id }}">{{ pending_invites|length }}</span> 位成员等待确认。</div>
-                        <div class="d-flex flex-wrap gap-2" id="pendingInvitesList-{{ team.id }}">
-                            {% for invite in pending_invites %}
-                            <div class="badge bg-light text-muted d-flex align-items-center gap-2 px-3 py-2 rounded-pill" data-invite-id="{{ invite.id }}">
-                                <span class="fw-semibold">{{ invite.invitee.username }}</span>
-                                <span class="text-muted">{{ invite.get_role_display }}</span>
-                                <form method="post" action="{% url 'totp:team_invitation_cancel' invite.id %}" class="ms-1 js-invite-cancel" data-team-id="{{ team.id }}">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-link btn-sm p-0 text-decoration-none text-muted">取消</button>
-                                </form>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
-                    <div class="table-responsive">
-                        <div class="team-member-table-wrapper">
-                            <table class="table table-hover align-middle mb-0 team-member-table" data-team-id="{{ team.id }}">
-                    <thead>
-                    <tr>
-                        <th scope="col">成员</th>
-                        <th scope="col">角色</th>
-                        <th scope="col">加入时间</th>
-                        <th scope="col" class="text-end">操作</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for member in team.memberships.all %}
-                        <tr data-member-id="{{ member.id }}" data-user-id="{{ member.user_id }}" data-role="{{ member.role }}">
-                            <td>
-                                <div class="d-flex align-items-center gap-3">
-                                    <div class="team-member-avatar">
-                                        {{ member.user.username|slice:":1"|upper }}
-                                    </div>
-                                    <div class="d-flex flex-column">
-                                        <span class="fw-semibold">{{ member.user.username }}</span>
-                                        {% if member.user.email %}
-                                        <span class="text-muted small">{{ member.user.email }}</span>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                                <span class="badge rounded-pill js-role-badge {% if member.role == 'owner' %}bg-dark{% elif member.role == 'admin' %}bg-primary{% else %}bg-secondary{% endif %}">
-                                    {{ member.get_role_display }}
-                                </span>
-                            </td>
-                            <td class="text-muted small">{{ member.joined_at|date:"Y-m-d H:i" }}</td>
-                            <td class="text-end">
-                                {% if member.role != 'owner' and member.user_id == request.user.id or membership.role == 'owner' and member.role != 'owner' or membership.role == 'admin' and member.role != 'owner' and member.role == 'member' or membership.role == 'admin' and member.role != 'owner' and member.user_id == request.user.id %}
-                                <div class="d-flex justify-content-end">
-                                    <div class="btn-group">
-                                        <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                                            操作
-                                        </button>
-                                        <div class="dropdown-menu dropdown-menu-end">
-                                            {% if membership.role == 'owner' and member.role != 'owner' %}
-                                                <form method="post" action="{% url 'totp:team_member_role' team.id member.id %}">
-                                                    {% csrf_token %}
-                                                    <input type="hidden" name="role" value="admin">
-                                                    <button class="dropdown-item js-member-role" type="submit" data-team-id="{{ team.id }}" data-target-role="admin"{% if member.role == 'admin' %} disabled{% endif %}>设为管理员</button>
-                                                </form>
-                                                <form method="post" action="{% url 'totp:team_member_role' team.id member.id %}">
-                                                    {% csrf_token %}
-                                                    <input type="hidden" name="role" value="member">
-                                                    <button class="dropdown-item js-member-role" type="submit" data-team-id="{{ team.id }}" data-target-role="member"{% if member.role == 'member' %} disabled{% endif %}>设为成员</button>
-                                                </form>
-                                            {% endif %}
-
-                                            {% if member.role != 'owner' %}
-                                                {% if membership.role == 'owner' %}
-                                                <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}">
-                                                    {% csrf_token %}
-                                                    <button class="dropdown-item text-danger" type="submit"
-                                                            data-confirm="确定对 {{ member.user.username }} 执行“{% if member.user_id == request.user.id %}退出团队{% else %}移除{% endif %}”吗？"
-                                                            data-confirm-title="{% if member.user_id == request.user.id %}退出团队{% else %}移除成员{% endif %}"
-                                                            data-confirm-ok="{% if member.user_id == request.user.id %}退出{% else %}移除{% endif %}"
-                                                            data-confirm-variant="danger">
-                                                        {% if member.user_id == request.user.id %}退出团队{% else %}移除成员{% endif %}
-                                                    </button>
-                                                </form>
-                                                {% elif membership.role == 'admin' %}
-                                                    {% if member.role == 'member' %}
-                                                    <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}">
-                                                        {% csrf_token %}
-                                                        <button class="dropdown-item text-danger" type="submit"
-                                                                data-confirm="确定对 {{ member.user.username }} 执行“{% if member.user_id == request.user.id %}退出团队{% else %}移除{% endif %}”吗？"
-                                                                data-confirm-title="{% if member.user_id == request.user.id %}退出团队{% else %}移除成员{% endif %}"
-                                                                data-confirm-ok="{% if member.user_id == request.user.id %}退出{% else %}移除{% endif %}"
-                                                                data-confirm-variant="danger">
-                                                            {% if member.user_id == request.user.id %}退出团队{% else %}移除成员{% endif %}
-                                                        </button>
-                                                    </form>
-                                                    {% elif member.user_id == request.user.id %}
-                                                    <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}">
-                                                        {% csrf_token %}
-                                                        <button class="dropdown-item text-danger" type="submit"
-                                                                data-confirm="确定退出该团队吗？"
-                                                                data-confirm-title="退出团队"
-                                                                data-confirm-ok="退出"
-                                                                data-confirm-variant="danger">
-                                                            退出团队
-                                                        </button>
-                                                    </form>
-                                                    {% endif %}
-                                                {% elif member.user_id == request.user.id %}
-                                                <form method="post" action="{% url 'totp:team_remove_member' team.id member.id %}">
-                                                    {% csrf_token %}
-                                                    <button class="dropdown-item text-danger" type="submit"
-                                                            data-confirm="确定退出该团队吗？"
-                                                            data-confirm-title="退出团队"
-                                                            data-confirm-ok="退出"
-                                                            data-confirm-variant="danger">
-                                                        退出团队
-                                                    </button>
-                                                </form>
-                                                {% endif %}
-                                            {% else %}
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </div>
-                                {% else %}
-                                <span class="text-muted small">—</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="4" class="text-center py-4 text-muted">暂未添加成员</td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+            <div class="tab-pane fade" id="teamPane-{{ team.id }}-members" role="tabpanel" aria-labelledby="teamTab-{{ team.id }}-members" tabindex="0"
+                 data-team-tab-pane="members"
+                 data-load-url="{% url 'totp:team_tab_fragment' team.id 'members' %}">
+                <div class="py-4 text-muted small">切换到该标签页后加载成员内容。</div>
             </div>
 
-            <div class="tab-pane fade" id="teamPane-{{ team.id }}-security" role="tabpanel" aria-labelledby="teamTab-{{ team.id }}-security" tabindex="0">
-                <div class="team-card-section">
-                    <div class="team-card-section-header">
-                        <h3 class="team-card-subtitle mb-0">安全操作</h3>
-                        <span class="text-muted small">高风险操作会要求二次确认</span>
-                    </div>
-                    {% if membership and membership.can_manage_entries %}
-                    <div class="alert alert-info bg-info-subtle border-0 d-flex flex-wrap align-items-center justify-content-between gap-2 mb-0">
-                        <div class="small mb-0">当前有效分享链接：<span id="activeShareLinksCountInline-{{ team.id }}">{{ active_share_links|default:0 }}</span> 条</div>
-                        <form method="post" action="{% url 'totp:team_revoke_all_share_links' team.id %}">
-                            {% csrf_token %}
-                            <button class="btn btn-outline-danger" type="submit"
-                                    data-confirm="确定撤销该团队下所有有效分享链接吗？"
-                                    data-confirm-title="撤销全部链接"
-                                    data-confirm-ok="撤销"
-                                    data-confirm-variant="danger"
-                                    data-confirm-hint="下一步会跳转到密码确认页，确认后返回团队页继续执行。">
-                                撤销全部链接
-                            </button>
-                        </form>
-                    </div>
-                    {% else %}
-                    <div class="text-muted small">你没有该团队的管理权限。</div>
-                    {% endif %}
-                </div>
+            <div class="tab-pane fade" id="teamPane-{{ team.id }}-security" role="tabpanel" aria-labelledby="teamTab-{{ team.id }}-security" tabindex="0"
+                 data-team-tab-pane="security"
+                 data-load-url="{% url 'totp:team_tab_fragment' team.id 'security' %}">
+                <div class="py-4 text-muted small">切换到该标签页后加载安全操作。</div>
             </div>
 
-            <div class="tab-pane fade" id="teamPane-{{ team.id }}-audit" role="tabpanel" aria-labelledby="teamTab-{{ team.id }}-audit" tabindex="0">
-                <div class="team-card-section">
-                    <div class="team-card-section-header">
-                        <h3 class="team-card-subtitle mb-0">审计</h3>
-                        <span class="text-muted small">查看成员变更、邀请与链接操作记录</span>
-                    </div>
-                    <div class="d-flex flex-wrap gap-2">
-                        <a class="btn btn-outline-secondary" href="{% url 'totp:team_audit' team.id %}">
-                            <i class="bi bi-journal-text me-1"></i> 打开审计
-                        </a>
-                        {% if membership and membership.can_manage_entries %}
-                        <div class="text-muted small d-flex align-items-center">导出审计建议在安全设备上进行。</div>
-                        {% endif %}
-                    </div>
-                </div>
+            <div class="tab-pane fade" id="teamPane-{{ team.id }}-audit" role="tabpanel" aria-labelledby="teamTab-{{ team.id }}-audit" tabindex="0"
+                 data-team-tab-pane="audit"
+                 data-load-url="{% url 'totp:team_tab_fragment' team.id 'audit' %}">
+                <div class="py-4 text-muted small">切换到该标签页后加载审计入口。</div>
             </div>
         </div>
     </div>
