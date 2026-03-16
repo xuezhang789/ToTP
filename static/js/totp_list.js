@@ -253,6 +253,10 @@
     if (!renameSubmitBtn) {
       return;
     }
+    if (window.appSetButtonLoading) {
+      window.appSetButtonLoading(renameSubmitBtn, flag, { label: '保存中' });
+      return;
+    }
     renameSubmitBtn.disabled = flag;
     if (renameSpinner) {
       renameSpinner.classList.toggle('d-none', !flag);
@@ -535,7 +539,14 @@
     }
     if (renameForm && typeof renameForm.checkValidity === 'function' && !renameForm.checkValidity()) {
       renameForm.classList.add('was-validated');
-      renameNameInput.focus({ preventScroll: true });
+      if (window.appFocusFirstInvalid) {
+        window.appFocusFirstInvalid(renameForm, { toastMessage: '请检查填写内容后再提交。' });
+      } else {
+        renameNameInput.focus({ preventScroll: true });
+      }
+      if (window.appNotify) {
+        window.appNotify({ alertEl: renameAlert, variant: 'warning', message: '请检查填写内容后再提交。' });
+      }
       return;
     }
     const value = renameNameInput.value.trim();

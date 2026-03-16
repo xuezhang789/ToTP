@@ -32,7 +32,7 @@
                         <div class="input-group">
                             <input id="signup-password" type="password" class="form-control" name="password"
                                    placeholder="密码" autocomplete="new-password" required>
-                            <button class="btn btn-outline-secondary" type="button" id="password-toggle" aria-label="显示或隐藏密码">
+                            <button class="btn btn-outline-secondary" type="button" id="password-toggle" aria-label="显示密码" aria-pressed="false">
                                 <i class="bi bi-eye"></i>
                             </button>
                         </div>
@@ -202,6 +202,9 @@
         passwordInput.dispatchEvent(new Event('input'));
         passwordInput.focus();
         passwordInput.select();
+        if (window.appAnnounce) {
+          window.appAnnounce('已生成强密码并填入');
+        }
       }
 
       function randomFrom(str){
@@ -236,6 +239,8 @@
         toggleBtn.addEventListener('click', () => {
           const isHidden = passwordInput.getAttribute('type') === 'password';
           passwordInput.setAttribute('type', isHidden ? 'text' : 'password');
+          toggleBtn.setAttribute('aria-pressed', isHidden ? 'true' : 'false');
+          toggleBtn.setAttribute('aria-label', isHidden ? '隐藏密码' : '显示密码');
           toggleBtn.innerHTML = isHidden ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
         });
       }
@@ -266,8 +271,6 @@
         console.error("Google One Tap failed:", t);
         if (window.appToast) {
           window.appToast('danger', 'Google 登录失败，请重试或使用账号密码登录。');
-        } else {
-          alert("Google 登录失败，请重试或使用账号密码登录。");
         }
       }
     }

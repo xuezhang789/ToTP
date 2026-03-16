@@ -118,6 +118,35 @@
     return invalid || null;
   }
 
+  function appInitModalAutoFocus() {
+    document.addEventListener('shown.bs.modal', (event) => {
+      const modal = event && event.target instanceof HTMLElement ? event.target : null;
+      if (!modal) {
+        return;
+      }
+      const target = modal.querySelector('[data-autofocus]') || modal.querySelector('input, textarea, select, button');
+      if (target && target.focus) {
+        target.focus({ preventScroll: true });
+        if (target.select && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+          try {
+            target.select();
+          } catch (e) {}
+        }
+      }
+    });
+  }
+
+  function appAnnounceFirstMessage() {
+    const alert = document.querySelector('main.app-main .alert[role="alert"]');
+    if (!alert) {
+      return;
+    }
+    const text = (alert.textContent || '').trim();
+    if (text) {
+      appAnnounce(text);
+    }
+  }
+
   function appToast(type, message, { delay = 2500 } = {}) {
     const bootstrap = ensureBootstrap();
     const container = document.getElementById('appToastContainer');
@@ -356,4 +385,7 @@
   window.appGetCsrfToken = appGetCsrfToken;
   window.appCopyToClipboard = appCopyToClipboard;
   window.appConfirm = appConfirm;
+
+  appInitModalAutoFocus();
+  appAnnounceFirstMessage();
 })();

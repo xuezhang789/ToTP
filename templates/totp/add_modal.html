@@ -1,7 +1,7 @@
 <div class="modal fade" id="addModal" tabindex="-1" aria-labelledby="addModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
         <div class="modal-content border-0 rounded-3 shadow">
-            <form method="post" action="{% url 'totp:add' %}">
+            <form id="addEntryForm" class="needs-validation" novalidate method="post" action="{% url 'totp:add' %}">
                 {% csrf_token %}
                 <div class="modal-header"><h5 class="modal-title" id="addModalLabel">添加密钥</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
@@ -9,11 +9,11 @@
                 <div class="modal-body">
                     <div id="addEntryAlert" class="alert alert-danger d-none" role="alert"></div>
                     <div class="mb-2">
-                        <label class="form-label">名称</label>
-                        <input name="name" class="form-control" placeholder="如：GitHub @me" required>
+                        <label class="form-label" for="addEntryName">名称</label>
+                        <input id="addEntryName" name="name" class="form-control" placeholder="如：GitHub @me" required data-autofocus>
                     </div>
                     <div class="mb-2">
-                        <label class="form-label">空间</label>
+                        <label class="form-label" for="entryTeamSelect">空间</label>
                         <select name="team_id" class="form-select" id="entryTeamSelect">
                             <option value="">个人空间</option>
                             {% for m in team_memberships %}
@@ -27,8 +27,8 @@
                         <div class="form-text">选择保存到个人或具有管理权限的团队空间。</div>
                     </div>
                     <div class="mb-2" data-group-field>
-                        <label class="form-label">分组（可选）</label>
-                        <select name="group_id" class="form-select">
+                        <label class="form-label" for="entryGroupSelect">分组（可选）</label>
+                        <select id="entryGroupSelect" name="group_id" class="form-select">
                             <option value="">未分组</option>
                             {% for g in groups %}
                             <option value="{{ g.id }}">{{ g.name }}</option>
@@ -36,13 +36,13 @@
                         </select>
                     </div>
                     <div class="mb-2">
-                        <label class="form-label">密钥（Base32）或 otpauth:// URI</label>
+                        <label class="form-label" for="secretInput">密钥（Base32）或 otpauth:// URI</label>
                         <textarea id="secretInput" name="secret" rows="2" class="form-control"
                                   placeholder="JBSWY3DPEHPK3PXP 或 otpauth://totp/..." required></textarea>
                         <div class="form-text">可上传二维码图片自动识别；仅解析 label→名称、secret→密钥，忽略 issuer。</div>
                     </div>
                     <div class="mb-2">
-                        <label class="form-label">二维码图片（可选）</label>
+                        <label class="form-label" for="qrFile">二维码图片（可选）</label>
                         <div class="d-flex flex-wrap gap-2">
                             <input type="file" id="qrFile" accept="image/*" class="form-control flex-grow-1"/>
                             <button type="button" id="pickFromGallery" class="btn btn-outline-primary w-100 w-md-auto">从相册导入</button>
@@ -51,7 +51,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
-                    <button class="btn btn-primary" type="submit">保存</button>
+                    <button class="btn btn-primary" id="addEntrySubmitBtn" type="submit">保存</button>
                 </div>
             </form>
         </div>
@@ -59,6 +59,26 @@
 </div>
 <script nonce="{{ csp_nonce }}">
     (function () {
+      const addForm = document.getElementById('addEntryForm');
+      const addSubmitBtn = document.getElementById('addEntrySubmitBtn');
+      const addAlert = document.getElementById('addEntryAlert');
+      addForm?.addEventListener('submit', (event) => {
+        if (typeof addForm.checkValidity === 'function' && !addForm.checkValidity()) {
+          event.preventDefault();
+          addForm.classList.add('was-validated');
+          if (window.appFocusFirstInvalid) {
+            window.appFocusFirstInvalid(addForm, { toastMessage: '请检查填写内容后再提交。' });
+          }
+          if (window.appNotify) {
+            window.appNotify({ alertEl: addAlert, variant: 'warning', message: '请检查填写内容后再提交。' });
+          }
+          return;
+        }
+        if (window.appSetButtonLoading) {
+          window.appSetButtonLoading(addSubmitBtn, true, { label: '保存中' });
+        }
+      });
+
       const ZXING_SRC = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js';
       const ZXING_INTEGRITY = 'sha384-DOP3OlIzNeWpufSZMxZihUYSqCAZFirsVmSAVg8ItvU9ac1FcQF6ZHjQ9CbCznNS';
       let readerPromise = null;

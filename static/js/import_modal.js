@@ -161,6 +161,14 @@
       importErrorAlert.classList.toggle('d-none', !message);
     }
 
+    function focusImportInput(mode) {
+      if (mode === 'file') {
+        importFileInput?.focus({ preventScroll: true });
+        return;
+      }
+      importManualText?.focus({ preventScroll: true });
+    }
+
     function showImportWarnings(warnings) {
       if (!importWarningAlert || !importWarningList) {
         return;
@@ -297,6 +305,7 @@
         const file = importFileInput?.files?.[0];
         if (!file) {
           showImportError('请选择要导入的文件');
+          focusImportInput(mode);
           return;
         }
         formData.append('file', file);
@@ -304,6 +313,7 @@
         const value = importManualText?.value.trim() || '';
         if (!value) {
           showImportError('请粘贴待导入的内容');
+          focusImportInput(mode);
           return;
         }
         formData.append('manual_text', value);
