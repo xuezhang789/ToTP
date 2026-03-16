@@ -22,6 +22,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from cryptography.fernet import Fernet
@@ -2209,6 +2210,7 @@ def invalidate_one_time_link(request, pk: int):
 
 
 @never_cache
+@csrf_exempt
 @require_POST
 def external_totp(request):
     """根据链接参数返回动态验证码，供未登录场景使用。"""
