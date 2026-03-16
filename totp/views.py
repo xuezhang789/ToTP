@@ -24,7 +24,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -34,6 +34,7 @@ from . import importers
 from project.utils import client_ip
 from .models import (
     Group,
+    TeamAsset,
     OneTimeLink,
     Team,
     TeamAudit,
@@ -282,6 +283,7 @@ def list_view(request):
 
     q = (request.GET.get("q") or "").strip()
     group_id = (request.GET.get("group") or "").strip()
+    asset_id = (request.GET.get("asset") or "").strip()
     space = (request.GET.get("space") or "personal").strip()
     selected_team = None
     selected_membership = None
@@ -302,7 +304,11 @@ def list_view(request):
         selected_team=selected_team,
         q=q,
         group_id=group_id,
+        asset_id=asset_id,
     )
+    team_assets = []
+    if selected_team is not None:
+        team_assets = list(TeamAsset.objects.filter(team=selected_team).order_by("name"))
 
     paginator = Paginator(entry_qs, 10)
     page_number = request.GET.get("page")
@@ -320,6 +326,8 @@ def list_view(request):
             "q": q,
             "groups": groups,
             "group_id": group_id,
+            "asset_id": asset_id,
+            "team_assets": team_assets,
             "team_memberships": memberships,
             "selected_space": space,
             "selected_team": selected_team,
@@ -896,6 +904,260 @@ def team_audit_export(request, team_id: int):
 
 
 @login_required
+def team_assets(request, team_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=False)
+    team = membership.team
+    q = (request.GET.get("q") or "").strip()
+    queryset = TeamAsset.objects.filter(team=team).prefetch_related("owners", "watchers")
+    if q:
+        queryset = queryset.filter(
+            Q(name__icontains=q)
+            | Q(description__icontains=q)
+            | Q(owners__username__icontains=q)
+            | Q(watchers__username__icontains=q)
+        ).distinct()
+    assets = list(
+        queryset.annotate(
+            entry_count=Count("entries", filter=Q(entries__is_deleted=False)),
+        ).order_by("name")
+    )
+    members = (
+        TeamMembership.objects.filter(team=team)
+        .select_related("user")
+        .order_by("user__username")
+    )
+    return render(
+        request,
+        "totp/team_assets.html",
+        {
+            "team": team,
+            "membership": membership,
+            "can_manage": membership.can_manage_entries,
+            "q": q,
+            "assets": assets,
+            "members": members,
+        },
+    )
+
+
+@login_required
+@require_GET
+def team_asset_options(request, team_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    assets = list(TeamAsset.objects.filter(team=membership.team).order_by("name").values("id", "name"))
+    return JsonResponse({"ok": True, "assets": assets})
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def team_asset_create(request, team_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    team = membership.team
+    members = (
+        TeamMembership.objects.filter(team=team)
+        .select_related("user")
+        .order_by("user__username")
+    )
+    if request.method == "POST":
+        name = (request.POST.get("name") or "").strip()
+        description = (request.POST.get("description") or "").strip()
+        owner_ids = request.POST.getlist("owners")
+        watcher_ids = request.POST.getlist("watchers")
+        if not name:
+            messages.error(request, "资产名称不能为空")
+            return render(
+                request,
+                "totp/team_asset_form.html",
+                {
+                    "team": team,
+                    "membership": membership,
+                    "members": members,
+                    "asset": None,
+                    "form": {
+                        "name": name,
+                        "description": description,
+                        "owners": owner_ids,
+                        "watchers": watcher_ids,
+                    },
+                },
+                status=400,
+            )
+        asset = TeamAsset.objects.create(team=team, name=name, description=description)
+        allowed_user_ids = set(members.values_list("user_id", flat=True))
+        owners = [int(v) for v in owner_ids if str(v).isdigit() and int(v) in allowed_user_ids]
+        watchers = [int(v) for v in watcher_ids if str(v).isdigit() and int(v) in allowed_user_ids]
+        asset.owners.set(owners)
+        asset.watchers.set(watchers)
+        messages.success(request, "资产已创建")
+        return redirect("totp:team_asset_detail", team_id=team.id, asset_id=asset.id)
+    return render(
+        request,
+        "totp/team_asset_form.html",
+        {
+            "team": team,
+            "membership": membership,
+            "members": members,
+            "asset": None,
+            "form": {
+                "name": "",
+                "description": "",
+                "owners": [],
+                "watchers": [],
+            },
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def team_asset_edit(request, team_id: int, asset_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    team = membership.team
+    asset = get_object_or_404(TeamAsset.objects.prefetch_related("owners", "watchers"), team=team, id=asset_id)
+    members = (
+        TeamMembership.objects.filter(team=team)
+        .select_related("user")
+        .order_by("user__username")
+    )
+    if request.method == "POST":
+        name = (request.POST.get("name") or "").strip()
+        description = (request.POST.get("description") or "").strip()
+        owner_ids = request.POST.getlist("owners")
+        watcher_ids = request.POST.getlist("watchers")
+        if not name:
+            messages.error(request, "资产名称不能为空")
+            return render(
+                request,
+                "totp/team_asset_form.html",
+                {
+                    "team": team,
+                    "membership": membership,
+                    "members": members,
+                    "asset": asset,
+                    "form": {
+                        "name": name,
+                        "description": description,
+                        "owners": owner_ids,
+                        "watchers": watcher_ids,
+                    },
+                },
+                status=400,
+            )
+        asset.name = name
+        asset.description = description
+        asset.save(update_fields=["name", "description", "updated_at"])
+        allowed_user_ids = set(members.values_list("user_id", flat=True))
+        owners = [int(v) for v in owner_ids if str(v).isdigit() and int(v) in allowed_user_ids]
+        watchers = [int(v) for v in watcher_ids if str(v).isdigit() and int(v) in allowed_user_ids]
+        asset.owners.set(owners)
+        asset.watchers.set(watchers)
+        messages.success(request, "资产已更新")
+        return redirect("totp:team_asset_detail", team_id=team.id, asset_id=asset.id)
+    return render(
+        request,
+        "totp/team_asset_form.html",
+        {
+            "team": team,
+            "membership": membership,
+            "members": members,
+            "asset": asset,
+            "form": {
+                "name": asset.name,
+                "description": asset.description,
+                "owners": [str(u.id) for u in asset.owners.all()],
+                "watchers": [str(u.id) for u in asset.watchers.all()],
+            },
+        },
+    )
+
+
+@login_required
+@require_POST
+def team_asset_delete(request, team_id: int, asset_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    team = membership.team
+    asset = get_object_or_404(TeamAsset, team=team, id=asset_id)
+    TOTPEntry.objects.filter(team=team, asset=asset).update(asset=None)
+    asset.delete()
+    messages.success(request, "资产已删除")
+    return redirect("totp:team_assets", team_id=team.id)
+
+
+@login_required
+def team_asset_detail(request, team_id: int, asset_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=False)
+    team = membership.team
+    asset = get_object_or_404(TeamAsset.objects.prefetch_related("owners", "watchers"), team=team, id=asset_id)
+    entries = (
+        TOTPEntry.objects.filter(team=team, asset=asset, is_deleted=False)
+        .select_related("group")
+        .order_by("name")
+    )
+    unassigned = (
+        TOTPEntry.objects.filter(team=team, asset__isnull=True, is_deleted=False)
+        .select_related("group")
+        .order_by("name")
+    )
+    return render(
+        request,
+        "totp/team_asset_detail.html",
+        {
+            "team": team,
+            "membership": membership,
+            "can_manage": membership.can_manage_entries,
+            "asset": asset,
+            "entries": entries,
+            "unassigned_entries": unassigned,
+        },
+    )
+
+
+def _parse_int_list(values, *, limit=200):
+    ids: list[int] = []
+    for item in values or []:
+        try:
+            value = int(item)
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            ids.append(value)
+    ids = list(dict.fromkeys(ids))
+    return ids[:limit]
+
+
+@login_required
+@require_POST
+def team_asset_assign_entries(request, team_id: int, asset_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    team = membership.team
+    asset = get_object_or_404(TeamAsset, team=team, id=asset_id)
+    entry_ids = _parse_int_list(request.POST.getlist("entry_ids"), limit=200)
+    if not entry_ids:
+        messages.error(request, "请选择要关联的密钥")
+        return redirect("totp:team_asset_detail", team_id=team.id, asset_id=asset.id)
+    updated = TOTPEntry.objects.filter(team=team, id__in=entry_ids, is_deleted=False).update(asset=asset)
+    if updated:
+        messages.success(request, f"已关联 {updated} 个密钥")
+    return redirect("totp:team_asset_detail", team_id=team.id, asset_id=asset.id)
+
+
+@login_required
+@require_POST
+def team_asset_remove_entries(request, team_id: int, asset_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    team = membership.team
+    asset = get_object_or_404(TeamAsset, team=team, id=asset_id)
+    entry_ids = _parse_int_list(request.POST.getlist("entry_ids"), limit=200)
+    if not entry_ids:
+        messages.error(request, "请选择要移除的密钥")
+        return redirect("totp:team_asset_detail", team_id=team.id, asset_id=asset.id)
+    updated = TOTPEntry.objects.filter(team=team, asset=asset, id__in=entry_ids).update(asset=None)
+    if updated:
+        messages.success(request, f"已移除 {updated} 个密钥")
+    return redirect("totp:team_asset_detail", team_id=team.id, asset_id=asset.id)
+
+
+@login_required
 @require_POST
 def team_revoke_all_share_links(request, team_id: int):
     membership = _get_team_membership(request.user, team_id, require_manage=True)
@@ -927,6 +1189,7 @@ def add_entry(request):
         name = (request.POST.get("name") or "").strip()
         group_id = request.POST.get("group_id") or ""
         team_id = (request.POST.get("team_id") or "").strip()
+        asset_id = (request.POST.get("asset_id") or "").strip()
         secret = (request.POST.get("secret") or "").strip()
 
         if secret.lower().startswith("otpauth://"):
@@ -942,11 +1205,17 @@ def add_entry(request):
 
         team = None
         group = None
+        asset = None
         if team_id:
             membership = _get_team_membership(
                 request.user, team_id, require_manage=True
             )
             team = membership.team
+            if asset_id:
+                try:
+                    asset = TeamAsset.objects.get(pk=int(asset_id), team=team)
+                except (TeamAsset.DoesNotExist, ValueError, TypeError):
+                    asset = None
         if group_id:
             try:
                 group = Group.objects.get(pk=int(group_id), user=request.user)
@@ -954,6 +1223,8 @@ def add_entry(request):
                 group = None
         if team is not None:
             group = None  # 团队空间下不复用个人分组
+            if asset is None:
+                asset = None
 
         if team is None:
             duplicate_qs = TOTPEntry.objects.filter(
@@ -972,6 +1243,7 @@ def add_entry(request):
             team=team,
             name=name,
             group=group,
+            asset=asset,
             secret_encrypted=enc,
         )
         log_entry_audit(
@@ -982,6 +1254,7 @@ def add_entry(request):
             metadata={
                 "space": "team" if entry.team_id else "personal",
                 "group": group.name if group else "",
+                "asset": asset.name if asset else "",
             },
         )
         messages.success(request, "已添加")
@@ -1334,6 +1607,14 @@ def batch_import_preview(request):
     except ValueError as exc:
         return JsonResponse({"ok": False, "errors": [str(exc)]}, status=400)
 
+    raw_asset_id = (request.POST.get("asset_id") or "").strip()
+    target_asset = None
+    if target_team is not None and raw_asset_id:
+        try:
+            target_asset = TeamAsset.objects.get(pk=int(raw_asset_id), team=target_team)
+        except (TeamAsset.DoesNotExist, ValueError, TypeError):
+            return JsonResponse({"ok": False, "errors": ["资产不存在或不可用"]}, status=400)
+
     mode = (request.POST.get("mode") or "manual").strip()
     manual_text = (request.POST.get("manual_text") or "").strip() if mode == "manual" else ""
     uploaded = request.FILES.get("file") if mode == "file" else None
@@ -1404,6 +1685,7 @@ def batch_import_preview(request):
             "ok": True,
             "space": space,
             "target_label": target_label,
+            "asset_id": str(target_asset.id) if target_asset else "",
             "entries": entries_payload,
             "warnings": warnings,
             "summary": {
@@ -1434,6 +1716,14 @@ def batch_import_apply(request):
         )
     except ValueError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+    raw_asset_id = (payload.get("asset_id") or "").strip()
+    target_asset = None
+    if target_team is not None and raw_asset_id:
+        try:
+            target_asset = TeamAsset.objects.get(pk=int(raw_asset_id), team=target_team)
+        except (TeamAsset.DoesNotExist, ValueError, TypeError):
+            return JsonResponse({"ok": False, "error": "invalid_asset"}, status=400)
 
     raw_entries = payload.get("entries") or []
     if not isinstance(raw_entries, list) or not raw_entries:
@@ -1473,7 +1763,9 @@ def batch_import_apply(request):
             return JsonResponse({"ok": False, "error": errors[0]}, status=400)
         return JsonResponse({"ok": False, "error": "没有可导入的条目"}, status=400)
 
-    created, skipped = _apply_import_entries(request.user, entries, team=target_team)
+    created, skipped = _apply_import_entries(
+        request.user, entries, team=target_team, asset=target_asset
+    )
 
     if created:
         message = f"成功导入 {created} 条"
@@ -1500,7 +1792,7 @@ def batch_import_apply(request):
     return JsonResponse({"ok": True, "redirect": redirect_url, "space": space})
 
 
-def _apply_import_entries(user, entries, *, team=None):
+def _apply_import_entries(user, entries, *, team=None, asset=None):
     """将解析后的条目写入数据库，返回 (新增数量, 跳过数量)。"""
 
     created = 0
@@ -1527,6 +1819,7 @@ def _apply_import_entries(user, entries, *, team=None):
                     TOTPEntry(
                         user=user,
                         team=team,
+                        asset=asset,
                         name=entry.name,
                         secret_encrypted=encrypt_str(entry.secret),
                     )
@@ -1545,7 +1838,11 @@ def _apply_import_entries(user, entries, *, team=None):
                                 actor=actor_obj,
                                 action=TOTPEntryAudit.Action.CREATED,
                                 new_value=created_entry.name,
-                                metadata={"space": "team", "import": True},
+                                metadata={
+                                    "space": "team",
+                                    "import": True,
+                                    "asset": asset.name if asset else "",
+                                },
                             )
                             for created_entry in created_entries
                         ]
@@ -1949,6 +2246,44 @@ def update_entry_group(request, pk: int):
         {
             "success": True,
             "group_name": group.name if group else "未分组",
+        }
+    )
+
+
+@login_required
+def update_entry_asset(request, pk: int):
+    if request.method != "POST":
+        return JsonResponse({"error": "method_not_allowed"}, status=405)
+
+    entry = _get_entry_for_user(request.user, pk, require_manage=True)
+    if not entry.is_team_entry:
+        return JsonResponse(
+            {"error": "personal_entry_not_supported", "message": "个人条目不支持资产归属"},
+            status=400,
+        )
+    asset_id = (request.POST.get("asset_id") or "").strip()
+    asset = None
+    if asset_id:
+        try:
+            asset = TeamAsset.objects.get(pk=int(asset_id), team=entry.team)
+        except (TeamAsset.DoesNotExist, ValueError, TypeError):
+            return JsonResponse({"error": "invalid_asset"}, status=400)
+
+    old_asset = entry.asset.name if entry.asset else ""
+    entry.asset = asset
+    entry.save(update_fields=["asset", "updated_at"])
+    log_entry_audit(
+        entry,
+        request.user,
+        TOTPEntryAudit.Action.ASSET_CHANGED,
+        old_value=old_asset,
+        new_value=asset.name if asset else "",
+        metadata={"space": "team", "team_id": entry.team_id},
+    )
+    return JsonResponse(
+        {
+            "success": True,
+            "asset_name": asset.name if asset else "未归属",
         }
     )
 

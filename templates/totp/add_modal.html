@@ -26,6 +26,14 @@
                         </select>
                         <div class="form-text">选择保存到个人或具有管理权限的团队空间。</div>
                     </div>
+                    <input type="hidden" id="teamAssetOptionsUrl" value="{% url 'totp:team_asset_options' 0 %}">
+                    <div class="mb-2 d-none" data-asset-field>
+                        <label class="form-label" for="entryAssetSelect">资产（可选）</label>
+                        <select id="entryAssetSelect" name="asset_id" class="form-select">
+                            <option value="">未归属</option>
+                        </select>
+                        <div class="form-text">仅团队空间可用，用于将密钥归档到系统/项目。</div>
+                    </div>
                     <div class="mb-2" data-group-field>
                         <label class="form-label" for="entryGroupSelect">分组（可选）</label>
                         <select id="entryGroupSelect" name="group_id" class="form-select">
@@ -62,6 +70,74 @@
       const addForm = document.getElementById('addEntryForm');
       const addSubmitBtn = document.getElementById('addEntrySubmitBtn');
       const addAlert = document.getElementById('addEntryAlert');
+      const teamSelect = document.getElementById('entryTeamSelect');
+      const groupField = document.querySelector('[data-group-field]');
+      const groupSelect = document.getElementById('entryGroupSelect');
+      const assetField = document.querySelector('[data-asset-field]');
+      const assetSelect = document.getElementById('entryAssetSelect');
+      const assetUrlTemplateInput = document.getElementById('teamAssetOptionsUrl');
+
+      function buildAssetUrl(teamId) {
+        const template = assetUrlTemplateInput?.value || '';
+        if (!template) {
+          return '';
+        }
+        return template.replace('/0/', `/${teamId}/`);
+      }
+
+      function setAssetOptions(items) {
+        if (!assetSelect) {
+          return;
+        }
+        assetSelect.replaceChildren();
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = '未归属';
+        assetSelect.appendChild(emptyOption);
+        (items || []).forEach((item) => {
+          const opt = document.createElement('option');
+          opt.value = String(item.id);
+          opt.textContent = item.name;
+          assetSelect.appendChild(opt);
+        });
+      }
+
+      function refreshTeamFields() {
+        const teamId = (teamSelect?.value || '').trim();
+        const isTeam = Boolean(teamId);
+        if (groupField) {
+          groupField.classList.toggle('d-none', isTeam);
+        }
+        if (groupSelect && isTeam) {
+          groupSelect.value = '';
+        }
+        if (assetField) {
+          assetField.classList.toggle('d-none', !isTeam);
+        }
+        if (!isTeam) {
+          if (assetSelect) {
+            assetSelect.value = '';
+          }
+          setAssetOptions([]);
+          return;
+        }
+        const url = buildAssetUrl(teamId);
+        if (!url) {
+          return;
+        }
+        fetch(url, { headers: { 'X-Requested-With': 'fetch' }, credentials: 'same-origin' })
+          .then((resp) => resp.json())
+          .then((data) => {
+            if (!data || !data.ok) {
+              return;
+            }
+            setAssetOptions(data.assets || []);
+          })
+          .catch(() => {});
+      }
+
+      teamSelect?.addEventListener('change', refreshTeamFields);
+      refreshTeamFields();
       addForm?.addEventListener('submit', (event) => {
         if (typeof addForm.checkValidity === 'function' && !addForm.checkValidity()) {
           event.preventDefault();

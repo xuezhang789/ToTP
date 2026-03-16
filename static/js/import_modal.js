@@ -75,6 +75,9 @@
     const importFilePanel = document.getElementById('importFilePanel');
     const importFileInput = document.getElementById('importFileInput');
     const importSpaceSelect = document.getElementById('importSpaceSelect');
+    const importAssetField = document.getElementById('importAssetField');
+    const importAssetSelect = document.getElementById('importAssetSelect');
+    const importAssetUrlTemplate = document.getElementById('teamAssetOptionsUrlForImport');
     const importPreviewBtn = document.getElementById('importPreviewBtn');
     const importApplyBtn = document.getElementById('importApplyBtn');
     const importErrorAlert = document.getElementById('importErrorAlert');
@@ -88,6 +91,7 @@
       payload: null,
       targetSpace: null,
       targetLabel: '',
+      targetAssetId: '',
     };
 
     function getAvailableSpaceValues() {
@@ -135,6 +139,74 @@
     }
 
     setSpaceValue(config.defaultSpace || 'personal');
+
+    function parseTeamId(space) {
+      if (!space || typeof space !== 'string') {
+        return '';
+      }
+      if (!space.startsWith('team:')) {
+        return '';
+      }
+      return space.slice(5).trim();
+    }
+
+    function buildAssetUrl(teamId) {
+      const template = importAssetUrlTemplate?.value || '';
+      if (!template) {
+        return '';
+      }
+      return template.replace('/0/', `/${teamId}/`);
+    }
+
+    function setAssetOptions(items) {
+      if (!importAssetSelect) {
+        return;
+      }
+      importAssetSelect.replaceChildren();
+      const emptyOption = document.createElement('option');
+      emptyOption.value = '';
+      emptyOption.textContent = '未归属';
+      importAssetSelect.appendChild(emptyOption);
+      (items || []).forEach((item) => {
+        const opt = document.createElement('option');
+        opt.value = String(item.id);
+        opt.textContent = item.name;
+        importAssetSelect.appendChild(opt);
+      });
+    }
+
+    function refreshAssetField() {
+      const currentSpace = getCurrentSpace();
+      const teamId = parseTeamId(currentSpace);
+      const isTeam = Boolean(teamId);
+      if (importAssetField) {
+        importAssetField.classList.toggle('d-none', !isTeam);
+      }
+      if (!isTeam) {
+        state.targetAssetId = '';
+        if (importAssetSelect) {
+          importAssetSelect.value = '';
+        }
+        setAssetOptions([]);
+        return;
+      }
+      const url = buildAssetUrl(teamId);
+      if (!url) {
+        return;
+      }
+      fetch(url, { headers: { 'X-Requested-With': 'fetch' }, credentials: 'same-origin' })
+        .then((resp) => resp.json())
+        .then((data) => {
+          if (!data || !data.ok) {
+            return;
+          }
+          setAssetOptions(data.assets || []);
+          if (importAssetSelect && state.targetAssetId) {
+            importAssetSelect.value = state.targetAssetId;
+          }
+        })
+        .catch(() => {});
+    }
 
     function currentImportMode() {
       const active = Array.from(importModeRadios).find((radio) => radio.checked);
@@ -209,7 +281,12 @@
     function resetModal() {
       state.payload = null;
       state.targetLabel = '';
+      state.targetAssetId = '';
       setSpaceValue(config.defaultSpace || 'personal');
+      if (importAssetSelect) {
+        importAssetSelect.value = '';
+      }
+      refreshAssetField();
       if (importManualText) {
         importManualText.value = '';
       }
@@ -281,6 +358,11 @@
       state.targetSpace = setSpaceValue(importSpaceSelect?.value);
       state.targetLabel = '';
       state.payload = null;
+      state.targetAssetId = '';
+      if (importAssetSelect) {
+        importAssetSelect.value = '';
+      }
+      refreshAssetField();
       importPreviewWrapper?.classList.add('d-none');
       if (importPreviewSummary) {
         importPreviewSummary.textContent = DEFAULT_TEXTS.previewSummary;
@@ -301,6 +383,10 @@
       formData.append('mode', mode);
       const currentSpace = getCurrentSpace();
       formData.append('space', currentSpace);
+      const teamId = parseTeamId(currentSpace);
+      if (teamId && importAssetSelect) {
+        formData.append('asset_id', (importAssetSelect.value || '').trim());
+      }
       if (mode === 'file') {
         const file = importFileInput?.files?.[0];
         if (!file) {
@@ -343,6 +429,11 @@
           }));
           state.targetSpace = setSpaceValue(data.space || currentSpace);
           state.targetLabel = data.target_label || (state.targetSpace === 'personal' ? '个人空间' : '');
+          state.targetAssetId = (data.asset_id || '').toString();
+          if (importAssetSelect) {
+            importAssetSelect.value = state.targetAssetId;
+          }
+          refreshAssetField();
           renderImportPreview(data.entries, data.summary);
           showImportWarnings(data.warnings || []);
           if (importApplyBtn) {
@@ -373,7 +464,7 @@
           'Content-Type': 'application/json',
           'X-CSRFToken': getCsrfToken(),
         },
-        body: JSON.stringify({ space: state.targetSpace, entries: state.payload }),
+        body: JSON.stringify({ space: state.targetSpace, asset_id: state.targetAssetId || '', entries: state.payload }),
         credentials: 'same-origin',
       })
         .then(async (resp) => {
@@ -409,6 +500,7 @@
       setImportMode(currentImportMode());
     }
 
+    refreshAssetField();
     importSpaceSelect?.addEventListener('change', handleSpaceChange);
     importPreviewBtn?.addEventListener('click', submitPreview);
     importApplyBtn?.addEventListener('click', submitApply);

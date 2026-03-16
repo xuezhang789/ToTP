@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}团队资产 - TOTP管理平台{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a class="btn btn-link p-0" href="{% url 'totp:teams' %}">
+        ← 返回团队空间
+    </a>
+</div>
+
+<div class="card app-panel border-0 shadow-sm mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <h1 class="app-section-title mb-1">资产目录</h1>
+            <p class="text-muted small mb-0">团队：{{ team.name }}</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            {% if can_manage %}
+            <a class="btn btn-primary" href="{% url 'totp:team_asset_create' team.id %}">
+                <i class="bi bi-plus-lg me-1"></i> 新建资产
+            </a>
+            {% endif %}
+            <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}?space=team:{{ team.id }}">
+                <i class="bi bi-box-arrow-up-right me-1"></i> 打开团队空间
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="card app-panel border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <form method="get" action="{% url 'totp:team_assets' team.id %}" class="row g-2 align-items-center">
+            <div class="col-12 col-md">
+                <div class="input-group">
+                    <span class="input-group-text bg-transparent">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input class="form-control" name="q" value="{{ q|default_if_none:'' }}" placeholder="搜索资产名称、描述、负责人或关注人" maxlength="80">
+                    {% if q %}
+                    <a class="btn btn-outline-secondary" href="{% url 'totp:team_assets' team.id %}">重置</a>
+                    {% else %}
+                    <button class="btn btn-primary" type="submit">搜索</button>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-12 col-md-auto">
+                <span class="badge rounded-pill bg-light text-muted fw-semibold">资产 {{ assets|length }}</span>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if assets %}
+    <div class="row g-3">
+        {% for asset in assets %}
+        <div class="col-12 col-lg-6">
+            <div class="card app-panel border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="min-width-0">
+                            <h2 class="h6 mb-1 text-truncate">
+                                <a class="text-decoration-none" href="{% url 'totp:team_asset_detail' team.id asset.id %}">
+                                    {{ asset.name }}
+                                </a>
+                            </h2>
+                            {% if asset.description %}
+                            <div class="text-muted small">{{ asset.description|truncatechars:120 }}</div>
+                            {% else %}
+                            <div class="text-muted small">暂无描述</div>
+                            {% endif %}
+                        </div>
+                        <span class="badge rounded-pill bg-light text-muted fw-semibold">密钥 {{ asset.entry_count|default:0 }}</span>
+                    </div>
+                    <div class="mt-3">
+                        <div class="text-muted small mb-1">负责人</div>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for u in asset.owners.all %}
+                                <span class="badge rounded-pill bg-primary-subtle text-primary fw-semibold">{{ u.username }}</span>
+                            {% empty %}
+                                <span class="text-muted small">未设置</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="text-muted small mb-1">关注人</div>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for u in asset.watchers.all %}
+                                <span class="badge rounded-pill bg-secondary-subtle text-secondary fw-semibold">{{ u.username }}</span>
+                            {% empty %}
+                                <span class="text-muted small">未设置</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% if can_manage %}
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        <a class="btn btn-outline-secondary btn-sm" href="{% url 'totp:team_asset_edit' team.id asset.id %}">编辑</a>
+                        <form method="post" action="{% url 'totp:team_asset_delete' team.id asset.id %}">
+                            {% csrf_token %}
+                            <button class="btn btn-outline-danger btn-sm" type="submit"
+                                    data-confirm="确定删除资产「{{ asset.name }}」吗？删除后其关联密钥将变为未归属。">
+                                删除
+                            </button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="card app-panel">
+        <div class="card-body text-center py-5">
+            {% if q %}
+            <p class="lead mb-2">未找到匹配的资产</p>
+            <p class="text-muted mb-3">尝试换个关键词，或重置筛选条件。</p>
+            <a class="btn btn-outline-secondary" href="{% url 'totp:team_assets' team.id %}">重置搜索</a>
+            {% else %}
+            <p class="lead mb-2">还没有资产目录</p>
+            <p class="text-muted mb-3">创建资产后，可以把团队密钥按系统/项目归档，并指定负责人。</p>
+            {% if can_manage %}
+            <a class="btn btn-primary" href="{% url 'totp:team_asset_create' team.id %}">新建资产</a>
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+{% endif %}
+{% endblock %}
+

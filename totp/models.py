@@ -232,6 +232,27 @@ class Group(models.Model):
         return self.name
 
 
+class TeamAsset(models.Model):
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="assets")
+    name = models.CharField(max_length=80)
+    description = models.TextField(blank=True)
+    owners = models.ManyToManyField(User, related_name="totp_team_asset_owners", blank=True)
+    watchers = models.ManyToManyField(User, related_name="totp_team_asset_watchers", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = (("team", "name"),)
+        ordering = ["name"]
+        indexes = [
+            models.Index(fields=["team", "name"]),
+            models.Index(fields=["team", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.team}: {self.name}"
+
+
 class ActiveTOTPEntryManager(models.Manager):
     """仅返回未被删除（不在回收站）的密钥对象。"""
 
@@ -275,6 +296,13 @@ class TOTPEntry(models.Model):
     )
     group = models.ForeignKey(
         Group, on_delete=models.SET_NULL, null=True, blank=True, related_name="entries"
+    )
+    asset = models.ForeignKey(
+        TeamAsset,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="entries",
     )
     name = models.CharField(max_length=64)
     secret_encrypted = models.TextField()
@@ -380,6 +408,7 @@ class TOTPEntryAudit(models.Model):
         CREATED = "created", "创建"
         RENAMED = "renamed", "重命名"
         GROUP_CHANGED = "group_changed", "分组调整"
+        ASSET_CHANGED = "asset_changed", "资产归属调整"
         TRASHED = "trashed", "移入回收站"
         RESTORED = "restored", "恢复"
         DELETED = "deleted", "永久删除"

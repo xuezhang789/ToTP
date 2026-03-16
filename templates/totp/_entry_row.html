@@ -1,5 +1,6 @@
 <tr data-id="{{ e.id }}" data-period="30"
     data-update-url="{% url 'totp:update_group' e.id %}"
+    data-update-asset-url="{% url 'totp:update_asset' e.id %}"
     data-rename-url="{% url 'totp:rename_entry' e.id %}">
     <td class="entry-cell-name">
         <div class="d-flex align-items-center gap-2 w-100" style="min-width:0;">
@@ -20,7 +21,20 @@
     </td>
     <td class="entry-cell-group">
         {% if e.team %}
-        <span class="badge rounded-pill bg-light text-muted fw-semibold">团队共享</span>
+            {% if e.can_manage %}
+            <select class="form-select form-select-sm asset-select" data-current="{{ e.asset_id|default_if_none:'' }}">
+                <option value="" {% if not e.asset_id %}selected{% endif %}>未归属</option>
+                {% for a in assets %}
+                <option value="{{ a.id }}" {% if e.asset_id == a.id %}selected{% endif %}>{{ a.name }}</option>
+                {% endfor %}
+            </select>
+            {% else %}
+                {% if e.asset %}
+                    <span class="badge rounded-pill bg-light text-muted fw-semibold">{{ e.asset.name }}</span>
+                {% else %}
+                    <span class="badge rounded-pill bg-light text-muted fw-semibold">未归属</span>
+                {% endif %}
+            {% endif %}
         {% else %}
         <select class="form-select form-select-sm group-select" data-current="{{ e.group_id|default_if_none:'' }}"
                 {% if not e.can_manage %}disabled{% endif %}>

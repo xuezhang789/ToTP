@@ -40,6 +40,7 @@
   const form = document.getElementById('searchForm');
   const qInput = document.getElementById('q');
   const groupSelect = document.getElementById('group');
+  const assetSelect = document.getElementById('asset');
   const clearBtn = document.getElementById('clearBtn');
   const searchBtn = document.getElementById('searchBtn');
   const spinner = document.getElementById('searchSpinner');
@@ -676,8 +677,57 @@
       });
   });
 
+  tbody.addEventListener('change', (event) => {
+    const select = event.target.closest('.asset-select');
+    if (!select) {
+      return;
+    }
+    const tr = select.closest('tr[data-update-asset-url]');
+    if (!tr) {
+      return;
+    }
+    const url = tr.dataset.updateAssetUrl;
+    const previous = select.dataset.current ?? '';
+    const value = select.value;
+    select.disabled = true;
+    select.classList.remove('is-valid', 'is-invalid');
+    const formData = new FormData();
+    formData.append('asset_id', value);
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'fetch',
+        'X-CSRFToken': window.appGetCsrfToken ? window.appGetCsrfToken() : '',
+      },
+      body: formData,
+    })
+      .then((resp) => {
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        return resp.json();
+      })
+      .then(() => {
+        select.dataset.current = value;
+        select.classList.add('is-valid');
+        setTimeout(() => select.classList.remove('is-valid'), 1200);
+      })
+      .catch((err) => {
+        console.error('Update asset failed:', err);
+        if (window.appToast) {
+          window.appToast('danger', '更新资产归属失败，请稍后再试。');
+        }
+        select.value = previous;
+        select.classList.add('is-invalid');
+        setTimeout(() => select.classList.remove('is-invalid'), 1500);
+      })
+      .finally(() => {
+        select.disabled = false;
+      });
+  });
+
   function updateClearButton() {
-    const hasValue = (qInput && qInput.value.trim()) || (groupSelect && groupSelect.value);
+    const hasValue = (qInput && qInput.value.trim()) || (groupSelect && groupSelect.value) || (assetSelect && assetSelect.value);
     if (clearBtn) {
       clearBtn.classList.toggle('d-none', !hasValue);
     }
@@ -691,6 +741,9 @@
   if (groupSelect) {
     groupSelect.addEventListener('change', updateClearButton);
   }
+  if (assetSelect) {
+    assetSelect.addEventListener('change', updateClearButton);
+  }
 
   if (clearBtn) {
     clearBtn.addEventListener('click', () => {
@@ -699,6 +752,9 @@
       }
       if (groupSelect) {
         groupSelect.value = '';
+      }
+      if (assetSelect) {
+        assetSelect.value = '';
       }
       updateClearButton();
       if (form) {

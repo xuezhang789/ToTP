@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from totp.models import Group, Team, TeamMembership, TOTPEntry
+from totp.models import Group, Team, TeamAsset, TeamMembership, TOTPEntry
 from totp.utils import decrypt_str, encrypt_str
 
 
@@ -19,18 +19,22 @@ class BatchImportTests(TestCase):
         session["reauth_at"] = int(timezone.now().timestamp())
         session.save()
 
-    def _preview_manual(self, text: str, space: str | None = None):
+    def _preview_manual(self, text: str, space: str | None = None, asset_id: str | None = None):
         url = reverse("totp:batch_import_preview")
         data = {"mode": "manual", "manual_text": text}
         if space:
             data["space"] = space
+        if asset_id is not None:
+            data["asset_id"] = asset_id
         return self.client.post(url, data, follow=False)
 
-    def _apply_entries(self, entries, space: str | None = None):
+    def _apply_entries(self, entries, space: str | None = None, asset_id: str | None = None):
         url = reverse("totp:batch_import_apply")
         payload = {"entries": entries}
         if space:
             payload["space"] = space
+        if asset_id is not None:
+            payload["asset_id"] = asset_id
         return self.client.post(
             url,
             data=json.dumps(payload),
@@ -122,6 +126,7 @@ class BatchImportTests(TestCase):
         TeamMembership.objects.create(
             team=team, user=self.user, role=TeamMembership.Role.OWNER
         )
+        asset = TeamAsset.objects.create(team=team, name="GitHub", description="")
         existing_secret = "JBSWY3DPEHPK3PXP"
         TOTPEntry.objects.create(
             user=self.user,
@@ -138,11 +143,12 @@ class BatchImportTests(TestCase):
         )
         space = f"team:{team.id}"
 
-        preview = self._preview_manual(payload, space=space)
+        preview = self._preview_manual(payload, space=space, asset_id=str(asset.id))
         self.assertEqual(preview.status_code, 200)
         data = preview.json()
         self.assertTrue(data["ok"])
         self.assertEqual(data["space"], space)
+        self.assertEqual(data.get("asset_id"), str(asset.id))
         warnings = data.get("warnings") or []
         self.assertTrue(any("团队空间不支持分组" in text for text in warnings))
         entries = [
@@ -155,7 +161,7 @@ class BatchImportTests(TestCase):
             for item in data["entries"]
         ]
 
-        apply_resp = self._apply_entries(entries, space=space)
+        apply_resp = self._apply_entries(entries, space=space, asset_id=str(asset.id))
         self.assertEqual(apply_resp.status_code, 200)
         apply_data = apply_resp.json()
         self.assertTrue(apply_data["ok"])
@@ -166,4 +172,5 @@ class BatchImportTests(TestCase):
         self.assertEqual(team_entries.count(), 2)
         created_entry = team_entries.get(name="Team Entry")
         self.assertIsNone(created_entry.group_id)
+        self.assertEqual(created_entry.asset_id, asset.id)
         self.assertEqual(decrypt_str(created_entry.secret_encrypted), "JBSWY3DPEHPK3PXQ")

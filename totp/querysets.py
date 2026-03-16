@@ -3,18 +3,22 @@ from django.db.models import Count, Prefetch, Q
 from .models import Group, Team, TeamMembership, TOTPEntry
 
 
-def entries_queryset_for_list(*, user, selected_team: Team | None, q: str, group_id: str):
+def entries_queryset_for_list(*, user, selected_team: Team | None, q: str, group_id: str, asset_id: str = ""):
     if selected_team is not None:
         entry_qs = (
             TOTPEntry.objects.filter(team=selected_team)
-            .select_related("team")
+            .select_related("team", "asset")
             .order_by("-created_at")
         )
+        if asset_id == "0":
+            entry_qs = entry_qs.filter(asset__isnull=True)
+        elif asset_id:
+            entry_qs = entry_qs.filter(asset_id=asset_id)
         groups = []
     else:
         entry_qs = (
             TOTPEntry.objects.filter(user=user, team__isnull=True)
-            .select_related("group")
+            .select_related("group", "asset")
             .order_by("-created_at")
         )
         if group_id == "0":
@@ -35,7 +39,7 @@ def entries_queryset_for_list(*, user, selected_team: Team | None, q: str, group
     if q:
         entry_qs = entry_qs.filter(name__icontains=q)
 
-    entry_qs = entry_qs.select_related("group", "team").prefetch_related(
+    entry_qs = entry_qs.select_related("group", "team", "asset").prefetch_related(
         Prefetch(
             "team__memberships",
             queryset=TeamMembership.objects.filter(user=user),
@@ -66,4 +70,3 @@ def teams_queryset_for_overview(*, user, q: str):
         )
         .order_by("name")
     )
-

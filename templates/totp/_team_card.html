@@ -47,6 +47,7 @@
                         修改名称
                     </button>
                     <a class="dropdown-item" href="{% url 'totp:team_audit' team.id %}">查看审计</a>
+                    <a class="dropdown-item" href="{% url 'totp:team_assets' team.id %}">资产目录</a>
                 </div>
             </div>
             {% endif %}
@@ -120,6 +121,9 @@
                             打开团队空间
                         </a>
                         {% endwith %}
+                        <a class="btn btn-outline-secondary" href="{% url 'totp:team_assets' team.id %}">
+                            资产目录
+                        </a>
                         <a class="btn btn-outline-secondary" href="{% url 'totp:team_audit' team.id %}">
                             查看审计
                         </a>

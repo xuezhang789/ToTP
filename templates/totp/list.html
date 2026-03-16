@@ -85,6 +85,9 @@
                 {% if selected_space == 'personal' %}
                 <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importModal"
                         type="button">批量导入</button>
+                {% elif selected_membership and selected_membership.can_manage_entries %}
+                <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importModal"
+                        type="button">批量导入</button>
                 {% endif %}
 
                 <div class="dropdown">
@@ -155,6 +158,15 @@
                     <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}?space={{ selected_space|urlencode }}">重置</a>
                     {% endif %}
                 </div>
+                {% if selected_team %}
+                <select class="form-select w-100 w-md-auto" id="asset" name="asset" aria-label="按资产筛选">
+                    <option value="" {% if not asset_id %}selected{% endif %}>全部资产</option>
+                    <option value="0" {% if asset_id == '0' %}selected{% endif %}>未归属</option>
+                    {% for a in team_assets %}
+                        <option value="{{ a.id }}" {% if asset_id == a.id|stringformat:"s" %}selected{% endif %}>{{ a.name }}</option>
+                    {% endfor %}
+                </select>
+                {% endif %}
             </form>
         </div>
     </div>
@@ -191,7 +203,7 @@
             <thead>
             <tr>
                 <th>名称</th>
-                <th>分组</th>
+                <th>{% if selected_team %}资产{% else %}分组{% endif %}</th>
                 <th class="text-nowrap">验证码</th>
                 <th class="text-nowrap d-none d-md-table-cell">有效期</th>
                 <th class="text-nowrap">操作</th>
@@ -199,7 +211,7 @@
             </thead>
             <tbody id="tbody">
             {% for e in entries %}
-            {% include 'totp/_entry_row.html' with e=e groups=groups %}
+            {% include 'totp/_entry_row.html' with e=e groups=groups assets=team_assets %}
             {% empty %}
             <tr class="no-data">
                 <td colspan="5" class="text-center text-muted py-5">
@@ -207,7 +219,13 @@
                         <div class="fw-semibold">暂无数据</div>
                         {% if selected_team %}
                             <div class="small text-muted">该团队空间暂无可查看的密钥。</div>
-                            <a class="btn btn-outline-primary" href="{% url 'totp:list' %}">返回个人空间</a>
+                            <div class="d-flex flex-wrap gap-2 justify-content-center">
+                                {% if selected_membership and selected_membership.can_manage_entries %}
+                                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">添加密钥</button>
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importModal">批量导入</button>
+                                {% endif %}
+                                <a class="btn btn-outline-primary" href="{% url 'totp:list' %}">返回个人空间</a>
+                            </div>
                         {% else %}
                             <div class="small text-muted">先添加一个密钥，或批量导入已有数据。</div>
                             <div class="d-flex flex-wrap gap-2 justify-content-center">
@@ -229,7 +247,7 @@
                 {% if page_obj.has_previous %}
                 <li class="page-item">
                     <a class="page-link"
-                       href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
+                       href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}{% if asset_id %}asset={{ asset_id }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
                        aria-label="Previous">
                         <span aria-hidden="true">&laquo;</span>
                     </a>
@@ -243,14 +261,14 @@
                 <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
                 {% else %}
                 <li class="page-item"><a class="page-link"
-                                         href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}page={{ num }}">{{ num }}</a></li>
+                                         href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}{% if asset_id %}asset={{ asset_id }}&amp;{% endif %}page={{ num }}">{{ num }}</a></li>
                 {% endif %}
                 {% endfor %}
 
                 {% if page_obj.has_next %}
                 <li class="page-item">
                     <a class="page-link"
-                       href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
+                       href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}{% if asset_id %}asset={{ asset_id }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
                        aria-label="Next">
                         <span aria-hidden="true">&raquo;</span>
                     </a>

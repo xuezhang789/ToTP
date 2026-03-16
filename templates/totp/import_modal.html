@@ -17,6 +17,14 @@
                         {% endfor %}
                     </select>
                     <div class="form-text">可选择个人空间或具备管理权限的团队空间。</div>
+                    <input type="hidden" id="teamAssetOptionsUrlForImport" value="{% url 'totp:team_asset_options' 0 %}">
+                </div>
+                <div class="mb-3 d-none" id="importAssetField">
+                    <label class="form-label" for="importAssetSelect">资产（可选）</label>
+                    <select class="form-select" id="importAssetSelect">
+                        <option value="">未归属</option>
+                    </select>
+                    <div class="form-text">仅团队空间可用，导入的密钥会直接归属到该资产。</div>
                 </div>
 
                 <div class="mb-3">

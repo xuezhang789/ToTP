@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}资产设置 - TOTP管理平台{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a class="btn btn-link p-0" href="{% url 'totp:team_assets' team.id %}">
+        ← 返回资产目录
+    </a>
+</div>
+
+<div class="card app-panel border-0 shadow-sm">
+    <div class="card-body p-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <div>
+                <h1 class="h5 mb-1">{% if asset %}编辑资产{% else %}新建资产{% endif %}</h1>
+                <div class="text-muted small">团队：{{ team.name }}</div>
+            </div>
+            {% if asset %}
+            <a class="btn btn-outline-secondary" href="{% url 'totp:team_asset_detail' team.id asset.id %}">查看详情</a>
+            {% endif %}
+        </div>
+
+        <form method="post" class="needs-validation" novalidate>
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label" for="assetName">资产名称</label>
+                <input id="assetName" name="name" class="form-control" maxlength="80" required
+                       value="{{ form.name|default:'' }}" placeholder="例如：GitHub / AWS / 生产堡垒机" data-autofocus>
+                <div class="form-text">建议使用系统/项目/服务名称，方便团队统一归档。</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="assetDesc">描述（可选）</label>
+                <textarea id="assetDesc" name="description" class="form-control" rows="3"
+                          placeholder="用途、使用范围、轮换规则等">{{ form.description|default:'' }}</textarea>
+            </div>
+            <div class="row g-3">
+                <div class="col-12 col-lg-6">
+                    <label class="form-label" for="assetOwners">负责人（可多选）</label>
+                    <select id="assetOwners" name="owners" class="form-select" multiple size="8">
+                        {% for m in members %}
+                            <option value="{{ m.user_id }}" {% if m.user_id|stringformat:"s" in form.owners %}selected{% endif %}>
+                                {{ m.user.username }}（{{ m.get_role_display }}）
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">负责人用于明确维护责任，可结合审计与提醒策略使用。</div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <label class="form-label" for="assetWatchers">关注人（可多选）</label>
+                    <select id="assetWatchers" name="watchers" class="form-select" multiple size="8">
+                        {% for m in members %}
+                            <option value="{{ m.user_id }}" {% if m.user_id|stringformat:"s" in form.watchers %}selected{% endif %}>
+                                {{ m.user.username }}（{{ m.get_role_display }}）
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">关注人用于接收提醒或参与协作，不建议填写敏感信息。</div>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 justify-content-end mt-4">
+                <a class="btn btn-outline-secondary" href="{% url 'totp:team_assets' team.id %}">取消</a>
+                <button class="btn btn-primary" type="submit">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
