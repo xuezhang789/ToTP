@@ -292,6 +292,9 @@ def google_onetap(request):
             user, created = User.objects.get_or_create(
                 username=username, defaults={"email": email}
             )
+        if not user.password:
+            user.set_unusable_password()
+            user.save(update_fields=["password"])
         # 保持邮箱信息最新
         if not user.email:
             user.email = email
