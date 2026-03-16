@@ -41,10 +41,11 @@ class OneTimeLinkTests(TestCase):
         return data
 
     def test_create_link_persists_record(self):
-        data = self._create_link(duration=10, max_views=3)
+        data = self._create_link(duration=10, max_views=3, note="for oncall")
         link = OneTimeLink.objects.get(pk=data["id"])
         self.assertEqual(link.entry, self.entry)
         self.assertEqual(link.max_views, 3)
+        self.assertEqual(link.note, "for oncall")
         self.assertTrue(link.expires_at)
         self.assertEqual(link.view_count, 0)
         self.assertTrue(self.entry.audits.filter(action="one_time_link_created").exists())

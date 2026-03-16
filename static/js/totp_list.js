@@ -975,6 +975,7 @@
   const shareLinkEntryId = document.getElementById('shareLinkEntryId');
   const shareLinkDuration = document.getElementById('shareLinkDuration');
   const shareLinkMaxViews = document.getElementById('shareLinkMaxViews');
+  const shareLinkNote = document.getElementById('shareLinkNote');
   const shareLinkResult = document.getElementById('shareLinkResult');
   const shareLinkAlert = document.getElementById('shareLinkAlert');
   const shareLinkUrl = document.getElementById('shareLinkUrl');
@@ -1011,6 +1012,9 @@
     if (shareLinkMaxViews) {
       shareLinkMaxViews.value = '3';
     }
+    if (shareLinkNote) {
+      shareLinkNote.value = '';
+    }
     if (shareLinkSpinner) {
       shareLinkSpinner.classList.add('d-none');
     }
@@ -1037,16 +1041,32 @@
     if (!payload) {
       return;
     }
+    if (payload.created_at) {
+      const created = new Date(payload.created_at);
+      const li = document.createElement('li');
+      li.textContent = `创建时间：${created.toLocaleString()}`;
+      shareLinkSummary.appendChild(li);
+    }
     if (payload.expires_at) {
       const expires = new Date(payload.expires_at);
       const li = document.createElement('li');
       li.textContent = `有效期至：${expires.toLocaleString()}`;
       shareLinkSummary.appendChild(li);
     }
+    if (payload.duration_minutes) {
+      const li = document.createElement('li');
+      li.textContent = `有效期：${payload.duration_minutes} 分钟`;
+      shareLinkSummary.appendChild(li);
+    }
     if (typeof payload.max_views !== 'undefined') {
       const remaining = payload.remaining_views ?? Math.max(0, payload.max_views - 1);
       const li = document.createElement('li');
       li.textContent = `最多查看 ${payload.max_views} 次，目前还可查看 ${remaining} 次。`;
+      shareLinkSummary.appendChild(li);
+    }
+    if (payload.note) {
+      const li = document.createElement('li');
+      li.textContent = `备注：${payload.note}`;
       shareLinkSummary.appendChild(li);
     }
   }
@@ -1087,6 +1107,7 @@
     const formData = new FormData();
     formData.append('duration', shareLinkDuration?.value || '10');
     formData.append('max_views', shareLinkMaxViews?.value || '3');
+    formData.append('note', (shareLinkNote?.value || '').trim());
 
     const createUrl = (config.oneTimeCreateUrlTemplate || '').replace('/0/', `/${shareLinkEntryId.value}/`);
 

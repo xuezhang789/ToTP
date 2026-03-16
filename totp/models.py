@@ -161,6 +161,7 @@ class TeamAudit(models.Model):
         MEMBER_REMOVED = "member_removed", "移除成员"
         MEMBER_LEFT = "member_left", "成员退出"
         LINKS_REVOKED_ALL = "links_revoked_all", "撤销全部分享链接"
+        LINKS_REVOKE_REMINDER_SENT = "links_revoke_reminder_sent", "提醒成员撤销分享链接"
 
     team = models.ForeignKey(
         Team,
@@ -461,6 +462,7 @@ class OneTimeLink(models.Model):
     token_hash = models.CharField(max_length=128, unique=True)
     expires_at = models.DateTimeField(db_index=True)
     max_views = models.PositiveSmallIntegerField(default=1)
+    note = models.CharField(max_length=120, blank=True)
     view_count = models.PositiveSmallIntegerField(default=0)
     first_viewed_at = models.DateTimeField(null=True, blank=True)
     last_viewed_at = models.DateTimeField(null=True, blank=True)

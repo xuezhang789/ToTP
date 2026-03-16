@@ -70,6 +70,36 @@ urlpatterns = [
         name="one_time_audit",
     ),
     path(
+        "share/one-time/audit/export/",
+        views.one_time_link_audit_export,
+        name="one_time_audit_export",
+    ),
+    path(
+        "share/one-time/audit/team/<int:team_id>/",
+        views.one_time_link_team_audit,
+        name="one_time_team_audit",
+    ),
+    path(
+        "share/one-time/audit/team/<int:team_id>/export/",
+        views.one_time_link_team_audit_export,
+        name="one_time_team_audit_export",
+    ),
+    path(
+        "share/one-time/batch-invalidate/",
+        views.batch_invalidate_one_time_links,
+        name="one_time_batch_invalidate",
+    ),
+    path(
+        "share/one-time/team/<int:team_id>/batch-invalidate/",
+        views.batch_invalidate_one_time_links_team,
+        name="one_time_team_batch_invalidate",
+    ),
+    path(
+        "share/one-time/team/<int:team_id>/batch-remind/",
+        views.batch_remind_one_time_links_team,
+        name="one_time_team_batch_remind",
+    ),
+    path(
         "share/one-time/<int:pk>/create/",
         views.create_one_time_link,
         name="one_time_create",

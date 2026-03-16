@@ -14,6 +14,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.paginator import Paginator
+from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Q, Prefetch
 from django.http import Http404, HttpResponse, JsonResponse, StreamingHttpResponse
@@ -2026,11 +2027,48 @@ def rename_entry(request, pk: int):
 def one_time_link_audit(request):
     """展示当前用户创建的一次性访问链接审计信息。"""
 
-    queryset = (
-        OneTimeLink.objects.filter(created_by=request.user)
-        .select_related("entry", "entry__group")
-        .order_by("-created_at")
+    now = timezone.now()
+    status = (request.GET.get("status") or "").strip()
+    space = (request.GET.get("space") or "").strip()
+    team_id = (request.GET.get("team") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+
+    queryset = OneTimeLink.objects.filter(created_by=request.user).select_related(
+        "entry", "entry__group", "entry__team"
     )
+    if q:
+        queryset = queryset.filter(
+            Q(entry__name__icontains=q)
+            | Q(note__icontains=q)
+            | Q(entry__team__name__icontains=q)
+        )
+    if space == "personal":
+        queryset = queryset.filter(entry__team__isnull=True)
+    elif space == "team":
+        queryset = queryset.filter(entry__team__isnull=False)
+        if team_id.isdigit():
+            queryset = queryset.filter(entry__team_id=int(team_id))
+    if status == "active":
+        queryset = queryset.filter(
+            expires_at__gt=now,
+            view_count__lt=F("max_views"),
+            entry__is_deleted=False,
+            revoked_at__isnull=True,
+        )
+    elif status == "revoked":
+        queryset = queryset.filter(revoked_at__isnull=False)
+    elif status == "deleted":
+        queryset = queryset.filter(entry__is_deleted=True)
+    elif status == "used":
+        queryset = queryset.filter(revoked_at__isnull=True, view_count__gte=F("max_views"))
+    elif status == "expired":
+        queryset = queryset.filter(
+            revoked_at__isnull=True,
+            view_count__lt=F("max_views"),
+            expires_at__lte=now,
+        )
+
+    queryset = queryset.order_by("-created_at")
 
     paginator = Paginator(queryset, 20)
     page_number = request.GET.get("page")
@@ -2065,6 +2103,11 @@ def one_time_link_audit(request):
     )
 
     active_count = OneTimeLink.active.filter(created_by=request.user).count()
+    params = request.GET.copy()
+    params.pop("page", None)
+    querystring = params.urlencode()
+    page_prefix = f"{querystring}&" if querystring else ""
+    memberships = _team_memberships_for_user(request.user)
 
     return render(
         request,
@@ -2074,8 +2117,590 @@ def one_time_link_audit(request):
             "page_obj": page_obj,
             "total_count": paginator.count,
             "active_count": active_count,
+            "filters": {
+                "status": status,
+                "space": space,
+                "team": team_id,
+                "q": q,
+            },
+            "querystring": querystring,
+            "page_prefix": page_prefix,
+            "team_memberships": memberships,
+            "is_team_audit": False,
+            "export_url": reverse("totp:one_time_audit_export"),
+            "batch_invalidate_url": reverse("totp:one_time_batch_invalidate"),
+            "batch_remind_url": "",
         },
     )
+
+
+@login_required
+@never_cache
+@require_GET
+def one_time_link_audit_export(request):
+    now = timezone.now()
+    status = (request.GET.get("status") or "").strip()
+    space = (request.GET.get("space") or "").strip()
+    team_id = (request.GET.get("team") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+
+    queryset = OneTimeLink.objects.filter(created_by=request.user).select_related(
+        "entry", "entry__group", "entry__team"
+    )
+    if q:
+        queryset = queryset.filter(
+            Q(entry__name__icontains=q)
+            | Q(note__icontains=q)
+            | Q(entry__team__name__icontains=q)
+        )
+    if space == "personal":
+        queryset = queryset.filter(entry__team__isnull=True)
+    elif space == "team":
+        queryset = queryset.filter(entry__team__isnull=False)
+        if team_id.isdigit():
+            queryset = queryset.filter(entry__team_id=int(team_id))
+    if status == "active":
+        queryset = queryset.filter(
+            expires_at__gt=now,
+            view_count__lt=F("max_views"),
+            entry__is_deleted=False,
+            revoked_at__isnull=True,
+        )
+    elif status == "revoked":
+        queryset = queryset.filter(revoked_at__isnull=False)
+    elif status == "deleted":
+        queryset = queryset.filter(entry__is_deleted=True)
+    elif status == "used":
+        queryset = queryset.filter(revoked_at__isnull=True, view_count__gte=F("max_views"))
+    elif status == "expired":
+        queryset = queryset.filter(
+            revoked_at__isnull=True,
+            view_count__lt=F("max_views"),
+            expires_at__lte=now,
+        )
+
+    queryset = queryset.order_by("-created_at")
+
+    def stream_rows():
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(
+            [
+                "link_id",
+                "entry_name",
+                "space",
+                "team",
+                "status",
+                "created_at",
+                "expires_at",
+                "max_views",
+                "view_count",
+                "remaining_views",
+                "note",
+                "first_viewed_at",
+                "last_viewed_at",
+                "last_view_ip",
+                "last_view_user_agent",
+                "revoked_at",
+            ]
+        )
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+
+        for link in queryset.iterator(chunk_size=200):
+            status_key = "active" if link.is_active else _resolve_link_inactive_reason(link)
+            team_name = link.entry.team.name if link.entry.team_id else ""
+            space_label = "team" if link.entry.team_id else "personal"
+            writer.writerow(
+                [
+                    link.id,
+                    link.entry.name,
+                    space_label,
+                    team_name,
+                    status_key,
+                    link.created_at.isoformat(),
+                    link.expires_at.isoformat(),
+                    link.max_views,
+                    link.view_count,
+                    max(0, link.max_views - link.view_count),
+                    link.note or "",
+                    link.first_viewed_at.isoformat() if link.first_viewed_at else "",
+                    link.last_viewed_at.isoformat() if link.last_viewed_at else "",
+                    link.last_view_ip or "",
+                    link.last_view_user_agent or "",
+                    link.revoked_at.isoformat() if link.revoked_at else "",
+                ]
+            )
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+    resp = StreamingHttpResponse(stream_rows(), content_type="text/csv; charset=utf-8")
+    resp["Content-Disposition"] = 'attachment; filename="one_time_links_audit.csv"'
+    return resp
+
+
+@login_required
+def one_time_link_team_audit(request, team_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    team = membership.team
+    now = timezone.now()
+    status = (request.GET.get("status") or "").strip()
+    creator = (request.GET.get("creator") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+
+    queryset = OneTimeLink.objects.filter(entry__team_id=team_id).select_related(
+        "entry",
+        "entry__group",
+        "entry__team",
+        "created_by",
+    )
+    if q:
+        queryset = queryset.filter(
+            Q(entry__name__icontains=q)
+            | Q(note__icontains=q)
+            | Q(created_by__username__icontains=q)
+            | Q(created_by__email__icontains=q)
+        )
+    if creator.isdigit():
+        queryset = queryset.filter(created_by_id=int(creator))
+    if status == "active":
+        queryset = queryset.filter(
+            expires_at__gt=now,
+            view_count__lt=F("max_views"),
+            entry__is_deleted=False,
+            revoked_at__isnull=True,
+        )
+    elif status == "revoked":
+        queryset = queryset.filter(revoked_at__isnull=False)
+    elif status == "deleted":
+        queryset = queryset.filter(entry__is_deleted=True)
+    elif status == "used":
+        queryset = queryset.filter(revoked_at__isnull=True, view_count__gte=F("max_views"))
+    elif status == "expired":
+        queryset = queryset.filter(
+            revoked_at__isnull=True,
+            view_count__lt=F("max_views"),
+            expires_at__lte=now,
+        )
+
+    queryset = queryset.order_by("-created_at")
+    paginator = Paginator(queryset, 20)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    status_labels = {
+        "active": "可用",
+        "expired": "已过期",
+        "used": "已用尽",
+        "revoked": "已撤销",
+        "deleted": "关联密钥已删除",
+    }
+    badge_classes = {
+        "active": "success",
+        "expired": "secondary",
+        "used": "warning",
+        "revoked": "danger",
+        "deleted": "danger",
+    }
+
+    records = []
+    for link in page_obj.object_list:
+        status_key = "active" if link.is_active else _resolve_link_inactive_reason(link)
+        records.append(
+            {
+                "link": link,
+                "status_key": status_key,
+                "status_label": status_labels.get(status_key, "未知状态"),
+                "badge_class": badge_classes.get(status_key, "secondary"),
+                "remaining_views": max(0, link.max_views - link.view_count),
+            }
+        )
+
+    active_count = OneTimeLink.active.filter(entry__team_id=team_id).count()
+    params = request.GET.copy()
+    params.pop("page", None)
+    querystring = params.urlencode()
+    page_prefix = f"{querystring}&" if querystring else ""
+
+    creator_memberships = (
+        TeamMembership.objects.filter(team_id=team_id)
+        .select_related("user")
+        .order_by("user__username")
+    )
+
+    return render(
+        request,
+        "totp/one_time_links.html",
+        {
+            "records": records,
+            "page_obj": page_obj,
+            "total_count": paginator.count,
+            "active_count": active_count,
+            "filters": {
+                "status": status,
+                "q": q,
+                "creator": creator,
+            },
+            "querystring": querystring,
+            "page_prefix": page_prefix,
+            "is_team_audit": True,
+            "team": team,
+            "creator_memberships": creator_memberships,
+            "export_url": reverse("totp:one_time_team_audit_export", args=[team_id]),
+            "batch_invalidate_url": reverse("totp:one_time_team_batch_invalidate", args=[team_id]),
+            "batch_remind_url": reverse("totp:one_time_team_batch_remind", args=[team_id]),
+        },
+    )
+
+
+@login_required
+@never_cache
+@require_GET
+def one_time_link_team_audit_export(request, team_id: int):
+    _get_team_membership(request.user, team_id, require_manage=True)
+    now = timezone.now()
+    status = (request.GET.get("status") or "").strip()
+    creator = (request.GET.get("creator") or "").strip()
+    q = (request.GET.get("q") or "").strip()
+
+    queryset = OneTimeLink.objects.filter(entry__team_id=team_id).select_related(
+        "entry",
+        "entry__group",
+        "entry__team",
+        "created_by",
+    )
+    if q:
+        queryset = queryset.filter(
+            Q(entry__name__icontains=q)
+            | Q(note__icontains=q)
+            | Q(created_by__username__icontains=q)
+            | Q(created_by__email__icontains=q)
+        )
+    if creator.isdigit():
+        queryset = queryset.filter(created_by_id=int(creator))
+    if status == "active":
+        queryset = queryset.filter(
+            expires_at__gt=now,
+            view_count__lt=F("max_views"),
+            entry__is_deleted=False,
+            revoked_at__isnull=True,
+        )
+    elif status == "revoked":
+        queryset = queryset.filter(revoked_at__isnull=False)
+    elif status == "deleted":
+        queryset = queryset.filter(entry__is_deleted=True)
+    elif status == "used":
+        queryset = queryset.filter(revoked_at__isnull=True, view_count__gte=F("max_views"))
+    elif status == "expired":
+        queryset = queryset.filter(
+            revoked_at__isnull=True,
+            view_count__lt=F("max_views"),
+            expires_at__lte=now,
+        )
+    queryset = queryset.order_by("-created_at")
+
+    def stream_rows():
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(
+            [
+                "link_id",
+                "created_by",
+                "created_by_email",
+                "entry_name",
+                "team",
+                "status",
+                "created_at",
+                "expires_at",
+                "max_views",
+                "view_count",
+                "remaining_views",
+                "note",
+                "first_viewed_at",
+                "last_viewed_at",
+                "last_view_ip",
+                "last_view_user_agent",
+                "revoked_at",
+            ]
+        )
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+
+        for link in queryset.iterator(chunk_size=200):
+            status_key = "active" if link.is_active else _resolve_link_inactive_reason(link)
+            writer.writerow(
+                [
+                    link.id,
+                    link.created_by.username,
+                    link.created_by.email or "",
+                    link.entry.name,
+                    link.entry.team.name if link.entry.team_id else "",
+                    status_key,
+                    link.created_at.isoformat(),
+                    link.expires_at.isoformat(),
+                    link.max_views,
+                    link.view_count,
+                    max(0, link.max_views - link.view_count),
+                    link.note or "",
+                    link.first_viewed_at.isoformat() if link.first_viewed_at else "",
+                    link.last_viewed_at.isoformat() if link.last_viewed_at else "",
+                    link.last_view_ip or "",
+                    link.last_view_user_agent or "",
+                    link.revoked_at.isoformat() if link.revoked_at else "",
+                ]
+            )
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+    resp = StreamingHttpResponse(stream_rows(), content_type="text/csv; charset=utf-8")
+    resp["Content-Disposition"] = 'attachment; filename="one_time_links_team_audit.csv"'
+    return resp
+
+
+@login_required
+@require_POST
+def batch_invalidate_one_time_links_team(request, team_id: int):
+    _get_team_membership(request.user, team_id, require_manage=True)
+    if not _has_recent_reauth(request):
+        return _reauth_json(request)
+
+    data = None
+    if (request.content_type or "").startswith("application/json"):
+        try:
+            data = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            data = None
+    if not isinstance(data, dict):
+        data = request.POST
+
+    raw_ids = data.get("ids") or []
+    ids: list[int] = []
+    if isinstance(raw_ids, str):
+        raw_ids = [part.strip() for part in raw_ids.split(",") if part.strip()]
+    if isinstance(raw_ids, list):
+        for item in raw_ids:
+            try:
+                value = int(item)
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                ids.append(value)
+    ids = list(dict.fromkeys(ids))[:50]
+    if not ids:
+        return JsonResponse({"ok": False, "message": "请选择要失效的链接"}, status=400)
+
+    now = timezone.now()
+    links = list(
+        OneTimeLink.objects.filter(entry__team_id=team_id, id__in=ids).select_related(
+            "entry", "entry__team"
+        )
+    )
+    if not links:
+        return JsonResponse({"ok": False, "message": "未找到可处理的链接"}, status=404)
+
+    active_ids = [
+        link.id
+        for link in links
+        if link.revoked_at is None and link.expires_at > now and link.view_count < link.max_views
+    ]
+    if not active_ids:
+        return JsonResponse({"ok": False, "message": "所选链接均已失效，无需处理"}, status=400)
+
+    OneTimeLink.objects.filter(id__in=active_ids, entry__team_id=team_id).update(
+        expires_at=now, revoked_at=now, updated_at=now
+    )
+    for link in links:
+        if link.id not in active_ids:
+            continue
+        entry = link.entry
+        log_entry_audit(
+            entry,
+            request.user,
+            TOTPEntryAudit.Action.ONE_TIME_LINK_REVOKED,
+            old_value=entry.name,
+            metadata={
+                "space": "team",
+                "one_time_link_id": link.id,
+                "batch": True,
+            },
+        )
+
+    return JsonResponse({"ok": True, "updated": len(active_ids), "requested": len(ids)})
+
+
+@login_required
+@require_POST
+def batch_remind_one_time_links_team(request, team_id: int):
+    membership = _get_team_membership(request.user, team_id, require_manage=True)
+    team = membership.team
+    if not _has_recent_reauth(request):
+        return _reauth_json(request)
+
+    data = None
+    if (request.content_type or "").startswith("application/json"):
+        try:
+            data = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            data = None
+    if not isinstance(data, dict):
+        data = request.POST
+
+    raw_ids = data.get("ids") or []
+    ids: list[int] = []
+    if isinstance(raw_ids, str):
+        raw_ids = [part.strip() for part in raw_ids.split(",") if part.strip()]
+    if isinstance(raw_ids, list):
+        for item in raw_ids:
+            try:
+                value = int(item)
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                ids.append(value)
+    ids = list(dict.fromkeys(ids))[:50]
+    if not ids:
+        return JsonResponse({"ok": False, "message": "请选择要提醒的链接"}, status=400)
+
+    now = timezone.now()
+    links = list(
+        OneTimeLink.objects.filter(entry__team_id=team_id, id__in=ids).select_related(
+            "entry", "entry__team", "created_by"
+        )
+    )
+    active_links = [
+        link
+        for link in links
+        if link.revoked_at is None and link.expires_at > now and link.view_count < link.max_views
+    ]
+    if not active_links:
+        return JsonResponse({"ok": False, "message": "所选链接均已失效，无需提醒"}, status=400)
+
+    by_user: dict[int, list[OneTimeLink]] = {}
+    for link in active_links:
+        by_user.setdefault(link.created_by_id, []).append(link)
+
+    audit_url = request.build_absolute_uri(
+        reverse("totp:one_time_team_audit", args=[team_id])
+    )
+    reminded_users = 0
+    reminded_links = 0
+    skipped_no_email = 0
+
+    for user_id, items in by_user.items():
+        user = items[0].created_by
+        if not user.email:
+            skipped_no_email += 1
+            continue
+        lines = [
+            f"团队：{team.name}",
+            "以下一次性访问链接仍处于可用状态，请确认是否需要尽快失效：",
+            "",
+        ]
+        for link in items:
+            remaining = max(0, link.max_views - link.view_count)
+            note = (link.note or "").replace("\n", " ").strip()
+            lines.append(
+                f"- link_id={link.id}  密钥={link.entry.name}  过期={link.expires_at.strftime('%Y-%m-%d %H:%M')}  剩余次数={remaining}"
+                + (f"  备注={note}" if note else "")
+            )
+        lines.extend(["", f"请在审计页处理：{audit_url}", ""])
+        send_mail(
+            subject=f"[ToTP] 请检查并失效一次性访问链接（{team.name}）",
+            message="\n".join(lines),
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            recipient_list=[user.email],
+            fail_silently=True,
+        )
+        log_team_audit(
+            team,
+            request.user,
+            TeamAudit.Action.LINKS_REVOKE_REMINDER_SENT,
+            target_user=user,
+            metadata={"count": len(items), "link_ids": [l.id for l in items][:50]},
+        )
+        reminded_users += 1
+        reminded_links += len(items)
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "reminded_users": reminded_users,
+            "reminded_links": reminded_links,
+            "skipped_no_email": skipped_no_email,
+        }
+    )
+@login_required
+@require_POST
+def batch_invalidate_one_time_links(request):
+    if not _has_recent_reauth(request):
+        return _reauth_json(request)
+
+    data = None
+    if (request.content_type or "").startswith("application/json"):
+        try:
+            data = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            data = None
+    if not isinstance(data, dict):
+        data = request.POST
+
+    raw_ids = data.get("ids") or []
+    ids: list[int] = []
+    if isinstance(raw_ids, str):
+        raw_ids = [part.strip() for part in raw_ids.split(",") if part.strip()]
+    if isinstance(raw_ids, list):
+        for item in raw_ids:
+            try:
+                value = int(item)
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                ids.append(value)
+    ids = list(dict.fromkeys(ids))[:50]
+    if not ids:
+        return JsonResponse({"ok": False, "message": "请选择要失效的链接"}, status=400)
+
+    now = timezone.now()
+    links = list(
+        OneTimeLink.objects.filter(created_by=request.user, id__in=ids).select_related(
+            "entry", "entry__team"
+        )
+    )
+    if not links:
+        return JsonResponse({"ok": False, "message": "未找到可处理的链接"}, status=404)
+
+    active_ids = [
+        link.id
+        for link in links
+        if link.revoked_at is None and link.expires_at > now and link.view_count < link.max_views
+    ]
+    if not active_ids:
+        return JsonResponse({"ok": False, "message": "所选链接均已失效，无需处理"}, status=400)
+
+    OneTimeLink.objects.filter(id__in=active_ids, created_by=request.user).update(
+        expires_at=now, revoked_at=now, updated_at=now
+    )
+    for link in links:
+        if link.id not in active_ids:
+            continue
+        entry = link.entry
+        log_entry_audit(
+            entry,
+            request.user,
+            TOTPEntryAudit.Action.ONE_TIME_LINK_REVOKED,
+            old_value=entry.name,
+            metadata={
+                "space": "team" if entry.team_id else "personal",
+                "one_time_link_id": link.id,
+                "batch": True,
+            },
+        )
+
+    return JsonResponse({"ok": True, "updated": len(active_ids), "requested": len(ids)})
 
 
 @login_required
@@ -2105,6 +2730,10 @@ def create_one_time_link(request, pk: int):
     except (TypeError, ValueError):
         max_views = 3
     max_views = max(1, min(max_views, 5))
+
+    note = (request.POST.get("note") or "").strip()
+    if len(note) > 120:
+        note = note[:120]
 
     now = timezone.now()
     active_links = OneTimeLink.active.filter(entry=entry).count()
@@ -2144,6 +2773,7 @@ def create_one_time_link(request, pk: int):
                 token_hash=candidate_hash,
                 expires_at=expires_at,
                 max_views=max_views,
+                note=note,
             )
         except IntegrityError:
             continue
@@ -2166,6 +2796,7 @@ def create_one_time_link(request, pk: int):
             "one_time_link_id": link.id,
             "expires_at": expires_at.isoformat(),
             "max_views": link.max_views,
+            "note": note,
         },
     )
     return JsonResponse(
@@ -2173,10 +2804,14 @@ def create_one_time_link(request, pk: int):
             "ok": True,
             "id": link.id,
             "url": url,
+            "created_at": link.created_at.isoformat(),
+            "created_at_timestamp": int(link.created_at.timestamp()),
             "expires_at": expires_at.isoformat(),
             "expires_at_timestamp": int(expires_at.timestamp()),
+            "duration_minutes": duration_minutes,
             "max_views": link.max_views,
             "remaining_views": link.max_views - link.view_count,
+            "note": note,
         }
     )
 
