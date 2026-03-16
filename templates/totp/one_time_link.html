@@ -137,11 +137,29 @@
     if (!code) {
       return;
     }
-    (window.appCopyToClipboard ? window.appCopyToClipboard(code.textContent.trim()) : Promise.reject(new Error('copy_not_supported')))
+    const text = code.textContent.trim();
+    if (window.appCopyWithFeedback) {
+      window.appCopyWithFeedback(copyBtn, text, {
+        successHtml: '<i class="bi bi-check-lg me-2"></i>已复制',
+        failureHtml: '<i class="bi bi-x-lg me-2"></i>复制失败',
+        restoreMs: 1500,
+        successAnnounce: '验证码已复制',
+        failureAnnounce: '复制失败',
+        successClass: 'btn-success',
+        failureClass: 'btn-danger',
+        clearClasses: ['btn-primary'],
+        toastFailure: '复制失败，请手动复制。',
+      }).catch(() => {});
+      return;
+    }
+    (window.appCopyToClipboard ? window.appCopyToClipboard(text) : Promise.reject(new Error('copy_not_supported')))
       .then(() => {
         copyBtn.classList.remove('btn-primary');
         copyBtn.classList.add('btn-success');
         copyBtn.innerHTML = '<i class="bi bi-check-lg me-2"></i>已复制';
+        if (window.appAnnounce) {
+          window.appAnnounce('验证码已复制');
+        }
         setTimeout(() => {
           copyBtn.classList.remove('btn-success');
           copyBtn.classList.add('btn-primary');
@@ -151,6 +169,9 @@
       .catch(() => {
         if (window.appToast) {
           window.appToast('danger', '复制失败，请手动复制。');
+        }
+        if (window.appAnnounce) {
+          window.appAnnounce('复制失败');
         }
       });
   });

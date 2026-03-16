@@ -18,13 +18,13 @@
                 <form method="post" action="{% url 'accounts:login' %}">{% csrf_token %}
                     <input type="hidden" name="next" value="{{ next|default:''|escape }}">
                     <div class="mb-3">
-                        <label class="form-label">用户名</label>
-                        <input class="form-control" name="username" placeholder="用户名" autocomplete="username"
+                        <label class="form-label" for="loginUsername">用户名</label>
+                        <input class="form-control" id="loginUsername" name="username" placeholder="用户名" autocomplete="username"
                                required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">密码</label>
-                        <input type="password" class="form-control" name="password" placeholder="密码"
+                        <label class="form-label" for="loginPassword">密码</label>
+                        <input type="password" class="form-control" id="loginPassword" name="password" placeholder="密码"
                                autocomplete="current-password" required>
                     </div>
                     <button class="btn btn-primary w-100" type="submit">登录</button>

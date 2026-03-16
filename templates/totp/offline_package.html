@@ -711,17 +711,32 @@
     if (!overlay || !textEl || !okBtn || !cancelBtn) {
       return Promise.resolve(window.confirm(message));
     }
+    const dialog = overlay.querySelector('.app-confirm-dialog');
+    const previousActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     textEl.textContent = message || '';
     overlay.classList.add('show');
+    overlay.setAttribute('aria-hidden', 'false');
+    if (dialog) {
+      dialog.tabIndex = -1;
+    }
     return new Promise((resolve) => {
       function cleanup() {
         okBtn.removeEventListener('click', onOk);
         cancelBtn.removeEventListener('click', onCancel);
         overlay.removeEventListener('click', onOverlay);
+        overlay.removeEventListener('keydown', onKeydown);
       }
       function close(value) {
         overlay.classList.remove('show');
+        overlay.setAttribute('aria-hidden', 'true');
         cleanup();
+        if (previousActive && previousActive.isConnected) {
+          try {
+            previousActive.focus({ preventScroll: true });
+          } catch (e) {
+            previousActive.focus();
+          }
+        }
         resolve(value);
       }
       function onOk() {
@@ -735,9 +750,41 @@
           close(false);
         }
       }
+      function onKeydown(e) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          close(false);
+          return;
+        }
+        if (e.key !== 'Tab') {
+          return;
+        }
+        const focusables = [cancelBtn, okBtn].filter((el) => el && !el.disabled);
+        if (!focusables.length) {
+          e.preventDefault();
+          (dialog || overlay).focus();
+          return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey) {
+          if (active === first || active === overlay || active === dialog) {
+            e.preventDefault();
+            last.focus();
+          }
+          return;
+        }
+        if (active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
       okBtn.addEventListener('click', onOk);
       cancelBtn.addEventListener('click', onCancel);
       overlay.addEventListener('click', onOverlay);
+      overlay.addEventListener('keydown', onKeydown);
+      cancelBtn.focus({ preventScroll: true });
     });
   }
 

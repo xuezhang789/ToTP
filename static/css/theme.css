@@ -205,6 +205,12 @@ main.app-main {
   outline-offset: 3px;
 }
 
+[role="button"]:focus-visible,
+.code-badge:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.3);
+  outline-offset: 3px;
+}
+
 .space-switch-toggle::after {
   margin-left: 0.35rem;
   border-top-color: currentColor;

@@ -202,7 +202,21 @@
             {% include 'totp/_entry_row.html' with e=e groups=groups %}
             {% empty %}
             <tr class="no-data">
-                <td colspan="5" class="text-center text-muted py-5">暂无数据</td>
+                <td colspan="5" class="text-center text-muted py-5">
+                    <div class="d-flex flex-column align-items-center gap-3">
+                        <div class="fw-semibold">暂无数据</div>
+                        {% if selected_team %}
+                            <div class="small text-muted">该团队空间暂无可查看的密钥。</div>
+                            <a class="btn btn-outline-primary" href="{% url 'totp:list' %}">返回个人空间</a>
+                        {% else %}
+                            <div class="small text-muted">先添加一个密钥，或批量导入已有数据。</div>
+                            <div class="d-flex flex-wrap gap-2 justify-content-center">
+                                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">添加密钥</button>
+                                <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importModal">批量导入</button>
+                            </div>
+                        {% endif %}
+                    </div>
+                </td>
             </tr>
             {% endfor %}
             </tbody>

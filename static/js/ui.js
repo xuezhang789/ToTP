@@ -8,6 +8,116 @@
     el.textContent = value == null ? '' : String(value);
   }
 
+  function appAnnounce(message) {
+    const region = document.getElementById('appLiveRegion');
+    if (!region) {
+      return;
+    }
+    const text = message == null ? '' : String(message);
+    region.textContent = '';
+    window.setTimeout(() => {
+      region.textContent = text;
+    }, 10);
+  }
+
+  function appSetButtonLoading(button, loading, { label = '', showSpinner = true } = {}) {
+    if (!button) {
+      return;
+    }
+    if (loading) {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      if (!button.dataset.appOriginalHtml) {
+        button.dataset.appOriginalHtml = button.innerHTML;
+      }
+      const base = label || button.dataset.appOriginalHtml || '';
+      if (showSpinner) {
+        button.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>${base}`;
+      } else {
+        button.innerHTML = base;
+      }
+      return;
+    }
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    if (button.dataset.appOriginalHtml != null) {
+      button.innerHTML = button.dataset.appOriginalHtml;
+    }
+  }
+
+  function appCopyWithFeedback(
+    button,
+    text,
+    {
+      successHtml = '已复制',
+      failureHtml = '复制失败',
+      restoreMs = 1200,
+      successAnnounce = '已复制',
+      failureAnnounce = '复制失败',
+      successClass = 'btn-success',
+      failureClass = 'btn-danger',
+      clearClasses = [],
+      toastFailure = '',
+    } = {}
+  ) {
+    if (!button) {
+      return Promise.reject(new Error('missing_button'));
+    }
+    if (button.dataset.appOriginalHtml == null) {
+      button.dataset.appOriginalHtml = button.innerHTML;
+    }
+    if (button.dataset.appOriginalClass == null) {
+      button.dataset.appOriginalClass = button.className || '';
+    }
+    const value = text == null ? '' : String(text);
+    return appCopyToClipboard(value)
+      .then(() => {
+        clearClasses.forEach((cls) => button.classList.remove(cls));
+        button.classList.remove(failureClass);
+        button.classList.add(successClass);
+        button.innerHTML = successHtml;
+        if (window.appAnnounce) {
+          window.appAnnounce(successAnnounce);
+        }
+        window.setTimeout(() => {
+          button.className = button.dataset.appOriginalClass || button.className;
+          button.innerHTML = button.dataset.appOriginalHtml || button.innerHTML;
+        }, restoreMs);
+        return true;
+      })
+      .catch((err) => {
+        clearClasses.forEach((cls) => button.classList.remove(cls));
+        button.classList.remove(successClass);
+        button.classList.add(failureClass);
+        button.innerHTML = failureHtml;
+        if (toastFailure && window.appToast) {
+          window.appToast('danger', toastFailure);
+        }
+        if (window.appAnnounce) {
+          window.appAnnounce(failureAnnounce);
+        }
+        window.setTimeout(() => {
+          button.className = button.dataset.appOriginalClass || button.className;
+          button.innerHTML = button.dataset.appOriginalHtml || button.innerHTML;
+        }, Math.max(restoreMs, 1400));
+        throw err;
+      });
+  }
+
+  function appFocusFirstInvalid(form, { toastMessage = '' } = {}) {
+    if (!form) {
+      return null;
+    }
+    const invalid = form.querySelector(':invalid');
+    if (invalid && invalid.focus) {
+      invalid.focus({ preventScroll: true });
+    }
+    if (toastMessage && window.appToast) {
+      window.appToast('warning', toastMessage);
+    }
+    return invalid || null;
+  }
+
   function appToast(type, message, { delay = 2500 } = {}) {
     const bootstrap = ensureBootstrap();
     const container = document.getElementById('appToastContainer');
@@ -239,6 +349,10 @@
   window.appToast = appToast;
   window.appInlineAlert = appInlineAlert;
   window.appNotify = appNotify;
+  window.appAnnounce = appAnnounce;
+  window.appSetButtonLoading = appSetButtonLoading;
+  window.appCopyWithFeedback = appCopyWithFeedback;
+  window.appFocusFirstInvalid = appFocusFirstInvalid;
   window.appGetCsrfToken = appGetCsrfToken;
   window.appCopyToClipboard = appCopyToClipboard;
   window.appConfirm = appConfirm;

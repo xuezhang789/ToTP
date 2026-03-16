@@ -191,13 +191,35 @@
       .then((resp) => resp.json())
       .then(renderPayload)
       .catch(() => showError())
-      .finally(() => refreshBtn?.removeAttribute('disabled'));
+      .finally(() => {
+        if (refreshBtn) {
+          if (window.appSetButtonLoading) {
+            window.appSetButtonLoading(refreshBtn, false);
+          } else {
+            refreshBtn.removeAttribute('disabled');
+            if (refreshBtn.dataset.originalLabel != null) {
+              refreshBtn.innerHTML = refreshBtn.dataset.originalLabel;
+            }
+          }
+        }
+      });
   }
 
   form?.addEventListener('submit', (event) => {
     event.preventDefault();
     if (!form.checkValidity()) {
       form.classList.add('was-validated');
+      if (window.appFocusFirstInvalid) {
+        window.appFocusFirstInvalid(form, { toastMessage: '请检查填写内容后再提交。' });
+      } else {
+        const invalid = form.querySelector(':invalid');
+        if (invalid && invalid.focus) {
+          invalid.focus({ preventScroll: true });
+        }
+        if (window.appToast) {
+          window.appToast('warning', '请检查填写内容后再提交。');
+        }
+      }
       return;
     }
     hideError();
@@ -206,6 +228,20 @@
 
   copyBtn?.addEventListener('click', () => {
     const value = codeEl.textContent.trim();
+    if (window.appCopyWithFeedback) {
+      window.appCopyWithFeedback(copyBtn, value, {
+        successHtml: '<i class="bi bi-check2"></i> 已复制',
+        failureHtml: '<i class="bi bi-x-lg"></i> 复制失败',
+        restoreMs: 1600,
+        successAnnounce: '验证码已复制',
+        failureAnnounce: '复制失败',
+        successClass: 'btn-success',
+        failureClass: 'btn-danger',
+        clearClasses: ['btn-outline-secondary'],
+        toastFailure: '复制失败，请手动复制。',
+      }).catch(() => {});
+      return;
+    }
     const copier = window.appCopyToClipboard
       ? window.appCopyToClipboard
       : (text) => navigator.clipboard.writeText(text);
@@ -213,6 +249,9 @@
       copyBtn.classList.remove('btn-outline-secondary');
       copyBtn.classList.add('btn-success');
       copyBtn.innerHTML = '<i class="bi bi-check2"></i> 已复制';
+      if (window.appAnnounce) {
+        window.appAnnounce('验证码已复制');
+      }
       setTimeout(() => {
         copyBtn.classList.remove('btn-success');
         copyBtn.classList.add('btn-outline-secondary');
@@ -222,6 +261,15 @@
   });
 
   refreshBtn?.addEventListener('click', () => {
+    if (window.appSetButtonLoading) {
+      window.appSetButtonLoading(refreshBtn, true, { label: '刷新中' });
+    } else {
+      if (refreshBtn?.dataset.originalLabel == null) {
+        refreshBtn.dataset.originalLabel = refreshBtn.innerHTML;
+      }
+      refreshBtn.setAttribute('disabled', 'disabled');
+      refreshBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>刷新中';
+    }
     refreshCode();
   });
 

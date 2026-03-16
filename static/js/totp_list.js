@@ -203,6 +203,10 @@
     if (!manualRefreshBtn) {
       return;
     }
+    if (window.appSetButtonLoading) {
+      window.appSetButtonLoading(manualRefreshBtn, flag, { label: '刷新中' });
+      return;
+    }
     if (!manualRefreshOriginalLabel) {
       manualRefreshOriginalLabel = manualRefreshBtn.innerHTML;
     }
@@ -222,6 +226,9 @@
     if (row.copyBtn && code && row.copyBtn.dataset.code !== code) {
       row.copyBtn.dataset.code = code;
     }
+    if (row.codeEl && code && row.codeEl.dataset.code !== code) {
+      row.codeEl.dataset.code = code;
+    }
     if (row.remainEl && Number.isFinite(remain) && remain !== row.lastRemain) {
       row.remainEl.textContent = `${remain}s`;
     }
@@ -235,6 +242,10 @@
       const safePeriod = period > 0 ? period : 30;
       const pct = Math.min(100, Math.max(0, Math.round(((safePeriod - remain) / safePeriod) * 100)));
       row.progressEl.style.width = `${pct}%`;
+      const progress = row.tr ? row.tr.querySelector('[role="progressbar"]') : null;
+      if (progress) {
+        progress.setAttribute('aria-valuenow', String(pct));
+      }
     }
   }
 
@@ -317,6 +328,9 @@
         if (window.appToast) {
           window.appToast('danger', '验证码刷新失败，可点击“刷新失败”状态重试。');
         }
+        if (window.appAnnounce) {
+          window.appAnnounce('验证码刷新失败');
+        }
       })
       .finally(() => {
         pendingRequest = null;
@@ -364,8 +378,31 @@
   });
 
   tbody.addEventListener('click', (event) => {
+    const badge = event.target.closest('.code-badge');
+    if (badge && badge.dataset.code) {
+      const row = badge.closest('tr');
+      const btn = row ? row.querySelector('.copy-btn') : null;
+      if (btn && btn.dataset.code) {
+        btn.click();
+      }
+      return;
+    }
     const btn = event.target.closest('.copy-btn');
     if (!btn || !btn.dataset.code) {
+      return;
+    }
+    if (window.appCopyWithFeedback) {
+      window.appCopyWithFeedback(btn, btn.dataset.code, {
+        successHtml: '已复制',
+        failureHtml: '复制失败',
+        successAnnounce: '验证码已复制',
+        failureAnnounce: '复制失败',
+        restoreMs: 1200,
+        successClass: 'btn-success',
+        failureClass: 'btn-danger',
+        clearClasses: ['btn-outline-secondary'],
+        toastFailure: '复制失败，请检查浏览器权限或手动复制。',
+      }).catch((err) => console.error('Copy failed:', err));
       return;
     }
     const original = btn.dataset.labelDefault || btn.innerHTML;
@@ -374,6 +411,9 @@
         btn.classList.remove('btn-outline-secondary');
         btn.classList.add('btn-success');
         btn.innerHTML = '已复制';
+        if (window.appAnnounce) {
+          window.appAnnounce('验证码已复制');
+        }
         setTimeout(() => {
           btn.classList.remove('btn-success');
           btn.classList.add('btn-outline-secondary');
@@ -388,12 +428,30 @@
         if (window.appToast) {
           window.appToast('danger', '复制失败，请检查浏览器权限或手动复制。');
         }
+        if (window.appAnnounce) {
+          window.appAnnounce('复制失败');
+        }
         setTimeout(() => {
           btn.classList.remove('btn-danger');
           btn.classList.add('btn-outline-secondary');
           btn.innerHTML = original;
         }, 1400);
       });
+  });
+
+  tbody.addEventListener('keydown', (event) => {
+    const badge = event.target && event.target.closest ? event.target.closest('.code-badge') : null;
+    if (!badge || !badge.dataset.code) {
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      const row = badge.closest('tr');
+      const btn = row ? row.querySelector('.copy-btn') : null;
+      if (btn && btn.dataset.code) {
+        btn.click();
+      }
+    }
   });
 
   tbody.addEventListener('click', (event) => {
@@ -652,6 +710,28 @@
     });
   }
 
+  document.addEventListener('keydown', (event) => {
+    const key = event.key;
+    const target = event.target;
+    const isTypingTarget = target instanceof HTMLElement
+      && (target.isContentEditable
+        || target.tagName === 'INPUT'
+        || target.tagName === 'TEXTAREA'
+        || target.tagName === 'SELECT');
+    if (key === '/' && !isTypingTarget) {
+      if (qInput) {
+        event.preventDefault();
+        qInput.focus({ preventScroll: true });
+        qInput.select();
+      }
+      return;
+    }
+    if (key === 'Escape' && qInput && document.activeElement === qInput && qInput.value) {
+      qInput.value = '';
+      updateClearButton();
+    }
+  });
+
   const addGroupModalEl = document.getElementById('addGroupModal');
   const groupManageList = document.getElementById('groupManageList');
   const groupManageAlert = document.getElementById('groupManageAlert');
@@ -681,19 +761,20 @@
     }
     row.querySelectorAll('button').forEach((btn) => {
       if (pending) {
-        btn.disabled = true;
-        if (btn === activeBtn) {
-          if (!btn.dataset.originalLabel) {
-            btn.dataset.originalLabel = btn.innerHTML;
-          }
-          const spinnerHtml = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>';
-          btn.innerHTML = `${spinnerHtml}${label || ''}`;
+        if (btn === activeBtn && window.appSetButtonLoading) {
+          window.appSetButtonLoading(btn, true, { label: label || '' });
+        } else {
+          btn.disabled = true;
         }
       } else {
-        btn.disabled = false;
-        if (btn.dataset.originalLabel) {
-          btn.innerHTML = btn.dataset.originalLabel;
-          delete btn.dataset.originalLabel;
+        if (window.appSetButtonLoading) {
+          window.appSetButtonLoading(btn, false);
+        } else {
+          btn.disabled = false;
+          if (btn.dataset.originalLabel) {
+            btn.innerHTML = btn.dataset.originalLabel;
+            delete btn.dataset.originalLabel;
+          }
         }
       }
     });

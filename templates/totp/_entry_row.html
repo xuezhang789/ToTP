@@ -32,14 +32,14 @@
         {% endif %}
     </td>
     <td class="text-nowrap entry-cell-code">
-        <span class="badge text-bg-dark code-badge code-text" data-code-placeholder="••••••">••••••</span>
+        <span class="badge text-bg-dark code-badge code-text" role="button" tabindex="0" aria-label="点击复制验证码" data-code-placeholder="••••••">••••••</span>
         <button class="btn btn-sm btn-outline-secondary btn-touch copy-btn ms-1" type="button" data-code="" data-label-default="复制" title="复制" aria-label="复制验证码">
             <i class="bi bi-clipboard"></i>
         </button>
         <div class="d-md-none text-muted small mt-1">剩余 <span class="remain-mobile">--s</span></div>
     </td>
     <td class="d-none d-md-table-cell entry-cell-expiry">
-        <div class="progress small" role="progressbar">
+        <div class="progress small" role="progressbar" aria-label="验证码有效期" aria-valuemin="0" aria-valuemax="100">
             <div class="progress-bar" style="width:0%"></div>
         </div>
         <small class="text-muted remain">--s</small>

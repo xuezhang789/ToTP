@@ -25,6 +25,10 @@
   }
 
   function setButtonLoading(button, loading, label) {
+    if (global.appSetButtonLoading) {
+      global.appSetButtonLoading(button, loading, { label: label || '' });
+      return;
+    }
     if (!button) {
       return;
     }
