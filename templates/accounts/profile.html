@@ -139,7 +139,7 @@
                             <ul class="password-tips list-unstyled small text-muted mt-2" id="password-change-suggestions"></ul>
                         </div>
                         {% if password_form.new_password1.help_text %}
-                        <div class="form-text">{{ password_form.new_password1.help_text|safe }}</div>
+                        <div class="form-text">{{ password_form.new_password1.help_text }}</div>
                         {% endif %}
                         {% if password_form.new_password1.errors %}
                         <div class="invalid-feedback d-block">
@@ -166,7 +166,7 @@
 
 {% block scripts %}
 {{ block.super }}
-<script>
+<script nonce="{{ csp_nonce }}">
   (function () {
     const passwordInput = document.getElementById('{{ password_form.new_password1.id_for_label }}');
     if (!passwordInput) {

@@ -36,5 +36,6 @@ class ExportEntriesTests(TestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/plain", response["Content-Type"])
+        if getattr(response, "streaming", False):
+            b"".join(response.streaming_content)
         self.assertTrue(entry.audits.filter(action="exported").exists())
-

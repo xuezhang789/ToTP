@@ -6,6 +6,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
+from project.utils import client_ip
 from .utils import decrypt_str, encrypt_str
 
 
@@ -526,7 +527,5 @@ class OneTimeLink(models.Model):
 
 
 def _get_client_ip(request):
-    forward = request.META.get("HTTP_X_FORWARDED_FOR")
-    if forward:
-        return forward.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR") or None
+    value = client_ip(request)
+    return value if value != "unknown" else None

@@ -69,7 +69,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script>
+<script nonce="{{ csp_nonce }}">
     (function(){
       const passwordInput = document.getElementById('signup-password');
       if(!passwordInput) return;

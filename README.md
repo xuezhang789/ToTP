@@ -66,13 +66,16 @@ python manage.py runserver 0.0.0.0:8000
 ## 生产部署指引
 
 1. **依赖安装**：在干净的 Python 虚拟环境中执行 `pip install -r requirements.txt`，推荐使用 `pip-tools`/`uv` 进行锁定。
-2. **环境变量**：必须设置 `DJANGO_SECRET_KEY`（强随机字符串）和 `ALLOWED_HOSTS`。如果使用 Google One Tap，确保 `GOOGLE_CLIENT_ID` 对应的域名与部署域名一致。
+2. **环境变量**：必须设置 `DJANGO_SECRET_KEY`（强随机字符串）、`DJANGO_ALLOWED_HOSTS`（逗号分隔，禁止 `*`）以及 `TOTP_ENC_KEY` / `TOTP_ENC_KEYS`（用于加密存储 TOTP 密钥）。如果使用 Google One Tap，确保 `GOOGLE_CLIENT_ID` 对应的域名与部署域名一致。
 3. **数据库**：生产环境推荐 PostgreSQL。按照 Django 官方文档配置 `DATABASES` 后执行 `python manage.py migrate`。
 4. **静态文件**：
    ```bash
    python manage.py collectstatic --noinput
    ```
    将 `static/` 目录交给 Nginx / CDN 提供服务。
+   - 如果启用了 `ManifestStaticFilesStorage`（或使用 WhiteNoise 的 manifest 模式），`{% static 'js/import_modal.js' %}` 这类引用会被解析到带 hash 的文件名（例如 `import_modal.<hash>.js`），因此**必须**在发布流程中执行 `collectstatic` 生成对应文件。
+   - 项目内已增加静态资源安全护栏测试（扫描 `staticfiles/js/import_modal*.js` 中的高危 DOM 注入模式），建议在 CI 中保持开启。
+   - `staticfiles/` 属于构建产物目录，建议只在发布/镜像构建阶段生成，并避免将旧产物与源码混用。
 5. **WSGI 服务**：使用 Gunicorn 作为示例：
    ```bash
    gunicorn project.wsgi:application --bind 0.0.0.0:8000 --workers 3
@@ -82,7 +85,7 @@ python manage.py runserver 0.0.0.0:8000
    - 回收站清理逻辑在用户访问相关页面时自动触发，如需定时任务可调用 `TOTPEntry.purge_expired_trash()`。
    - 监控命中率高的接口（如 `/api/tokens/`）时，可通过缓存层缓解并发压力。
 7. **日志与安全**：
-   - 根据需要配置 `LOGGING`，并开启 `SECURE_*`、`CSRF_COOKIE_SECURE`、`SESSION_COOKIE_SECURE` 等安全选项。
+   - 根据需要配置 `LOGGING`，并开启 `SECURE_*`、`CSRF_COOKIE_SECURE`、`SESSION_COOKIE_SECURE` 等安全选项（默认在 `DJANGO_DEBUG=false` 时会启用更严格的默认值）。
    - 推荐在反向代理层设置速率限制，防止暴力破解或链接枚举。
 
 ---
@@ -107,9 +110,18 @@ curl -H "Cookie: sessionid=..." https://your-domain/api/tokens/
 
 | 变量名 | 描述 | 默认值 |
 | ------ | ---- | ------ |
-| `DJANGO_SECRET_KEY` | Django 密钥，亦用于加密 TOTP 密钥 | 开发环境内置的弱密钥（务必覆盖） |
-| `DEBUG` | 调试模式 | `True` |
-| `ALLOWED_HOSTS` | 允许访问的主机名列表 | `*` |
+| `DJANGO_SECRET_KEY` | Django SECRET_KEY | `dev-secret-key-change-me`（生产必须覆盖） |
+| `DJANGO_DEBUG` | 调试模式 | `True` |
+| `DJANGO_ALLOWED_HOSTS` | 允许访问的主机名列表（逗号分隔） | `localhost,127.0.0.1,[::1]` |
+| `TOTP_ENC_KEY` | TOTP 密钥加密主密钥（单把） | 空（生产必须设置） |
+| `TOTP_ENC_KEYS` | TOTP 密钥加密备用密钥（多把，逗号分隔） | 空 |
+| `DJANGO_CSP` | 是否启用 CSP（带 nonce 的 script-src） | 生产默认启用 |
+| `DJANGO_CSP_REPORT_ONLY` | CSP 是否仅上报不拦截 | 开发默认启用 |
+| `TOTP_EXTERNAL_TOOL_ENABLED` | 是否启用外部验证码工具 | 开发默认启用，生产默认关闭 |
+| `TOTP_EXTERNAL_TOOL_ALLOW_SECRET_PREFILL` | 是否允许 `?secret=` 预填 | `False` |
+| `DJANGO_TRUST_X_FORWARDED_FOR` | 是否信任 `X-Forwarded-For` 获取客户端 IP | `False` |
+| `TOTP_EXPORT_ENCRYPTED_MAX_ENTRIES` | 加密导出单次最大条目数 | `2000` |
+| `TOTP_EXPORT_OFFLINE_MAX_ENTRIES` | 离线包单次最大条目数 | `1000` |
 | `GOOGLE_CLIENT_ID` | Google One Tap 客户端 ID | `YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com` |
 
 如需使用其它第三方登录或更严格的安全策略，可在 `project/settings.py` 中调整。

@@ -379,7 +379,7 @@
 {% block scripts %}
 {% if request.user.is_authenticated %}
 <script src="{% static 'js/import_modal.js' %}"></script>
-<script>
+<script nonce="{{ csp_nonce }}">
     (function () {
       const total = Number('{{ stats.current_cycle_total|default:30 }}');
       const initialRemain = Number('{{ stats.current_cycle_remaining|default:0 }}');

@@ -100,7 +100,7 @@
 
 {% block scripts %}
 {% if link %}
-<script>
+<script nonce="{{ csp_nonce }}">
 (() => {
   const code = document.getElementById('oneTimeCode');
   const countdownEl = document.getElementById('oneTimeCountdown');

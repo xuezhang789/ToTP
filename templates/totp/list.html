@@ -388,7 +388,7 @@
 
 {% block scripts %}
 <script src="{% static 'js/import_modal.js' %}"></script>
-<script>
+<script nonce="{{ csp_nonce }}">
 window.TotpListConfig = {
   importPreviewUrl: "{% url 'totp:batch_import_preview' %}",
   importApplyUrl: "{% url 'totp:batch_import_apply' %}",

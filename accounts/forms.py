@@ -98,6 +98,8 @@ class PasswordUpdateForm(PasswordChangeForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "new_password1" in self.fields:
+            self.fields["new_password1"].help_text = ""
         field_configs = {
             "old_password": ("当前密码", "请输入当前密码"),
             "new_password1": ("新密码", "至少 8 位，包含多种字符"),
@@ -130,6 +132,8 @@ class PasswordSetForm(SetPasswordForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "new_password1" in self.fields:
+            self.fields["new_password1"].help_text = ""
         field_configs = {
             "new_password1": ("新密码", "至少 8 位，包含多种字符"),
             "new_password2": ("确认新密码", "再次输入新密码"),

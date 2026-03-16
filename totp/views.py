@@ -4,9 +4,11 @@ import secrets
 import csv
 import base64
 import os
+import io
 from datetime import datetime, time, timedelta
 from urllib.parse import quote
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
@@ -14,7 +16,7 @@ from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Q, Prefetch
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -27,6 +29,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from . import importers
+from project.utils import client_ip
 from .models import (
     Group,
     OneTimeLink,
@@ -39,6 +42,7 @@ from .models import (
     log_entry_audit,
     log_team_audit,
 )
+from .querysets import entries_queryset_for_list, teams_queryset_for_overview
 
 UserModel = get_user_model()
 from .utils import (
@@ -50,8 +54,6 @@ from .utils import (
 )
 
 
-EXTERNAL_TOTP_RATE_LIMIT = 20
-EXTERNAL_TOTP_RATE_WINDOW_SECONDS = 60
 EXPORT_REAUTH_MAX_AGE_SECONDS = 5 * 60
 TEAM_ONE_TIME_LINK_ACTIVE_LIMIT = 50
 TEAM_ONE_TIME_LINK_MAX_DURATION_MINUTES = 30
@@ -291,42 +293,13 @@ def list_view(request):
             request.user, team_id, require_manage=False
         )
         selected_team = selected_membership.team
-        entry_qs = (
-            TOTPEntry.objects.filter(team=selected_team)
-            .select_related("team")
-            .order_by("-created_at")
-        )
-        groups = []
     else:
         space = "personal"
-        entry_qs = (
-            TOTPEntry.objects.filter(user=request.user, team__isnull=True)
-            .select_related("group")
-            .order_by("-created_at")
-        )
-        if group_id == "0":
-            entry_qs = entry_qs.filter(group__isnull=True)
-        elif group_id:
-            entry_qs = entry_qs.filter(group_id=group_id)
-        groups = (
-            Group.objects.filter(user=request.user)
-            .annotate(
-                entry_count=Count(
-                    "entries",
-                    filter=Q(entries__is_deleted=False, entries__team__isnull=True),
-                )
-            )
-            .order_by("name")
-        )
-
-    if q:
-        entry_qs = entry_qs.filter(name__icontains=q)
-
-    entry_qs = entry_qs.select_related("group", "team").prefetch_related(
-        Prefetch(
-            "team__memberships",
-            queryset=TeamMembership.objects.filter(user=request.user),
-        )
+    entry_qs, groups = entries_queryset_for_list(
+        user=request.user,
+        selected_team=selected_team,
+        q=q,
+        group_id=group_id,
     )
 
     paginator = Paginator(entry_qs, 10)
@@ -358,27 +331,7 @@ def teams_overview(request):
     """展示团队列表及成员信息。"""
 
     q = (request.GET.get("q") or "").strip()
-    teams = (
-        Team.objects.filter(memberships__user=request.user)
-        .filter(Q(name__icontains=q) if q else Q())
-        .annotate(
-            member_count=Count("memberships", distinct=True),
-            entry_count=Count(
-                "entries",
-                filter=Q(entries__is_deleted=False),
-                distinct=True,
-            ),
-        )
-        .prefetch_related(
-            Prefetch(
-                "memberships",
-                queryset=TeamMembership.objects.select_related("user").order_by(
-                    "role", "user__username"
-                ),
-            )
-        )
-        .order_by("name")
-    )
+    teams = teams_queryset_for_overview(user=request.user, q=q)
     membership_map = {team.id: team.get_membership(request.user) for team in teams}
     role_labels = dict(TeamMembership.Role.choices)
     available_roles = [
@@ -862,6 +815,8 @@ def team_audit(request, team_id: int):
 
 
 @login_required
+@never_cache
+@require_GET
 def team_audit_export(request, team_id: int):
     membership = _get_team_membership(request.user, team_id, require_manage=True)
     team = membership.team
@@ -871,8 +826,20 @@ def team_audit_export(request, team_id: int):
     actor_raw = (request.GET.get("actor") or "").strip()
     target_raw = (request.GET.get("target") or "").strip()
 
-    queryset = TeamAudit.objects.filter(team=team).select_related(
-        "actor", "target_user"
+    queryset = (
+        TeamAudit.objects.filter(team=team)
+        .select_related("actor", "target_user")
+        .only(
+            "created_at",
+            "action",
+            "actor_id",
+            "actor__username",
+            "target_user_id",
+            "target_user__username",
+            "old_value",
+            "new_value",
+            "metadata",
+        )
     )
     if action and action in dict(TeamAudit.Action.choices):
         queryset = queryset.filter(action=action)
@@ -902,10 +869,14 @@ def team_audit_export(request, team_id: int):
     response["Content-Disposition"] = (
         f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
     )
+    response["Cache-Control"] = "no-store"
+    response["Pragma"] = "no-cache"
     response.write("\ufeff")
     writer = csv.writer(response)
     writer.writerow(["时间", "动作", "操作人", "目标用户", "旧值", "新值", "详情"])
-    for record in queryset.order_by("-created_at")[:20000]:
+    for idx, record in enumerate(queryset.order_by("-created_at").iterator(chunk_size=1000)):
+        if idx >= 20000:
+            break
         actor_label = record.actor.username if record.actor_id else "系统"
         target_label = record.target_user.username if record.target_user_id else ""
         writer.writerow(
@@ -1654,6 +1625,7 @@ def _secret_preview(secret: str) -> str:
 
 
 
+@never_cache
 @login_required
 @require_GET
 def export_download(request):
@@ -1690,6 +1662,7 @@ def export_download(request):
     )
 
 
+@never_cache
 @login_required
 def export_entries(request):
     """导出当前用户的全部密钥，以文本形式下载。"""
@@ -1702,46 +1675,54 @@ def export_entries(request):
         user=request.user,
         team__isnull=True,
         is_deleted=False,
-    ).select_related("group").order_by("name")
+    ).select_related("group").only(
+        "id",
+        "name",
+        "secret_encrypted",
+        "group_id",
+        "group__name",
+    ).order_by("name")
 
-    entries = list(queryset)
-    if not entries:
+    if not queryset.exists():
         messages.info(request, "当前没有可以导出的密钥")
         return redirect("totp:list")
 
-    lines = []
-    audit_rows = []
-    for entry in entries:
-        secret = decrypt_str(entry.secret_encrypted)
-        parts = [secret, entry.name]
-        if entry.group:
-            parts.append(entry.group.name)
-        lines.append("|".join(parts))
-        audit_rows.append(
-            TOTPEntryAudit(
-                entry=entry,
-                actor=request.user,
-                action=TOTPEntryAudit.Action.EXPORTED,
-                old_value=entry.name,
-                metadata={"space": "personal"},
-            )
-        )
-
-    content = "\n".join(lines)
     filename = timezone.now().strftime("totp-export-%Y%m%d-%H%M%S.txt")
     quoted = quote(filename)
 
-    response = HttpResponse(content, content_type="text/plain; charset=utf-8")
+    def row_stream():
+        audit_rows = []
+        for entry in queryset.iterator(chunk_size=200):
+            secret = decrypt_str(entry.secret_encrypted)
+            parts = [secret, entry.name]
+            if entry.group_id:
+                parts.append(entry.group.name)
+            audit_rows.append(
+                TOTPEntryAudit(
+                    entry=entry,
+                    actor=request.user,
+                    action=TOTPEntryAudit.Action.EXPORTED,
+                    old_value=entry.name,
+                    metadata={"space": "personal"},
+                )
+            )
+            if len(audit_rows) >= 500:
+                TOTPEntryAudit.objects.bulk_create(audit_rows)
+                audit_rows.clear()
+            yield ("|".join(parts) + "\n").encode("utf-8")
+        if audit_rows:
+            TOTPEntryAudit.objects.bulk_create(audit_rows)
+
+    response = StreamingHttpResponse(row_stream(), content_type="text/plain; charset=utf-8")
     response["Content-Disposition"] = (
         f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}"
     )
     response["Cache-Control"] = "no-store"
     response["Pragma"] = "no-cache"
-    if audit_rows:
-        TOTPEntryAudit.objects.bulk_create(audit_rows)
     return response
 
 
+@never_cache
 @login_required
 @require_POST
 def export_encrypted_package(request):
@@ -1764,19 +1745,30 @@ def export_encrypted_package(request):
         team__isnull=True,
         is_deleted=False,
     ).select_related("group").order_by("name")
-    entries = list(queryset)
-    if not entries:
+    if not queryset.exists():
         messages.info(request, "当前没有可以导出的密钥")
         return redirect("totp:list")
 
-    lines = []
+    limit = int(getattr(settings, "EXPORT_ENCRYPTED_MAX_ENTRIES", 2000) or 2000)
+    total = queryset.count()
+    if total > limit:
+        messages.error(
+            request,
+            f"密钥数量过多（{total} 条），为避免导出时占用过多资源，单次最多导出 {limit} 条。请减少条目数量或分批处理后再试。",
+        )
+        return redirect(f"{reverse('totp:list')}?modal=export_encrypted")
+
+    buffer = io.StringIO()
     audit_rows = []
-    for entry in entries:
+    entry_count = 0
+    for entry in queryset.iterator(chunk_size=200):
         secret = decrypt_str(entry.secret_encrypted)
         parts = [secret, entry.name]
         if entry.group:
             parts.append(entry.group.name)
-        lines.append("|".join(parts))
+        buffer.write("|".join(parts))
+        buffer.write("\n")
+        entry_count += 1
         audit_rows.append(
             TOTPEntryAudit(
                 entry=entry,
@@ -1786,8 +1778,11 @@ def export_encrypted_package(request):
                 metadata={"space": "personal"},
             )
         )
+        if len(audit_rows) >= 500:
+            TOTPEntryAudit.objects.bulk_create(audit_rows)
+            audit_rows.clear()
 
-    plaintext = "\n".join(lines).encode("utf-8")
+    plaintext = buffer.getvalue().encode("utf-8")
     iterations = 200000
     salt = os.urandom(16)
     kdf = PBKDF2HMAC(
@@ -1811,7 +1806,7 @@ def export_encrypted_package(request):
         },
         "meta": {
             "generated_at": timezone.now().isoformat(),
-            "count": len(entries),
+            "count": entry_count,
         },
     }
 
@@ -1831,7 +1826,9 @@ def export_encrypted_package(request):
     return response
 
 
+@never_cache
 @login_required
+@require_GET
 def export_offline_package(request):
     """生成离线只读 HTML，便于无网络环境查看验证码。"""
 
@@ -1849,14 +1846,22 @@ def export_offline_package(request):
         .order_by("name")
     )
 
-    entries = list(queryset)
-    if not entries:
+    if not queryset.exists():
         messages.info(request, "当前没有可用的密钥，无法生成离线包")
+        return redirect("totp:list")
+
+    limit = int(getattr(settings, "EXPORT_OFFLINE_MAX_ENTRIES", 1000) or 1000)
+    total = queryset.count()
+    if total > limit:
+        messages.error(
+            request,
+            f"密钥数量过多（{total} 条），离线包会包含所有密钥并占用较大内存，单次最多导出 {limit} 条。请减少条目数量或分批处理后再试。",
+        )
         return redirect("totp:list")
 
     entries_payload = []
     audit_rows = []
-    for entry in entries:
+    for entry in queryset.iterator(chunk_size=200):
         secret = decrypt_str(entry.secret_encrypted)
         issuer = entry.group.name if entry.group else request.user.username
         entries_payload.append(
@@ -1878,6 +1883,9 @@ def export_offline_package(request):
                 metadata={"space": "personal"},
             )
         )
+        if len(audit_rows) >= 500:
+            TOTPEntryAudit.objects.bulk_create(audit_rows)
+            audit_rows.clear()
 
     generated_at = timezone.now()
     filename = generated_at.strftime("totp-offline-%Y%m%d-%H%M%S.html")
@@ -2205,6 +2213,9 @@ def invalidate_one_time_link(request, pk: int):
 def external_totp(request):
     """根据链接参数返回动态验证码，供未登录场景使用。"""
 
+    if not getattr(settings, "EXTERNAL_TOOL_ENABLED", False):
+        return JsonResponse({"ok": False, "message": "该功能已关闭"}, status=404)
+
     if not _external_totp_rate_limit_allow(request):
         return JsonResponse(
             {"ok": False, "message": "请求过于频繁，请稍后再试"},
@@ -2276,10 +2287,17 @@ def external_totp(request):
 def external_totp_tool(request):
     """展示一个外部验证码生成工具页面。"""
 
+    if not getattr(settings, "EXTERNAL_TOOL_ENABLED", False):
+        raise Http404("Not found")
+
     digits = (request.GET.get("digits") or "6").strip()
     period = (request.GET.get("period") or "30").strip()
     context = {
-        "prefill_secret": (request.GET.get("secret") or "").strip(),
+        "prefill_secret": (
+            (request.GET.get("secret") or "").strip()
+            if getattr(settings, "EXTERNAL_TOOL_ALLOW_SECRET_PREFILL", False)
+            else ""
+        ),
         "prefill_digits": digits,
         "prefill_period": period,
         "digits_choices": ["4", "5", "6", "7", "8"],
@@ -2288,6 +2306,7 @@ def external_totp_tool(request):
     return render(request, "totp/external_tool.html", context)
 
 
+@never_cache
 def one_time_view(request, token: str):
     """展示一次性访问链接的验证码。"""
 
@@ -2369,23 +2388,34 @@ def _resolve_link_inactive_reason(link: OneTimeLink) -> str:
 def _external_totp_rate_limit_allow(request) -> bool:
     """简单的 IP 级频率限制，限制单位时间内的访问次数。"""
 
-    ip = _client_ip_from_request(request)
-    cache_key = f"totp:external_totp:rl:{ip}"
-    if cache.add(cache_key, 1, EXTERNAL_TOTP_RATE_WINDOW_SECONDS):
-        return True
-    try:
-        count = cache.incr(cache_key)
-    except ValueError:
-        cache.set(cache_key, 1, EXTERNAL_TOTP_RATE_WINDOW_SECONDS)
-        return True
-    return count <= EXTERNAL_TOTP_RATE_LIMIT
+    ip = client_ip(request)
+    short_key = f"totp:external_totp:rl:short:{ip}"
+    long_key = f"totp:external_totp:rl:long:{ip}"
 
+    short_window = int(getattr(settings, "EXTERNAL_TOTP_RATE_WINDOW_SECONDS", 60))
+    short_limit = int(getattr(settings, "EXTERNAL_TOTP_RATE_LIMIT", 10))
+    long_window = int(getattr(settings, "EXTERNAL_TOTP_RATE_WINDOW_SECONDS_LONG", 600))
+    long_limit = int(getattr(settings, "EXTERNAL_TOTP_RATE_LIMIT_LONG", 60))
 
-def _client_ip_from_request(request) -> str:
-    forward = request.META.get("HTTP_X_FORWARDED_FOR")
-    if forward:
-        return forward.split(",")[0].strip() or "unknown"
-    return request.META.get("REMOTE_ADDR") or "unknown"
+    if cache.add(short_key, 1, short_window):
+        short_count = 1
+    else:
+        try:
+            short_count = cache.incr(short_key)
+        except ValueError:
+            cache.set(short_key, 1, short_window)
+            short_count = 1
+
+    if cache.add(long_key, 1, long_window):
+        long_count = 1
+    else:
+        try:
+            long_count = cache.incr(long_key)
+        except ValueError:
+            cache.set(long_key, 1, long_window)
+            long_count = 1
+
+    return short_count <= short_limit and long_count <= long_limit
 
 
 def _external_totp_response(

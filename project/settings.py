@@ -48,6 +48,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "project.middleware.CSPNonceMiddleware",
     "django.middleware.gzip.GZipMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -71,6 +72,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "accounts.context_processors.google_client_id",
+                "project.context_processors.csp_nonce",
             ],
         },
     },
@@ -110,6 +112,21 @@ LOGIN_URL = "/auth/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/auth/login/"
 
+CSP_ENABLED = _env_bool("DJANGO_CSP", not DEBUG)
+CSP_REPORT_ONLY = _env_bool("DJANGO_CSP_REPORT_ONLY", DEBUG)
+
+EXTERNAL_TOOL_ENABLED = _env_bool("TOTP_EXTERNAL_TOOL_ENABLED", DEBUG)
+EXTERNAL_TOTP_RATE_LIMIT = int(os.environ.get("TOTP_EXTERNAL_TOTP_RATE_LIMIT", "20"))
+EXTERNAL_TOTP_RATE_WINDOW_SECONDS = int(os.environ.get("TOTP_EXTERNAL_TOTP_RATE_WINDOW_SECONDS", "60"))
+EXTERNAL_TOTP_RATE_LIMIT_LONG = int(os.environ.get("TOTP_EXTERNAL_TOTP_RATE_LIMIT_LONG", "60"))
+EXTERNAL_TOTP_RATE_WINDOW_SECONDS_LONG = int(os.environ.get("TOTP_EXTERNAL_TOTP_RATE_WINDOW_SECONDS_LONG", "600"))
+EXTERNAL_TOOL_ALLOW_SECRET_PREFILL = _env_bool("TOTP_EXTERNAL_TOOL_ALLOW_SECRET_PREFILL", False)
+
+TRUST_X_FORWARDED_FOR = _env_bool("DJANGO_TRUST_X_FORWARDED_FOR", False)
+
+EXPORT_ENCRYPTED_MAX_ENTRIES = int(os.environ.get("TOTP_EXPORT_ENCRYPTED_MAX_ENTRIES", "2000"))
+EXPORT_OFFLINE_MAX_ENTRIES = int(os.environ.get("TOTP_EXPORT_OFFLINE_MAX_ENTRIES", "1000"))
+
 REDIS_URL = os.environ.get("REDIS_URL", "").strip()
 if REDIS_URL:
     CACHES = {
@@ -132,6 +149,9 @@ SESSION_COOKIE_SECURE = _env_bool("DJANGO_SESSION_COOKIE_SECURE", not DEBUG)
 CSRF_COOKIE_SECURE = _env_bool("DJANGO_CSRF_COOKIE_SECURE", not DEBUG)
 SESSION_COOKIE_SAMESITE = os.environ.get("DJANGO_SESSION_COOKIE_SAMESITE", "Lax")
 CSRF_COOKIE_SAMESITE = os.environ.get("DJANGO_CSRF_COOKIE_SAMESITE", "Lax")
+SESSION_COOKIE_HTTPONLY = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = os.environ.get("DJANGO_X_FRAME_OPTIONS", "DENY")
 SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "0" if DEBUG else "31536000"))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("DJANGO_HSTS_INCLUDE_SUBDOMAINS", not DEBUG)
 SECURE_HSTS_PRELOAD = _env_bool("DJANGO_HSTS_PRELOAD", not DEBUG)

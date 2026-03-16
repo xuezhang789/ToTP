@@ -57,9 +57,10 @@
         </div>
     </div>
 </div>
-<script>
+<script nonce="{{ csp_nonce }}">
     (function () {
-      const ZXING_SRC = 'https://cdn.bootcdn.net/ajax/libs/zxing/0.20.0/zxing.min.js';
+      const ZXING_SRC = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js';
+      const ZXING_INTEGRITY = 'sha384-DOP3OlIzNeWpufSZMxZihUYSqCAZFirsVmSAVg8ItvU9ac1FcQF6ZHjQ9CbCznNS';
       let readerPromise = null;
 
       function loadScriptOnce(src) {
@@ -77,6 +78,8 @@
           const script = document.createElement('script');
           script.id = 'zxing-script';
           script.src = src;
+          script.integrity = ZXING_INTEGRITY;
+          script.crossOrigin = 'anonymous';
           script.async = true;
           script.onload = () => resolve(window.ZXing);
           script.onerror = () => reject(new Error('ZXing 加载失败'));

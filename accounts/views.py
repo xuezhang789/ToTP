@@ -29,18 +29,12 @@ User = get_user_model()
 
 from .forms import PasswordSetForm, PasswordUpdateForm, ProfileForm, password_strength_errors
 from totp.models import OneTimeLink, TOTPEntry
+from project.utils import client_ip
 
 LOGIN_RATE_LIMIT = 10
 LOGIN_RATE_WINDOW_SECONDS = 300
 SIGNUP_RATE_LIMIT = 5
 SIGNUP_RATE_WINDOW_SECONDS = 600
-
-
-def _client_ip(request) -> str:
-    forward = request.META.get("HTTP_X_FORWARDED_FOR")
-    if forward:
-        return forward.split(",")[0].strip() or "unknown"
-    return request.META.get("REMOTE_ADDR") or "unknown"
 
 
 def _rate_limit_allow(cache_key: str, *, limit: int, window_seconds: int) -> bool:
@@ -75,7 +69,7 @@ def login_view(request):
     if request.method == "POST":
         username = (request.POST.get("username") or "").strip()
         password = (request.POST.get("password") or "").strip()
-        ip = _client_ip(request)
+        ip = client_ip(request)
         rl_key = f"auth:login:v1:{ip}:{username.lower()}"
         if not _rate_limit_allow(
             rl_key,
@@ -100,7 +94,7 @@ def signup_view(request):
         return redirect("/")
     context = {"next": _next_url(request, fallback="/")}
     if request.method == "POST":
-        ip = _client_ip(request)
+        ip = client_ip(request)
         rl_key = f"auth:signup:v1:{ip}"
         if not _rate_limit_allow(
             rl_key,

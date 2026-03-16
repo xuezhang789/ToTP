@@ -14,7 +14,7 @@
 
 <iframe src="{{ download_url }}" style="display:none" title="download"></iframe>
 {{ return_url|json_script:"returnUrl" }}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function () {
   const value = JSON.parse(document.getElementById('returnUrl')?.textContent || '""');
   if (value) {

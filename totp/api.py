@@ -2,11 +2,13 @@ from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.http import JsonResponse
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
 
 from .models import TOTPEntry
 from .utils import decrypt_str, totp_code_base32
 
 @login_required
+@never_cache
 def api_tokens(request):
     """返回所有 TOTP 条目的当前验证码。"""
     items = []
@@ -44,7 +46,10 @@ def api_tokens(request):
 
     cached = cache.get(cache_key) if cache_key else None
     if cached is not None:
-        return JsonResponse(cached)
+        response = JsonResponse(cached)
+        response["Cache-Control"] = "no-store"
+        response["Pragma"] = "no-cache"
+        return response
 
     for entry in queryset.iterator(chunk_size=200):
         secret = decrypt_str(entry.secret_encrypted)
@@ -66,4 +71,7 @@ def api_tokens(request):
     payload = {"remaining": remaining, "items": items}
     if cache_key:
         cache.set(cache_key, payload, 2)
-    return JsonResponse(payload)
+    response = JsonResponse(payload)
+    response["Cache-Control"] = "no-store"
+    response["Pragma"] = "no-cache"
+    return response

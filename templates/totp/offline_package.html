@@ -438,7 +438,7 @@
     <p class="footer-note">&copy; {{ generated_at|date:"Y" }} 离线导出 · 无网络亦可安全使用 · 主站：<strong>https://2fa.97.cx/</strong></p>
 </div>
 {{ entries_payload|json_script:"entries-data" }}
-<script>
+<script nonce="{{ csp_nonce }}">
 (function(){
   const RAW_ENTRIES = JSON.parse(document.getElementById('entries-data').textContent || '[]');
   const uaInfo = document.getElementById('uaInfo');
@@ -461,7 +461,13 @@
       unsupportedEl.style.display = 'block';
     }
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="5" class="entry-sub">浏览器不支持必要的加密接口，无法生成验证码。</td></tr>';
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 5;
+      td.className = 'entry-sub';
+      td.textContent = '浏览器不支持必要的加密接口，无法生成验证码。';
+      tr.appendChild(td);
+      tbody.replaceChildren(tr);
     }
     return;
   }
@@ -521,23 +527,62 @@
 
   function createRow(entry){
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="entry-name" data-label="名称">
-        <div>${entry.name}</div>
-        <div class="entry-sub">${entry.issuer ? `账号：${entry.issuer}` : '&nbsp;'}</div>
-      </td>
-      <td data-label="分组">${entry.group || '未分组'}</td>
-      <td data-label="验证码"><span class="offline-code" data-role="code">000000</span></td>
-      <td data-label="有效期">
-        <div class="offline-countdown" data-role="countdown">剩余 30 秒</div>
-        <div class="offline-progress">
-          <span class="offline-progress-bar" data-role="progress"></span>
-        </div>
-      </td>
-      <td data-label="操作">
-        <button class="btn btn-sm btn-primary" data-role="copy">复制</button>
-      </td>
-    `;
+    const nameTd = document.createElement('td');
+    nameTd.className = 'entry-name';
+    nameTd.dataset.label = '名称';
+    const titleDiv = document.createElement('div');
+    titleDiv.textContent = entry.name || '';
+    const subDiv = document.createElement('div');
+    subDiv.className = 'entry-sub';
+    if (entry.issuer) {
+      subDiv.textContent = `账号：${entry.issuer}`;
+    } else {
+      subDiv.textContent = '\u00a0';
+    }
+    nameTd.appendChild(titleDiv);
+    nameTd.appendChild(subDiv);
+
+    const groupTd = document.createElement('td');
+    groupTd.dataset.label = '分组';
+    groupTd.textContent = entry.group || '未分组';
+
+    const codeTd = document.createElement('td');
+    codeTd.dataset.label = '验证码';
+    const codeSpan = document.createElement('span');
+    codeSpan.className = 'offline-code';
+    codeSpan.dataset.role = 'code';
+    codeSpan.textContent = '000000';
+    codeTd.appendChild(codeSpan);
+
+    const expiryTd = document.createElement('td');
+    expiryTd.dataset.label = '有效期';
+    const countdownDiv = document.createElement('div');
+    countdownDiv.className = 'offline-countdown';
+    countdownDiv.dataset.role = 'countdown';
+    countdownDiv.textContent = '剩余 30 秒';
+    const progressWrapper = document.createElement('div');
+    progressWrapper.className = 'offline-progress';
+    const progressBar = document.createElement('span');
+    progressBar.className = 'offline-progress-bar';
+    progressBar.dataset.role = 'progress';
+    progressWrapper.appendChild(progressBar);
+    expiryTd.appendChild(countdownDiv);
+    expiryTd.appendChild(progressWrapper);
+
+    const actionTd = document.createElement('td');
+    actionTd.dataset.label = '操作';
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'btn btn-sm btn-primary';
+    copyBtn.type = 'button';
+    copyBtn.dataset.role = 'copy';
+    copyBtn.textContent = '复制';
+    actionTd.appendChild(copyBtn);
+
+    tr.appendChild(nameTd);
+    tr.appendChild(groupTd);
+    tr.appendChild(codeTd);
+    tr.appendChild(expiryTd);
+    tr.appendChild(actionTd);
     return tr;
   }
 
@@ -594,7 +639,13 @@
 
   if (tbody) {
     if (rendered.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="entry-sub">暂无可用密钥。</td></tr>';
+      const emptyTr = document.createElement('tr');
+      const emptyTd = document.createElement('td');
+      emptyTd.colSpan = 5;
+      emptyTd.className = 'entry-sub';
+      emptyTd.textContent = '暂无可用密钥。';
+      emptyTr.appendChild(emptyTd);
+      tbody.replaceChildren(emptyTr);
     } else {
       rendered.forEach((row) => tbody.appendChild(row));
     }
@@ -703,7 +754,16 @@
     RAW_ENTRIES.splice(0, RAW_ENTRIES.length);
     rendered.forEach(wipeRow);
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="5"><div class="alert alert-warning" style="margin:0;">离线数据已手动销毁。如需再次查看，请回到系统重新生成离线包。</div></td></tr>';
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 5;
+      const alert = document.createElement('div');
+      alert.className = 'alert alert-warning';
+      alert.style.margin = '0';
+      alert.textContent = '离线数据已手动销毁。如需再次查看，请回到系统重新生成离线包。';
+      td.appendChild(alert);
+      tr.appendChild(td);
+      tbody.replaceChildren(tr);
     }
     if (destroyBtn) {
       destroyBtn.disabled = true;

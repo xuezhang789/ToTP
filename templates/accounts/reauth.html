@@ -49,7 +49,7 @@
 {% endblock %}
 {% block scripts %}
 {{ block.super }}
-<script>
+<script nonce="{{ csp_nonce }}">
   (function () {
     window.handleReauthCredential = async function (resp) {
       const nextValue = document.getElementById('reauth-next')?.value || '/';
