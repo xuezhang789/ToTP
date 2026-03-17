@@ -1,3 +1,4 @@
+from urllib.parse import quote
 import hashlib
 from datetime import timedelta
 from pathlib import Path
@@ -77,3 +78,29 @@ class SecurityHardeningTests(TestCase):
         self.assertIn("https://accounts.google.com", csp)
         self.assertNotIn("oauth2.googleapis.com", csp)
         self.assertNotIn("www.googleapis.com", csp)
+
+    def test_reauth_json_redirects_to_referer(self):
+        """测试 _reauth_json 返回的重定向链接是否包含 Referer"""
+        # 使用 batch_import_apply 作为触发点，因为它调用 _reauth_json
+        url = reverse("totp:batch_import_apply")
+        referer = "/totp/some/random/page/"
+        
+        # 确保 session 中没有 reauth_at，触发 _has_recent_reauth 失败
+        if "reauth_at" in self.client.session:
+            del self.client.session["reauth_at"]
+            self.client.session.save()
+
+        response = self.client.post(
+            url,
+            data={"space": "personal"},
+            content_type="application/json",
+            HTTP_REFERER=referer
+        )
+
+        self.assertEqual(response.status_code, 403)
+        data = response.json()
+        self.assertEqual(data["error"], "reauth_required")
+        
+        # 验证 redirect URL 中包含 referer
+        expected_next = quote(referer)
+        self.assertIn(f"next={expected_next}", data["redirect"])

@@ -112,18 +112,19 @@ class ProfileViewTests(TestCase):
         self.assertEqual(summary["active_links"], 1)
 
     def test_change_password_strength_validation(self):
+        # 验证不再强制检查密码强度（用户要求）
         self.client.force_login(self.user)
         payload = {
             "password_submit": "1",
             "old_password": "StrongPass123!",
-            "new_password1": "abc12345",
-            "new_password2": "abc12345",
+            "new_password1": "weakpass",
+            "new_password2": "weakpass",
         }
-        response = self.client.post(reverse("accounts:profile"), payload)
+        response = self.client.post(reverse("accounts:profile"), payload, follow=True)
         self.assertEqual(response.status_code, 200)
-        password_form = response.context["password_form"]
-        self.assertTrue(password_form.errors)
-        self.assertIn("密码需至少包含", password_form.errors.get("new_password2", [""])[0])
+        messages = list(response.context["messages"])
+        # 应该成功更新，因为去掉了强度校验
+        self.assertTrue(any("密码已更新" in str(msg) for msg in messages))
 
     def test_passwordless_account_can_set_password(self):
         user = self.user_model.objects.create_user(

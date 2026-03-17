@@ -120,11 +120,15 @@ def _reauth_redirect(request, *, next_url: str | None = None, fallback: str | No
 
 
 def _reauth_json(request):
+    next_url = request.META.get("HTTP_REFERER")
+    if not next_url:
+        next_url = reverse("totp:list")
+    
     return JsonResponse(
         {
             "ok": False,
             "error": "reauth_required",
-            "redirect": f"{reverse('accounts:reauth')}?next={quote(reverse('totp:list'))}",
+            "redirect": f"{reverse('accounts:reauth')}?next={quote(next_url)}",
         },
         status=403,
     )
@@ -1944,12 +1948,9 @@ def trash_bulk_action(request):
 
 
 @login_required
+@require_POST
 def restore_entry(request, pk: int):
     """从回收站恢复指定的 TOTP 条目。"""
-
-    if request.method != "POST":
-        messages.error(request, "请求方式不正确")
-        return redirect("totp:trash")
 
     if not _has_recent_reauth(request):
         messages.info(request, "为保障安全，请先确认密码后再恢复")

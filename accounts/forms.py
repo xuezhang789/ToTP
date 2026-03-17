@@ -121,9 +121,10 @@ class PasswordUpdateForm(PasswordChangeForm):
 
     def clean_new_password2(self):
         password = super().clean_new_password2()
-        errors = password_strength_errors(password, username=self.user.username)
-        if errors:
-            raise forms.ValidationError(errors)
+        # 用户要求：把二次确认机制密码强度检测去掉。只在注册时验证密码强度就好。
+        # errors = password_strength_errors(password, username=self.user.username)
+        # if errors:
+        #     raise forms.ValidationError(errors)
         return password
 
 
@@ -151,7 +152,8 @@ class PasswordSetForm(SetPasswordForm):
 
     def clean_new_password2(self):
         password = super().clean_new_password2()
-        errors = password_strength_errors(password, username=self.user.username)
-        if errors:
-            raise forms.ValidationError(errors)
+        # 用户要求：把二次确认机制密码强度检测去掉。只在注册时验证密码强度就好。
+        # errors = password_strength_errors(password, username=self.user.username)
+        # if errors:
+        #     raise forms.ValidationError(errors)
         return password
