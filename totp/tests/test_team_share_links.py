@@ -40,14 +40,14 @@ class TeamShareLinkTests(TestCase):
         self._reauth()
         res = self.client.post(
             reverse("totp:one_time_create", args=[self.entry_a.id]),
-            {"duration": 60, "max_views": 1},
+            {"duration": 99999, "max_views": 1},
         )
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertTrue(data["ok"])
         expires_at = datetime.fromisoformat(data["expires_at"])
         delta = expires_at - timezone.now()
-        self.assertLessEqual(delta.total_seconds(), 30 * 60 + 10)
+        self.assertLessEqual(delta.total_seconds(), 12 * 60 * 60 + 10)
 
     def test_team_share_link_quota_blocks_creation(self):
         self._reauth()

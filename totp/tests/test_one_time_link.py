@@ -50,6 +50,20 @@ class OneTimeLinkTests(TestCase):
         self.assertEqual(link.view_count, 0)
         self.assertTrue(self.entry.audits.filter(action="one_time_link_created").exists())
 
+    def test_create_link_supports_12_hours_and_10_views(self):
+        data = self._create_link(duration=720, max_views=10)
+        link = OneTimeLink.objects.get(pk=data["id"])
+        self.assertEqual(link.max_views, 10)
+        delta = link.expires_at - link.created_at
+        self.assertGreaterEqual(delta.total_seconds(), 11.5 * 60 * 60)
+
+    def test_create_link_clamps_duration_and_views(self):
+        data = self._create_link(duration=99999, max_views=999)
+        link = OneTimeLink.objects.get(pk=data["id"])
+        self.assertEqual(link.max_views, 10)
+        delta = link.expires_at - link.created_at
+        self.assertLessEqual(delta.total_seconds(), 12 * 60 * 60 + 5)
+
     def test_view_consumes_quota(self):
         data = self._create_link(max_views=1)
         token = data["url"].rstrip("/").split("/")[-1]

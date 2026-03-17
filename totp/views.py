@@ -59,7 +59,7 @@ from .utils import (
 
 EXPORT_REAUTH_MAX_AGE_SECONDS = 5 * 60
 TEAM_ONE_TIME_LINK_ACTIVE_LIMIT = 50
-TEAM_ONE_TIME_LINK_MAX_DURATION_MINUTES = 30
+TEAM_ONE_TIME_LINK_MAX_DURATION_MINUTES = 12 * 60
 
 TEAM_MANAGER_ROLES = (
     TeamMembership.Role.OWNER,
@@ -3642,14 +3642,14 @@ def create_one_time_link(request, pk: int):
         duration_minutes = int(request.POST.get("duration") or 10)
     except (TypeError, ValueError):
         duration_minutes = 10
-    max_duration = TEAM_ONE_TIME_LINK_MAX_DURATION_MINUTES if entry.team_id else 60
+    max_duration = TEAM_ONE_TIME_LINK_MAX_DURATION_MINUTES
     duration_minutes = max(1, min(duration_minutes, max_duration))
 
     try:
         max_views = int(request.POST.get("max_views") or 3)
     except (TypeError, ValueError):
         max_views = 3
-    max_views = max(1, min(max_views, 5))
+    max_views = max(1, min(max_views, 10))
 
     note = (request.POST.get("note") or "").strip()
     if len(note) > 120:
