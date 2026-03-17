@@ -4,7 +4,19 @@
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <div>
         <h1 class="h4 mb-1">团队审计</h1>
-        <div class="text-muted small">{{ team.name }} · {{ membership.get_role_display }}</div>
+        <div class="text-muted small">
+            {{ team.name }} · {{ membership.get_role_display }}
+            <span class="mx-1">·</span>
+            共 {{ base_count }} 条
+            {% if is_filtered %}
+            <span class="mx-1">·</span>
+            筛选后 {{ filtered_count }} 条
+            {% endif %}
+            {% if page_obj and page_obj.paginator.num_pages > 1 %}
+            <span class="mx-1">·</span>
+            第 {{ page_obj.number }}/{{ page_obj.paginator.num_pages }} 页
+            {% endif %}
+        </div>
     </div>
     <div class="d-flex flex-wrap gap-2">
         <a class="btn btn-outline-secondary" href="{% url 'totp:teams' %}">返回团队列表</a>
@@ -14,10 +26,35 @@
 
 <div class="card app-panel border-0 shadow-sm mb-3">
     <div class="card-body">
-        <form method="get" class="row g-2 align-items-end">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div class="text-muted small">快捷筛选</div>
+            <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-sm {% if risk == 'high' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                   href="{{ quick_links.high_risk }}">只看高风险</a>
+                <a class="btn btn-sm {% if days == 7 %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                   href="{{ quick_links.last7 }}">最近 7 天</a>
+                <a class="btn btn-sm {% if days == 30 %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                   href="{{ quick_links.last30 }}">最近 30 天</a>
+            </div>
+        </div>
+        {% if filter_chips %}
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            {% for chip in filter_chips %}
+            <a class="badge rounded-pill bg-primary-subtle text-primary text-decoration-none"
+               href="{{ chip.remove_url }}" aria-label="移除筛选：{{ chip.label }}">
+                {{ chip.label }} ×
+            </a>
+            {% endfor %}
+            <a class="badge rounded-pill bg-light text-muted text-decoration-none"
+               href="{% url 'totp:team_audit' team.id %}">清除全部</a>
+        </div>
+        {% endif %}
+        <form method="get" class="row g-2 align-items-end" role="search" aria-label="团队审计筛选">
+            {% if risk %}<input type="hidden" name="risk" value="{{ risk }}">{% endif %}
+            {% if days %}<input type="hidden" name="days" value="{{ days }}">{% endif %}
             <div class="col-12 col-md-3">
-                <label class="form-label small text-muted mb-1">动作</label>
-                <select class="form-select" name="action">
+                <label class="form-label small text-muted mb-1" for="auditAction">动作</label>
+                <select class="form-select" name="action" id="auditAction">
                     <option value="">全部</option>
                     {% for value,label in action_choices %}
                     <option value="{{ value }}" {% if selected_action == value %}selected{% endif %}>{{ label }}</option>
@@ -25,40 +62,41 @@
                 </select>
             </div>
             <div class="col-12 col-md-3">
-                <label class="form-label small text-muted mb-1">操作人</label>
-                <select class="form-select" name="actor">
+                <label class="form-label small text-muted mb-1" for="auditActor">操作人</label>
+                <select class="form-select" name="actor" id="auditActor">
                     <option value="">全部</option>
                     {% for row in actor_options %}
                     <option value="{{ row.actor_id }}" {% if selected_actor == row.actor_id|stringformat:'s' %}selected{% endif %}>
-                        {{ row.actor__username }}
+                        {{ row.actor__username }}{% if row.actor__email %}（{{ row.actor__email }}）{% endif %}
                     </option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col-12 col-md-3">
-                <label class="form-label small text-muted mb-1">目标用户</label>
-                <select class="form-select" name="target">
+                <label class="form-label small text-muted mb-1" for="auditTarget">目标用户</label>
+                <select class="form-select" name="target" id="auditTarget">
                     <option value="">全部</option>
                     {% for row in target_options %}
                     <option value="{{ row.target_user_id }}" {% if selected_target == row.target_user_id|stringformat:'s' %}selected{% endif %}>
-                        {{ row.target_user__username }}
+                        {{ row.target_user__username }}{% if row.target_user__email %}（{{ row.target_user__email }}）{% endif %}
                     </option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col-12 col-md">
-                <label class="form-label small text-muted mb-1">搜索</label>
-                <input class="form-control" name="q" value="{{ q|default_if_none:'' }}" placeholder="用户名/邮箱/旧值/新值" maxlength="80">
+                <label class="form-label small text-muted mb-1" for="auditQuery">搜索</label>
+                <input class="form-control" id="auditQuery" name="q" value="{{ q|default_if_none:'' }}" placeholder="用户名/邮箱/旧值/新值" maxlength="80">
             </div>
             <div class="col-12 col-md-auto">
                 <div class="d-flex flex-wrap gap-2">
                     <button class="btn btn-primary" type="submit">筛选</button>
                     <a class="btn btn-outline-secondary" href="{% url 'totp:team_audit' team.id %}">重置</a>
                     <a class="btn btn-outline-success"
-                       href="{% url 'totp:team_audit_export' team.id %}?{% if selected_action %}action={{ selected_action|urlencode }}&amp;{% endif %}{% if selected_actor %}actor={{ selected_actor|urlencode }}&amp;{% endif %}{% if selected_target %}target={{ selected_target|urlencode }}&amp;{% endif %}{% if q %}q={{ q|urlencode }}{% endif %}">
+                       href="{% url 'totp:team_audit_export' team.id %}{% if querystring %}?{{ querystring }}{% endif %}">
                         导出 CSV
                     </a>
                 </div>
+                <div class="text-muted small mt-1">导出最多 20000 条，建议先筛选缩小范围。</div>
             </div>
         </form>
     </div>
@@ -91,9 +129,21 @@
                     <div class="text-break fw-semibold">{{ record.new_value }}</div>
                 </div>
                 {% endif %}
+                {% if record.metadata_text and record.metadata_text != '{}' %}
+                <details class="small mt-2">
+                    <summary class="text-muted">详情</summary>
+                    <pre class="small text-muted mb-0 mt-2">{{ record.metadata_text }}</pre>
+                </details>
+                {% endif %}
             </div>
             {% empty %}
-            <div class="list-group-item text-center text-muted py-5">暂无审计记录</div>
+            <div class="list-group-item text-center text-muted py-5">
+                {% if is_filtered %}
+                未找到匹配的审计记录，请尝试调整筛选条件。
+                {% else %}
+                暂无审计记录
+                {% endif %}
+            </div>
             {% endfor %}
         </div>
     </div>
@@ -107,6 +157,7 @@
                 <th class="text-nowrap">目标用户</th>
                 <th>旧值</th>
                 <th>新值</th>
+                <th class="text-nowrap">详情</th>
             </tr>
             </thead>
             <tbody>
@@ -124,10 +175,24 @@
                 </td>
                 <td class="text-muted small text-break">{{ record.old_value }}</td>
                 <td class="fw-semibold text-break">{{ record.new_value }}</td>
+                <td class="text-muted small">
+                    {% if record.metadata_text and record.metadata_text != '{}' %}
+                    <details>
+                        <summary>查看</summary>
+                        <pre class="small text-muted mb-0 mt-2">{{ record.metadata_text }}</pre>
+                    </details>
+                    {% endif %}
+                </td>
             </tr>
             {% empty %}
             <tr>
-                <td colspan="6" class="text-center text-muted py-5">暂无审计记录</td>
+                <td colspan="7" class="text-center text-muted py-5">
+                    {% if is_filtered %}
+                    未找到匹配的审计记录，请尝试调整筛选条件。
+                    {% else %}
+                    暂无审计记录
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
             </tbody>
@@ -139,7 +204,7 @@
             <ul class="pagination justify-content-center mb-0">
                 {% if page_obj.has_previous %}
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}&amp;{% if selected_action %}action={{ selected_action|urlencode }}&amp;{% endif %}{% if selected_actor %}actor={{ selected_actor|urlencode }}&amp;{% endif %}{% if selected_target %}target={{ selected_target|urlencode }}&amp;{% endif %}{% if q %}q={{ q|urlencode }}{% endif %}" aria-label="上一页">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if querystring %}&amp;{{ querystring }}{% endif %}" aria-label="上一页">
                         <span aria-hidden="true">&laquo;</span>
                     </a>
                 </li>
@@ -147,19 +212,29 @@
                 <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
                 {% endif %}
 
-                {% for num in page_obj.paginator.page_range %}
+                {% if page_window.0 != 1 %}
+                <li class="page-item"><a class="page-link" href="?page=1{% if querystring %}&amp;{{ querystring }}{% endif %}">1</a></li>
+                {% if show_start_ellipsis %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+                {% endif %}
+                {% endif %}
+                {% for num in page_window %}
                 {% if num == page_obj.number %}
                 <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
                 {% else %}
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ num }}&amp;{% if selected_action %}action={{ selected_action|urlencode }}&amp;{% endif %}{% if selected_actor %}actor={{ selected_actor|urlencode }}&amp;{% endif %}{% if selected_target %}target={{ selected_target|urlencode }}&amp;{% endif %}{% if q %}q={{ q|urlencode }}{% endif %}">{{ num }}</a>
-                </li>
+                <li class="page-item"><a class="page-link" href="?page={{ num }}{% if querystring %}&amp;{{ querystring }}{% endif %}">{{ num }}</a></li>
                 {% endif %}
                 {% endfor %}
+                {% if page_window|last != page_obj.paginator.num_pages %}
+                {% if show_end_ellipsis %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+                {% endif %}
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if querystring %}&amp;{{ querystring }}{% endif %}">{{ page_obj.paginator.num_pages }}</a></li>
+                {% endif %}
 
                 {% if page_obj.has_next %}
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ page_obj.next_page_number }}&amp;{% if selected_action %}action={{ selected_action|urlencode }}&amp;{% endif %}{% if selected_actor %}actor={{ selected_actor|urlencode }}&amp;{% endif %}{% if selected_target %}target={{ selected_target|urlencode }}&amp;{% endif %}{% if q %}q={{ q|urlencode }}{% endif %}" aria-label="下一页">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if querystring %}&amp;{{ querystring }}{% endif %}" aria-label="下一页">
                         <span aria-hidden="true">&raquo;</span>
                     </a>
                 </li>

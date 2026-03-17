@@ -156,6 +156,25 @@ def reauth_view(request):
 
 @login_required
 @require_http_methods(["POST"])
+def reauth_api(request):
+    try:
+        data = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return _json({"ok": False, "error": "invalid_json"}, 400)
+    password = (data.get("password") or "").strip()
+    if not password:
+        return _json({"ok": False, "error": "missing_password"}, 400)
+    if not request.user.has_usable_password():
+        return _json({"ok": False, "error": "no_password"}, 400)
+    user = authenticate(request, username=request.user.username, password=password)
+    if not user:
+        return _json({"ok": False, "error": "wrong_password"}, 403)
+    request.session["reauth_at"] = int(timezone.now().timestamp())
+    return _json({"ok": True})
+
+
+@login_required
+@require_http_methods(["POST"])
 def reauth_google(request):
     try:
         data = json.loads(request.body.decode("utf-8") or "{}")

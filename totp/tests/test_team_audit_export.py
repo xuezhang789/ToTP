@@ -39,6 +39,7 @@ class TeamAuditExportTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn("no-store", res.headers.get("Cache-Control", ""))
         self.assertEqual(res.headers.get("Pragma"), "no-cache")
+        self.assertEqual(res.headers.get("X-Export-Limit"), "20000")
         content = res.content.decode("utf-8")
         self.assertTrue(content.startswith("\ufeff"))
         self.assertIn("时间,动作,操作人,目标用户,旧值,新值,详情", content)

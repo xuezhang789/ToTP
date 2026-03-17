@@ -3,6 +3,12 @@
 {% block title %}我的密钥-TOTP管理平台{% endblock %}
 {% block head %}
 {{ block.super }}
+{% if not has_password %}
+<meta name="google-signin-client_id" content="{{ GOOGLE_CLIENT_ID }}">
+<link rel="preconnect" href="https://accounts.google.com" crossorigin>
+<link rel="dns-prefetch" href="https://accounts.google.com">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -232,7 +238,7 @@
         </table>
     </div>
     {% if page_obj.has_other_pages %}
-    <div class="card-footer">
+    <div class="card-footer" id="entryListPagination">
         <nav aria-label="Page navigation">
             <ul class="pagination justify-content-center mb-0">
                 {% if page_obj.has_previous %}
@@ -318,32 +324,48 @@
                                placeholder="例如：发给值班同事，仅用于本次变更">
                         <div class="form-text">备注会记录在审计中，建议不要填写敏感信息。</div>
                     </div>
+                    <div class="mt-3">
+                        <label class="form-label" for="shareLinkPassword">确认密码</label>
+                        <div class="input-group">
+                            <input class="form-control" id="shareLinkPassword" name="password" type="password"
+                                   autocomplete="current-password"
+                                   {% if has_password %}required{% else %}disabled{% endif %}
+                                   placeholder="请输入账号密码">
+                            <button class="btn btn-outline-secondary" type="button" id="shareLinkPasswordToggleBtn"
+                                    {% if not has_password %}disabled{% endif %}
+                                    aria-label="显示或隐藏密码">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            <div class="invalid-feedback">请输入密码。</div>
+                        </div>
+                        {% if has_password %}
+                        <div class="form-text">用于二次确认，不会保存密码。</div>
+                        {% else %}
+                        <div class="form-text">该账号未设置本地密码，请使用 Google 再次确认。</div>
+                        <div class="mt-2" id="shareLinkGoogleBox">
+                            <div id="g_id_onload"
+                                 data-client_id="{{ GOOGLE_CLIENT_ID }}"
+                                 data-context="signin"
+                                 data-ux_mode="popup"
+                                 data-callback="handleShareLinkReauthCredential"
+                                 data-auto_prompt="false">
+                            </div>
+                            <div class="g_id_signin" data-type="standard" data-shape="rect" data-theme="outline"
+                                 data-text="continue_with" data-size="large" data-logo_alignment="left"></div>
+                        </div>
+                        {% endif %}
+                    </div>
                     <div class="alert alert-info mt-3 mb-0">
                         <div class="small">链接为只读访问，查看后立刻计数并可随时失效。请仅共享给可信任的对象。</div>
                     </div>
                 </form>
-                <div id="shareLinkResult" class="d-none mt-3">
-                    <div class="card border-success">
-                        <div class="card-body">
-                            <p class="text-success fw-semibold mb-2">
-                                链接已生成，请尽快发送给接收者。
-                            </p>
-                            <div class="input-group">
-                                <input type="text" class="form-control" id="shareLinkUrl" readonly>
-                                <button class="btn btn-outline-success" id="shareLinkCopyBtn" type="button">复制</button>
-                            </div>
-                            <ul class="list-unstyled small text-muted mt-3 mb-0" id="shareLinkSummary"></ul>
-                        </div>
-                    </div>
-                </div>
             </div>
             <div class="modal-footer d-flex flex-wrap gap-2">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="button" class="btn btn-primary" id="shareLinkSubmitBtn">
                     <span class="spinner-border spinner-border-sm me-2 d-none" id="shareLinkSpinner" role="status" aria-hidden="true"></span>
-                    生成链接
+                    确认生成
                 </button>
-                <button type="button" class="btn btn-outline-danger d-none" id="shareLinkInvalidateBtn">立即失效</button>
             </div>
         </div>
     </div>
@@ -424,7 +446,11 @@ window.TotpListConfig = {
   tokensUrl: "{% url 'totp:api_tokens' %}",
   defaultSpace: "{{ selected_space|default:'personal'|escapejs }}",
   oneTimeCreateUrlTemplate: "{% url 'totp:one_time_create' 0 %}",
-  oneTimeInvalidateUrlTemplate: "{% url 'totp:one_time_invalidate' 0 %}"
+  oneTimeInvalidateUrlTemplate: "{% url 'totp:one_time_invalidate' 0 %}",
+  reauthApiUrl: "{% url 'accounts:reauth_api' %}",
+  reauthGoogleUrl: "{% url 'accounts:reauth_google' %}",
+  googleClientId: "{{ GOOGLE_CLIENT_ID|escapejs }}",
+  hasPassword: {% if has_password %}true{% else %}false{% endif %}
 };
 </script>
 <script src="{% static 'js/totp_list.js' %}"></script>

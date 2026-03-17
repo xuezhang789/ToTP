@@ -332,6 +332,7 @@ def list_view(request):
             "selected_space": space,
             "selected_team": selected_team,
             "selected_membership": selected_membership,
+            "has_password": request.user.has_usable_password(),
         },
     )
 
@@ -1016,10 +1017,32 @@ def team_audit(request, team_id: int):
     q = (request.GET.get("q") or "").strip()
     actor_raw = (request.GET.get("actor") or "").strip()
     target_raw = (request.GET.get("target") or "").strip()
+    risk = (request.GET.get("risk") or "").strip()
+    days_raw = (request.GET.get("days") or "").strip()
 
     queryset = TeamAudit.objects.filter(team=team).select_related(
         "actor", "target_user"
     )
+    base_count = TeamAudit.objects.filter(team=team).count()
+    if risk == "high":
+        queryset = queryset.filter(
+            action__in=[
+                TeamAudit.Action.LINKS_REVOKED_ALL,
+                TeamAudit.Action.MEMBER_ROLE_CHANGED,
+                TeamAudit.Action.MEMBER_REMOVED,
+                TeamAudit.Action.INVITE_SENT,
+                TeamAudit.Action.INVITE_UPDATED,
+                TeamAudit.Action.INVITE_CANCELLED,
+            ]
+        )
+    days_value = None
+    if days_raw.isdigit():
+        days_value = int(days_raw)
+        if days_value not in (7, 30, 90):
+            days_value = None
+    if days_value:
+        since = timezone.now() - timedelta(days=days_value)
+        queryset = queryset.filter(created_at__gte=since)
     if action and action in dict(TeamAudit.Action.choices):
         queryset = queryset.filter(action=action)
     if actor_raw:
@@ -1045,18 +1068,97 @@ def team_audit(request, team_id: int):
     paginator = Paginator(queryset, 30)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
+    for record in page_obj.object_list:
+        record.metadata_text = json.dumps(record.metadata or {}, ensure_ascii=False)
     actor_options = (
         TeamAudit.objects.filter(team=team, actor__isnull=False)
-        .values("actor_id", "actor__username")
+        .values("actor_id", "actor__username", "actor__email")
         .distinct()
         .order_by("actor__username")
     )
     target_options = (
         TeamAudit.objects.filter(team=team, target_user__isnull=False)
-        .values("target_user_id", "target_user__username")
+        .values("target_user_id", "target_user__username", "target_user__email")
         .distinct()
         .order_by("target_user__username")
     )
+    params = request.GET.copy()
+    params.pop("page", None)
+    querystring = params.urlencode()
+    is_filtered = bool(action or q or actor_raw or target_raw or risk or days_value)
+
+    total_pages = page_obj.paginator.num_pages
+    current_page = page_obj.number
+    start = max(1, current_page - 2)
+    end = min(total_pages, current_page + 2)
+    page_window = list(range(start, end + 1))
+
+    actor_label_map = {
+        str(row["actor_id"]): (
+            f'{row["actor__username"]}（{row["actor__email"]}）'
+            if row.get("actor__email")
+            else row["actor__username"]
+        )
+        for row in actor_options
+    }
+    target_label_map = {
+        str(row["target_user_id"]): (
+            f'{row["target_user__username"]}（{row["target_user__email"]}）'
+            if row.get("target_user__email")
+            else row["target_user__username"]
+        )
+        for row in target_options
+    }
+    action_label_map = dict(TeamAudit.Action.choices)
+
+    def build_remove_url(keys):
+        next_params = request.GET.copy()
+        next_params.pop("page", None)
+        for k in keys:
+            next_params.pop(k, None)
+        base = reverse("totp:team_audit", args=[team.id])
+        qs = next_params.urlencode()
+        return f"{base}?{qs}" if qs else base
+
+    filter_chips = []
+    if risk == "high":
+        filter_chips.append({"label": "高风险", "remove_url": build_remove_url(["risk"])})
+    if days_value:
+        filter_chips.append(
+            {"label": f"最近 {days_value} 天", "remove_url": build_remove_url(["days"])}
+        )
+    if action and action in action_label_map:
+        filter_chips.append(
+            {"label": f"动作：{action_label_map.get(action)}", "remove_url": build_remove_url(["action"])}
+        )
+    if actor_raw and actor_raw in actor_label_map:
+        filter_chips.append(
+            {"label": f"操作人：{actor_label_map.get(actor_raw)}", "remove_url": build_remove_url(["actor"])}
+        )
+    if target_raw and target_raw in target_label_map:
+        filter_chips.append(
+            {"label": f"目标：{target_label_map.get(target_raw)}", "remove_url": build_remove_url(["target"])}
+        )
+    if q:
+        filter_chips.append(
+            {"label": f"搜索：{q}", "remove_url": build_remove_url(["q"])}
+        )
+
+    quick_params = request.GET.copy()
+    quick_params.pop("page", None)
+
+    quick_links = {}
+    high_risk_params = quick_params.copy()
+    high_risk_params["risk"] = "high"
+    quick_links["high_risk"] = f'{reverse("totp:team_audit", args=[team.id])}?{high_risk_params.urlencode()}'
+
+    last7_params = quick_params.copy()
+    last7_params["days"] = "7"
+    quick_links["last7"] = f'{reverse("totp:team_audit", args=[team.id])}?{last7_params.urlencode()}'
+
+    last30_params = quick_params.copy()
+    last30_params["days"] = "30"
+    quick_links["last30"] = f'{reverse("totp:team_audit", args=[team.id])}?{last30_params.urlencode()}'
     return render(
         request,
         "totp/team_audit.html",
@@ -1065,6 +1167,8 @@ def team_audit(request, team_id: int):
             "membership": membership,
             "page_obj": page_obj,
             "records": page_obj.object_list,
+            "base_count": base_count,
+            "filtered_count": paginator.count,
             "action_choices": TeamAudit.Action.choices,
             "selected_action": action,
             "q": q,
@@ -1072,6 +1176,15 @@ def team_audit(request, team_id: int):
             "target_options": target_options,
             "selected_actor": actor_raw,
             "selected_target": target_raw,
+            "querystring": querystring,
+            "is_filtered": is_filtered,
+            "page_window": page_window,
+            "show_start_ellipsis": start > 2,
+            "show_end_ellipsis": end < total_pages - 1,
+            "risk": risk,
+            "days": days_value or "",
+            "filter_chips": filter_chips,
+            "quick_links": quick_links,
         },
     )
 
@@ -1087,6 +1200,8 @@ def team_audit_export(request, team_id: int):
     q = (request.GET.get("q") or "").strip()
     actor_raw = (request.GET.get("actor") or "").strip()
     target_raw = (request.GET.get("target") or "").strip()
+    risk = (request.GET.get("risk") or "").strip()
+    days_raw = (request.GET.get("days") or "").strip()
 
     queryset = (
         TeamAudit.objects.filter(team=team)
@@ -1103,6 +1218,25 @@ def team_audit_export(request, team_id: int):
             "metadata",
         )
     )
+    if risk == "high":
+        queryset = queryset.filter(
+            action__in=[
+                TeamAudit.Action.LINKS_REVOKED_ALL,
+                TeamAudit.Action.MEMBER_ROLE_CHANGED,
+                TeamAudit.Action.MEMBER_REMOVED,
+                TeamAudit.Action.INVITE_SENT,
+                TeamAudit.Action.INVITE_UPDATED,
+                TeamAudit.Action.INVITE_CANCELLED,
+            ]
+        )
+    days_value = None
+    if days_raw.isdigit():
+        days_value = int(days_raw)
+        if days_value not in (7, 30, 90):
+            days_value = None
+    if days_value:
+        since = timezone.now() - timedelta(days=days_value)
+        queryset = queryset.filter(created_at__gte=since)
     if action and action in dict(TeamAudit.Action.choices):
         queryset = queryset.filter(action=action)
     if actor_raw:
@@ -1125,6 +1259,8 @@ def team_audit_export(request, team_id: int):
             | Q(new_value__icontains=q)
         )
 
+    export_limit = 20000
+    total_count = queryset.count()
     filename = timezone.now().strftime(f"team-audit-{team.id}-%Y%m%d-%H%M%S.csv")
     quoted = quote(filename)
     response = HttpResponse(content_type="text/csv; charset=utf-8")
@@ -1133,11 +1269,27 @@ def team_audit_export(request, team_id: int):
     )
     response["Cache-Control"] = "no-store"
     response["Pragma"] = "no-cache"
+    response["X-Export-Limit"] = str(export_limit)
+    response["X-Export-Total"] = str(total_count)
+    if total_count > export_limit:
+        response["X-Export-Truncated"] = "1"
     response.write("\ufeff")
     writer = csv.writer(response)
     writer.writerow(["时间", "动作", "操作人", "目标用户", "旧值", "新值", "详情"])
+    if total_count > export_limit:
+        writer.writerow(
+            [
+                "提示",
+                f"导出上限 {export_limit} 条，本次已导出前 {export_limit} 条（共 {total_count} 条）。建议添加筛选后再次导出。",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
     for idx, record in enumerate(queryset.order_by("-created_at").iterator(chunk_size=1000)):
-        if idx >= 20000:
+        if idx >= export_limit:
             break
         actor_label = record.actor.username if record.actor_id else "系统"
         target_label = record.target_user.username if record.target_user_id else ""
@@ -2619,6 +2771,8 @@ def one_time_link_audit(request):
     space = (request.GET.get("space") or "").strip()
     team_id = (request.GET.get("team") or "").strip()
     q = (request.GET.get("q") or "").strip()
+    days_raw = (request.GET.get("days") or "").strip()
+    unvisited = (request.GET.get("unvisited") or "").strip()
 
     queryset = OneTimeLink.objects.filter(created_by=request.user).select_related(
         "entry", "entry__group", "entry__team"
@@ -2629,6 +2783,16 @@ def one_time_link_audit(request):
             | Q(note__icontains=q)
             | Q(entry__team__name__icontains=q)
         )
+    days_value = None
+    if days_raw.isdigit():
+        days_value = int(days_raw)
+        if days_value not in (7, 30, 90):
+            days_value = None
+    if days_value:
+        since = now - timedelta(days=days_value)
+        queryset = queryset.filter(created_at__gte=since)
+    if unvisited in ("1", "true", "yes"):
+        queryset = queryset.filter(first_viewed_at__isnull=True)
     if space == "personal":
         queryset = queryset.filter(entry__team__isnull=True)
     elif space == "team":
@@ -2695,6 +2859,67 @@ def one_time_link_audit(request):
     querystring = params.urlencode()
     page_prefix = f"{querystring}&" if querystring else ""
     memberships = _team_memberships_for_user(request.user)
+    is_filtered = bool(status or space or team_id or q or days_value or unvisited)
+
+    total_pages = page_obj.paginator.num_pages
+    current_page = page_obj.number
+    start = max(1, current_page - 2)
+    end = min(total_pages, current_page + 2)
+    page_window = list(range(start, end + 1))
+
+    team_label_map = {str(m.team_id): m.team.name for m in memberships}
+    space_label_map = {"personal": "个人", "team": "团队"}
+    status_label_map = {
+        "active": "可用",
+        "expired": "已过期",
+        "used": "已用尽",
+        "revoked": "已撤销",
+        "deleted": "关联密钥已删除",
+    }
+
+    def build_remove_url(keys):
+        next_params = request.GET.copy()
+        next_params.pop("page", None)
+        for k in keys:
+            next_params.pop(k, None)
+        base = reverse("totp:one_time_audit")
+        qs = next_params.urlencode()
+        return f"{base}?{qs}" if qs else base
+
+    filter_chips = []
+    if status and status in status_label_map:
+        filter_chips.append(
+            {"label": f"状态：{status_label_map.get(status)}", "remove_url": build_remove_url(["status"])}
+        )
+    if space and space in space_label_map:
+        filter_chips.append(
+            {"label": f"空间：{space_label_map.get(space)}", "remove_url": build_remove_url(["space", "team"])}
+        )
+    if team_id and team_id in team_label_map:
+        filter_chips.append(
+            {"label": f"团队：{team_label_map.get(team_id)}", "remove_url": build_remove_url(["team"])}
+        )
+    if days_value:
+        filter_chips.append(
+            {"label": f"最近 {days_value} 天", "remove_url": build_remove_url(["days"])}
+        )
+    if unvisited in ("1", "true", "yes"):
+        filter_chips.append({"label": "未访问", "remove_url": build_remove_url(["unvisited"])})
+    if q:
+        filter_chips.append({"label": f"搜索：{q}", "remove_url": build_remove_url(["q"])})
+
+    quick_params = request.GET.copy()
+    quick_params.pop("page", None)
+    quick_links = {}
+    active_params = quick_params.copy()
+    active_params["status"] = "active"
+    quick_links["active"] = f'{reverse("totp:one_time_audit")}?{active_params.urlencode()}'
+    last7_params = quick_params.copy()
+    last7_params["days"] = "7"
+    quick_links["last7"] = f'{reverse("totp:one_time_audit")}?{last7_params.urlencode()}'
+    unvisited_params = quick_params.copy()
+    unvisited_params["unvisited"] = "1"
+    quick_links["unvisited"] = f'{reverse("totp:one_time_audit")}?{unvisited_params.urlencode()}'
 
     return render(
         request,
@@ -2709,6 +2934,8 @@ def one_time_link_audit(request):
                 "space": space,
                 "team": team_id,
                 "q": q,
+                "days": str(days_value) if days_value else "",
+                "unvisited": "1" if unvisited in ("1", "true", "yes") else "",
             },
             "querystring": querystring,
             "page_prefix": page_prefix,
@@ -2717,6 +2944,12 @@ def one_time_link_audit(request):
             "export_url": reverse("totp:one_time_audit_export"),
             "batch_invalidate_url": reverse("totp:one_time_batch_invalidate"),
             "batch_remind_url": "",
+            "filter_chips": filter_chips,
+            "quick_links": quick_links,
+            "is_filtered": is_filtered,
+            "page_window": page_window,
+            "show_start_ellipsis": start > 2,
+            "show_end_ellipsis": end < total_pages - 1,
         },
     )
 
@@ -2730,6 +2963,8 @@ def one_time_link_audit_export(request):
     space = (request.GET.get("space") or "").strip()
     team_id = (request.GET.get("team") or "").strip()
     q = (request.GET.get("q") or "").strip()
+    days_raw = (request.GET.get("days") or "").strip()
+    unvisited = (request.GET.get("unvisited") or "").strip()
 
     queryset = OneTimeLink.objects.filter(created_by=request.user).select_related(
         "entry", "entry__group", "entry__team"
@@ -2740,6 +2975,16 @@ def one_time_link_audit_export(request):
             | Q(note__icontains=q)
             | Q(entry__team__name__icontains=q)
         )
+    days_value = None
+    if days_raw.isdigit():
+        days_value = int(days_raw)
+        if days_value not in (7, 30, 90):
+            days_value = None
+    if days_value:
+        since = now - timedelta(days=days_value)
+        queryset = queryset.filter(created_at__gte=since)
+    if unvisited in ("1", "true", "yes"):
+        queryset = queryset.filter(first_viewed_at__isnull=True)
     if space == "personal":
         queryset = queryset.filter(entry__team__isnull=True)
     elif space == "team":
@@ -2836,6 +3081,8 @@ def one_time_link_team_audit(request, team_id: int):
     status = (request.GET.get("status") or "").strip()
     creator = (request.GET.get("creator") or "").strip()
     q = (request.GET.get("q") or "").strip()
+    days_raw = (request.GET.get("days") or "").strip()
+    unvisited = (request.GET.get("unvisited") or "").strip()
 
     queryset = OneTimeLink.objects.filter(entry__team_id=team_id).select_related(
         "entry",
@@ -2850,6 +3097,16 @@ def one_time_link_team_audit(request, team_id: int):
             | Q(created_by__username__icontains=q)
             | Q(created_by__email__icontains=q)
         )
+    days_value = None
+    if days_raw.isdigit():
+        days_value = int(days_raw)
+        if days_value not in (7, 30, 90):
+            days_value = None
+    if days_value:
+        since = now - timedelta(days=days_value)
+        queryset = queryset.filter(created_at__gte=since)
+    if unvisited in ("1", "true", "yes"):
+        queryset = queryset.filter(first_viewed_at__isnull=True)
     if creator.isdigit():
         queryset = queryset.filter(created_by_id=int(creator))
     if status == "active":
@@ -2916,6 +3173,62 @@ def one_time_link_team_audit(request, team_id: int):
         .select_related("user")
         .order_by("user__username")
     )
+    is_filtered = bool(status or creator or q or days_value or unvisited)
+
+    total_pages = page_obj.paginator.num_pages
+    current_page = page_obj.number
+    start = max(1, current_page - 2)
+    end = min(total_pages, current_page + 2)
+    page_window = list(range(start, end + 1))
+
+    creator_label_map = {str(m.user_id): m.user.username for m in creator_memberships}
+    status_label_map = {
+        "active": "可用",
+        "expired": "已过期",
+        "used": "已用尽",
+        "revoked": "已撤销",
+        "deleted": "关联密钥已删除",
+    }
+
+    def build_remove_url(keys):
+        next_params = request.GET.copy()
+        next_params.pop("page", None)
+        for k in keys:
+            next_params.pop(k, None)
+        base = reverse("totp:one_time_team_audit", args=[team_id])
+        qs = next_params.urlencode()
+        return f"{base}?{qs}" if qs else base
+
+    filter_chips = []
+    if status and status in status_label_map:
+        filter_chips.append(
+            {"label": f"状态：{status_label_map.get(status)}", "remove_url": build_remove_url(["status"])}
+        )
+    if creator and creator in creator_label_map:
+        filter_chips.append(
+            {"label": f"创建人：{creator_label_map.get(creator)}", "remove_url": build_remove_url(["creator"])}
+        )
+    if days_value:
+        filter_chips.append(
+            {"label": f"最近 {days_value} 天", "remove_url": build_remove_url(["days"])}
+        )
+    if unvisited in ("1", "true", "yes"):
+        filter_chips.append({"label": "未访问", "remove_url": build_remove_url(["unvisited"])})
+    if q:
+        filter_chips.append({"label": f"搜索：{q}", "remove_url": build_remove_url(["q"])})
+
+    quick_params = request.GET.copy()
+    quick_params.pop("page", None)
+    quick_links = {}
+    active_params = quick_params.copy()
+    active_params["status"] = "active"
+    quick_links["active"] = f'{reverse("totp:one_time_team_audit", args=[team_id])}?{active_params.urlencode()}'
+    last7_params = quick_params.copy()
+    last7_params["days"] = "7"
+    quick_links["last7"] = f'{reverse("totp:one_time_team_audit", args=[team_id])}?{last7_params.urlencode()}'
+    unvisited_params = quick_params.copy()
+    unvisited_params["unvisited"] = "1"
+    quick_links["unvisited"] = f'{reverse("totp:one_time_team_audit", args=[team_id])}?{unvisited_params.urlencode()}'
 
     return render(
         request,
@@ -2929,6 +3242,8 @@ def one_time_link_team_audit(request, team_id: int):
                 "status": status,
                 "q": q,
                 "creator": creator,
+                "days": str(days_value) if days_value else "",
+                "unvisited": "1" if unvisited in ("1", "true", "yes") else "",
             },
             "querystring": querystring,
             "page_prefix": page_prefix,
@@ -2938,6 +3253,12 @@ def one_time_link_team_audit(request, team_id: int):
             "export_url": reverse("totp:one_time_team_audit_export", args=[team_id]),
             "batch_invalidate_url": reverse("totp:one_time_team_batch_invalidate", args=[team_id]),
             "batch_remind_url": reverse("totp:one_time_team_batch_remind", args=[team_id]),
+            "filter_chips": filter_chips,
+            "quick_links": quick_links,
+            "is_filtered": is_filtered,
+            "page_window": page_window,
+            "show_start_ellipsis": start > 2,
+            "show_end_ellipsis": end < total_pages - 1,
         },
     )
 
@@ -2951,6 +3272,8 @@ def one_time_link_team_audit_export(request, team_id: int):
     status = (request.GET.get("status") or "").strip()
     creator = (request.GET.get("creator") or "").strip()
     q = (request.GET.get("q") or "").strip()
+    days_raw = (request.GET.get("days") or "").strip()
+    unvisited = (request.GET.get("unvisited") or "").strip()
 
     queryset = OneTimeLink.objects.filter(entry__team_id=team_id).select_related(
         "entry",
@@ -2965,6 +3288,16 @@ def one_time_link_team_audit_export(request, team_id: int):
             | Q(created_by__username__icontains=q)
             | Q(created_by__email__icontains=q)
         )
+    days_value = None
+    if days_raw.isdigit():
+        days_value = int(days_raw)
+        if days_value not in (7, 30, 90):
+            days_value = None
+    if days_value:
+        since = now - timedelta(days=days_value)
+        queryset = queryset.filter(created_at__gte=since)
+    if unvisited in ("1", "true", "yes"):
+        queryset = queryset.filter(first_viewed_at__isnull=True)
     if creator.isdigit():
         queryset = queryset.filter(created_by_id=int(creator))
     if status == "active":

@@ -18,6 +18,10 @@
             {% endif %}
         </div>
         <div class="d-flex flex-wrap gap-2 align-items-center">
+            <div class="d-md-none form-check mb-0">
+                <input class="form-check-input" type="checkbox" id="selectAllLinksMobile" aria-label="全选">
+                <label class="form-check-label small text-muted" for="selectAllLinksMobile">全选</label>
+            </div>
             <div class="small text-muted">
                 共 {{ total_count }} 条，当前有效 {{ active_count }} 条
             </div>
@@ -27,7 +31,7 @@
             </a>
             <button type="button" class="btn btn-sm btn-outline-danger" id="batchInvalidateBtn"
                     data-url="{{ batch_invalidate_url }}" disabled>
-                批量失效（已选 <span id="selectedCount">0</span>）
+                批量失效（已选 <span id="selectedCount">0</span>，可失效 <span id="selectedActiveCount">0</span>）
             </button>
             {% if is_team_audit and batch_remind_url %}
             <button type="button" class="btn btn-sm btn-outline-primary" id="batchRemindBtn"
@@ -38,11 +42,41 @@
         </div>
     </div>
     <div class="card-body border-bottom">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <div class="text-muted small">快捷筛选</div>
+            <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-sm {% if filters.status == 'active' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                   href="{{ quick_links.active }}">只看可用</a>
+                <a class="btn btn-sm {% if filters.days == '7' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                   href="{{ quick_links.last7 }}">最近 7 天</a>
+                <a class="btn btn-sm {% if filters.unvisited %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                   href="{{ quick_links.unvisited }}">未访问</a>
+            </div>
+        </div>
+        {% if filter_chips %}
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            {% for chip in filter_chips %}
+            <a class="badge rounded-pill bg-primary-subtle text-primary text-decoration-none"
+               href="{{ chip.remove_url }}" aria-label="移除筛选：{{ chip.label }}">
+                {{ chip.label }} ×
+            </a>
+            {% endfor %}
+            {% if is_team_audit and team %}
+                <a class="badge rounded-pill bg-light text-muted text-decoration-none"
+                   href="{% url 'totp:one_time_team_audit' team.id %}">清除全部</a>
+            {% else %}
+                <a class="badge rounded-pill bg-light text-muted text-decoration-none"
+                   href="{% url 'totp:one_time_audit' %}">清除全部</a>
+            {% endif %}
+        </div>
+        {% endif %}
         <form class="row g-2 align-items-end" method="get" role="search" aria-label="筛选一次性链接">
+            {% if filters.days %}<input type="hidden" name="days" value="{{ filters.days }}">{% endif %}
+            {% if filters.unvisited %}<input type="hidden" name="unvisited" value="1">{% endif %}
             <div class="col-12 col-md-3">
                 <label class="form-label small text-muted mb-1" for="auditQ">关键词</label>
                 <input id="auditQ" class="form-control" name="q" value="{{ filters.q|default:'' }}"
-                       placeholder="密钥名称 / 团队 / 备注" maxlength="64">
+                       placeholder="{% if is_team_audit %}密钥名称 / 备注 / 创建人{% else %}密钥名称 / 团队 / 备注{% endif %}" maxlength="64">
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label small text-muted mb-1" for="auditStatus">状态</label>
@@ -122,11 +156,23 @@
                             {% if link.note %}
                                 <div class="text-muted small">备注：{{ link.note }}</div>
                             {% endif %}
+                            <div class="text-muted small">ID：{{ link.id }}</div>
                         </div>
                         <div class="d-flex align-items-start gap-2">
-                            <input class="form-check-input mt-1" type="checkbox" value="{{ link.id }}" data-link-select aria-label="选择链接">
+                            <input class="form-check-input mt-1" type="checkbox" value="{{ link.id }}" data-link-select data-status-key="{{ item.status_key }}" aria-label="选择链接">
                             <span class="badge text-bg-{{ item.badge_class }}">{{ item.status_label }}</span>
                         </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary copy-link-id-btn"
+                                data-copy-text="{{ link.id }}" aria-label="复制链接 ID">
+                            <i class="bi bi-clipboard me-1"></i>复制 ID
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger revoke-link-btn"
+                                data-url="{{ batch_invalidate_url }}" data-link-id="{{ link.id }}"
+                                {% if item.status_key != 'active' %}disabled{% endif %}>
+                            <i class="bi bi-slash-circle me-1"></i>失效
+                        </button>
                     </div>
                     <div class="small mt-2">
                         <span class="text-muted">查看：</span>{{ link.view_count }} / {{ link.max_views }}，
@@ -158,7 +204,13 @@
                 </div>
                 {% endwith %}
             {% empty %}
-            <div class="list-group-item text-center text-muted py-5">暂无创建的一次性访问链接</div>
+            <div class="list-group-item text-center text-muted py-5">
+                {% if is_filtered %}
+                未找到匹配的链接，请尝试调整筛选条件。
+                {% else %}
+                暂无创建的一次性访问链接
+                {% endif %}
+            </div>
             {% endfor %}
         </div>
     </div>
@@ -178,6 +230,7 @@
                 <th class="text-nowrap">创建 / 过期</th>
                 <th class="text-nowrap">访问记录</th>
                 <th class="text-nowrap">访问信息</th>
+                <th class="text-nowrap">操作</th>
             </tr>
             </thead>
             <tbody>
@@ -185,7 +238,7 @@
                 {% with link=item.link %}
                 <tr>
                     <td class="text-nowrap">
-                        <input class="form-check-input" type="checkbox" value="{{ link.id }}" data-link-select aria-label="选择链接">
+                        <input class="form-check-input" type="checkbox" value="{{ link.id }}" data-link-select data-status-key="{{ item.status_key }}" aria-label="选择链接">
                     </td>
                     <td>
                         <div class="fw-semibold">{{ link.entry.name }}</div>
@@ -201,6 +254,7 @@
                             {% if link.note %}
                                 <div class="text-muted small">备注：{{ link.note }}</div>
                             {% endif %}
+                            <div class="text-muted small">ID：{{ link.id }}</div>
                         </div>
                     </td>
                     {% if is_team_audit %}
@@ -234,7 +288,7 @@
                             <div>IP：{{ link.last_view_ip }}</div>
                         {% endif %}
                         {% if link.last_view_user_agent %}
-                            <div class="text-muted small text-truncate">
+                            <div class="text-muted small text-truncate" title="{{ link.last_view_user_agent }}">
                                 UA：{{ link.last_view_user_agent }}
                             </div>
                         {% endif %}
@@ -242,11 +296,30 @@
                             <div class="text-muted">暂无记录</div>
                         {% endif %}
                     </td>
+                    <td class="text-nowrap">
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary copy-link-id-btn"
+                                    data-copy-text="{{ link.id }}" aria-label="复制链接 ID">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger revoke-link-btn"
+                                    data-url="{{ batch_invalidate_url }}" data-link-id="{{ link.id }}"
+                                    {% if item.status_key != 'active' %}disabled{% endif %} aria-label="失效链接">
+                                <i class="bi bi-slash-circle"></i>
+                            </button>
+                        </div>
+                    </td>
                 </tr>
                 {% endwith %}
             {% empty %}
             <tr>
-                <td colspan="{% if is_team_audit %}8{% else %}7{% endif %}" class="text-center text-muted py-5">暂无创建的一次性访问链接</td>
+                <td colspan="{% if is_team_audit %}9{% else %}8{% endif %}" class="text-center text-muted py-5">
+                    {% if is_filtered %}
+                    未找到匹配的链接，请尝试调整筛选条件。
+                    {% else %}
+                    暂无创建的一次性访问链接
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
             </tbody>
@@ -266,15 +339,25 @@
                 <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
                 {% endif %}
 
-                {% for num in page_obj.paginator.page_range %}
+                {% if page_window.0 != 1 %}
+                <li class="page-item"><a class="page-link" href="?{{ page_prefix }}page=1">1</a></li>
+                {% if show_start_ellipsis %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+                {% endif %}
+                {% endif %}
+                {% for num in page_window %}
                 {% if num == page_obj.number %}
                 <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
                 {% else %}
-                <li class="page-item">
-                    <a class="page-link" href="?{{ page_prefix }}page={{ num }}">{{ num }}</a>
-                </li>
+                <li class="page-item"><a class="page-link" href="?{{ page_prefix }}page={{ num }}">{{ num }}</a></li>
                 {% endif %}
                 {% endfor %}
+                {% if page_window|last != page_obj.paginator.num_pages %}
+                {% if show_end_ellipsis %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+                {% endif %}
+                <li class="page-item"><a class="page-link" href="?{{ page_prefix }}page={{ page_obj.paginator.num_pages }}">{{ page_obj.paginator.num_pages }}</a></li>
+                {% endif %}
 
                 {% if page_obj.has_next %}
                 <li class="page-item">
