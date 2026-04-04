@@ -98,6 +98,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "project.wsgi.application"
 
+AUTHENTICATION_BACKENDS = [
+    "accounts.backends.UsernameOrEmailBackend",
+]
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",

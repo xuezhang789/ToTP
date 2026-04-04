@@ -8,72 +8,121 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 {% endblock %}
 {% block content %}
-<div class="team-page">
-    <section class="team-page-header">
-        <div class="team-page-header-bar">
-            <div class="team-page-header-main">
-                <div class="team-page-breadcrumb">
-                    <span class="fw-semibold">账号中心</span>
-                    <span>/</span>
-                    <span class="fw-semibold">二次确认</span>
-                </div>
-                <div class="team-page-title-row">
-                    <h1 class="app-section-title mb-0">确认密码</h1>
-                </div>
-                <p class="team-page-summary mb-0">继续执行导出、分享或删除等敏感操作前，请先完成一次身份确认。</p>
+<div class="team-page auth-page auth-page-compact">
+    <section class="auth-hero auth-hero-reauth">
+        <div class="auth-hero-main">
+            <div class="auth-hero-badge-row">
+                <span class="auth-hero-badge"><i class="bi bi-shield-check"></i>账号中心</span>
+                {% if has_password %}
+                <span class="auth-hero-state"><i class="bi bi-key"></i>本地密码确认</span>
+                {% else %}
+                <span class="auth-hero-state"><i class="bi bi-google"></i>Google 再确认</span>
+                {% endif %}
+            </div>
+            <h1 class="auth-hero-title">继续前确认身份</h1>
+            <p class="auth-hero-copy">在执行导出、分享、失效或删除等敏感操作前，再确认一次当前会话的操作者身份。</p>
+            <div class="auth-hero-pill-row">
+                <span class="auth-hero-pill"><i class="bi bi-download"></i>导出与备份</span>
+                <span class="auth-hero-pill"><i class="bi bi-link"></i>分享与失效</span>
+                <span class="auth-hero-pill"><i class="bi bi-trash3"></i>删除与治理</span>
+            </div>
+        </div>
+        <div class="auth-hero-aside">
+            <div class="auth-hero-highlight">
+                <div class="auth-hero-highlight-label">当前保护</div>
+                <div class="auth-hero-highlight-value">高风险动作前再次确认</div>
+                <p>即使设备处于已登录状态，也会在关键动作前要求再确认，减少误触发和会话滥用风险。</p>
+            </div>
+            <div class="auth-hero-metric-grid">
+                <article class="auth-hero-metric">
+                    <div class="auth-hero-metric-label">确认方式</div>
+                    <div class="auth-hero-metric-value">{% if has_password %}当前密码{% else %}Google{% endif %}</div>
+                    <p>根据账号当前的登录方式与绑定状态自动选择。</p>
+                </article>
+                <article class="auth-hero-metric">
+                    <div class="auth-hero-metric-label">确认后</div>
+                    <div class="auth-hero-metric-value">立即返回</div>
+                    <p>通过后会自动回到原来的操作页面继续执行。</p>
+                </article>
             </div>
         </div>
     </section>
 
     <div class="auth-shell">
         <section class="auth-panel">
-            <div class="auth-icon"><i class="bi bi-shield-check"></i></div>
-            <div class="auth-eyebrow">敏感操作保护</div>
-            <h2 class="auth-title">继续前请完成确认</h2>
-            <p class="auth-copy">这样可以防止在已登录状态下被误触发高风险操作。</p>
+            <div class="auth-panel-head">
+                <div class="auth-icon"><i class="bi bi-shield-check"></i></div>
+                <div>
+                    <div class="auth-eyebrow">敏感操作保护</div>
+                    <h2 class="auth-title">继续前完成确认</h2>
+                    <p class="auth-copy">通过后会自动返回原页面，无需重新查找操作入口。</p>
+                </div>
+            </div>
 
             {% if has_password %}
-                <form method="post" action="{% url 'accounts:reauth' %}">
+                <form method="post" action="{% url 'accounts:reauth' %}" class="auth-form-stack">
                     {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ next }}">
-                    <div class="mb-3">
+                    <input type="hidden" name="next" value="{{ next|default:''|escape }}">
+                    <div class="auth-field-wrap">
                         <label class="form-label" for="reauthPassword">当前密码</label>
-                        <input type="password" class="form-control" id="reauthPassword" name="password" autocomplete="current-password" required>
+                        <input type="password" class="form-control" id="reauthPassword" name="password"
+                               autocomplete="current-password" autofocus required>
+                        <div class="form-text">仅用于确认当前会话归属，不会修改你的登录方式。</div>
                     </div>
-                    <button class="btn btn-primary w-100" type="submit">继续</button>
+                    <button class="btn btn-primary auth-submit-btn w-100" type="submit">确认并继续</button>
                 </form>
             {% else %}
-                <p class="text-muted small mb-3">该账号未设置本地密码，请使用 Google 再次确认后继续。</p>
-                <div id="g_id_onload"
-                     data-client_id="{{ GOOGLE_CLIENT_ID }}"
-                     data-context="signin"
-                     data-ux_mode="popup"
-                     data-callback="handleReauthCredential"
-                     data-auto_prompt="true">
+                <div class="auth-inline-banner" role="status">
+                    <i class="bi bi-info-circle"></i>
+                    <div>
+                        <strong>该账号未设置本地密码</strong>
+                        <span>请使用 Google 再次确认后继续。</span>
+                    </div>
                 </div>
-                <div class="g_id_signin" data-type="standard" data-shape="rect" data-theme="outline"
-                     data-text="continue_with" data-size="large" data-logo_alignment="left"></div>
+                <div class="auth-social-shell">
+                    <div id="g_id_onload"
+                         data-client_id="{{ GOOGLE_CLIENT_ID }}"
+                         data-context="signin"
+                         data-ux_mode="popup"
+                         data-callback="handleReauthCredential"
+                         data-auto_prompt="true">
+                    </div>
+                    <div class="g_id_signin" data-type="standard" data-shape="rect" data-theme="outline"
+                         data-text="continue_with" data-size="large" data-logo_alignment="left"></div>
+                </div>
                 <input type="hidden" id="reauth-next" value="{{ next }}">
             {% endif %}
 
-            <div class="text-center mt-3 small">
+            <div class="auth-panel-foot text-center small">
                 <a class="text-decoration-none" href="{% url 'accounts:profile' %}">返回个人资料</a>
             </div>
         </section>
 
         <aside class="auth-side-panel">
-            <div class="team-section-kicker">为什么需要确认</div>
-            <h3 class="team-page-panel-title mt-2">保护高风险操作</h3>
-            <p class="auth-side-copy mb-0">导出、分享、永久删除等动作会影响密钥安全边界，所以需要再次确认身份。</p>
+            <div class="auth-side-block">
+                <div class="team-section-kicker">为什么需要确认</div>
+                <h3 class="team-page-panel-title mt-2">把高风险动作和普通浏览明确区分开</h3>
+                <p class="auth-side-copy mb-0">导出、分享、永久删除等动作会改变密钥安全边界，因此需要在已登录状态下再确认一次。</p>
+            </div>
             <div class="auth-side-list">
                 <div class="auth-side-item">
-                    <strong>导出与备份</strong>
-                    防止在已登录设备上被误导出密钥数据。
+                    <i class="bi bi-download"></i>
+                    <div>
+                        <strong>导出与备份</strong>
+                        防止在已登录设备上被误导出密钥数据。
+                    </div>
                 </div>
                 <div class="auth-side-item">
-                    <strong>分享与失效</strong>
-                    确保分享链接和团队治理操作由本人执行。
+                    <i class="bi bi-link-45deg"></i>
+                    <div>
+                        <strong>分享与失效</strong>
+                        确保分享链接和团队治理操作由本人执行。
+                    </div>
                 </div>
+            </div>
+            <div class="auth-side-note">
+                <div class="auth-side-note-title">确认完成后</div>
+                <p class="mb-0">系统会直接返回上一操作页面，避免你在多个页面之间来回切换。</p>
             </div>
         </aside>
     </div>

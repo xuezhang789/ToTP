@@ -2,6 +2,7 @@ import json
 import re
 import secrets
 from datetime import timedelta
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from django.conf import settings
 from django.contrib import messages
@@ -69,6 +70,27 @@ def _next_url(request, fallback="/"):
     ):
         return nxt
     return fallback
+
+
+def _append_query_params(url: str, **params) -> str:
+    """为 URL 追加或覆盖查询参数。"""
+
+    parts = urlsplit(url)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    for key, value in params.items():
+        if value is None:
+            query.pop(key, None)
+        else:
+            query[key] = str(value)
+    return urlunsplit(
+        (
+            parts.scheme,
+            parts.netloc,
+            parts.path,
+            urlencode(query),
+            parts.fragment,
+        )
+    )
 
 
 def _reauth_rate_limit_key(request) -> str:
@@ -168,7 +190,7 @@ def login_view(request):
         return redirect(_next_url(request))
     nxt = _next_url(request)
     ip = client_ip(request)
-    context = {"next": nxt}
+    context = {"next": nxt, "logged_out": request.GET.get("logged_out") == "1"}
     context.update(_login_challenge_context(request, ip))
     if request.method == "POST":
         username = (request.POST.get("username") or "").strip()
@@ -212,7 +234,7 @@ def login_view(request):
         _record_login_failure(ip)
         if context.get("login_challenge_required"):
             _ensure_login_challenge(request, refresh=True)
-        messages.error(request, "用户名或密码错误")
+        messages.error(request, "账号或密码错误")
         context.update(_login_challenge_context(request, ip))
     return render(request, "accounts/login.html", context)
 
@@ -273,7 +295,8 @@ def signup_view(request):
 def logout_view(request):
     """注销当前用户并跳转。"""
     logout(request)
-    return redirect(settings.LOGOUT_REDIRECT_URL)
+    messages.success(request, "你已安全退出，可随时重新登录。")
+    return redirect(_append_query_params(settings.LOGOUT_REDIRECT_URL, logged_out=1))
 
 
 @login_required

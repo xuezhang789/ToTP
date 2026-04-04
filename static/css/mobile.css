@@ -130,16 +130,122 @@
     .team-page-header-actions form .btn {
         width: 100%;
     }
+    .auth-hero,
     .auth-shell,
     .profile-grid,
-    .workspace-hero-grid {
+    .landing-hero,
+    .landing-bottom-grid {
         grid-template-columns: 1fr;
     }
-    .auth-panel,
-    .auth-side-panel,
-    .workspace-hero-side,
-    .workspace-hero-body {
+    .landing-page {
+        gap: 0.9rem;
+    }
+    .landing-hero,
+    .landing-entry-section,
+    .landing-panel {
         padding: 1rem;
+    }
+    .landing-brand-row {
+        align-items: flex-start;
+    }
+    .landing-title {
+        font-size: 2rem;
+    }
+    .landing-copy {
+        font-size: 0.95rem;
+    }
+    .landing-badge-row,
+    .landing-action-row,
+    .landing-brand-actions {
+        gap: 0.55rem;
+    }
+    .landing-badge,
+    .landing-action-row .btn,
+    .landing-brand-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .landing-proof-row,
+    .landing-entry-grid {
+        grid-template-columns: 1fr;
+    }
+    .landing-entry-card {
+        padding: 1rem;
+    }
+    .landing-entry-meta {
+        gap: 0.4rem;
+    }
+    .landing-entry-card .btn {
+        width: 100%;
+    }
+    .landing-section-head {
+        flex-direction: column;
+        align-items: flex-start;
+        margin-bottom: 0.85rem;
+    }
+    .landing-entry-head,
+    .landing-step-item {
+        grid-template-columns: 1fr;
+        align-items: flex-start;
+    }
+    .landing-step-index {
+        width: 2.2rem;
+        height: 2.2rem;
+    }
+    .auth-page {
+        gap: 0.9rem;
+    }
+    .auth-hero {
+        padding: 1rem;
+    }
+    .auth-hero-title {
+        font-size: 1.9rem;
+    }
+    .auth-hero-copy {
+        font-size: 0.94rem;
+    }
+    .auth-hero-metric-grid {
+        grid-template-columns: 1fr;
+    }
+    .auth-hero-pill-row,
+    .auth-hero-badge-row {
+        gap: 0.5rem;
+    }
+    .auth-hero-pill,
+    .auth-hero-badge,
+    .auth-hero-state {
+        width: 100%;
+        justify-content: center;
+    }
+    .auth-panel,
+    .auth-side-panel {
+        padding: 1rem;
+    }
+    .auth-page-login .auth-hero,
+    .auth-page-signup .auth-hero {
+        padding: 0.95rem;
+    }
+    .auth-page-login .auth-hero-title,
+    .auth-page-signup .auth-hero-title {
+        font-size: 2rem;
+    }
+    .auth-page-login .auth-panel-login,
+    .auth-page-signup .auth-panel-signup {
+        padding: 1.15rem 1rem;
+    }
+    .auth-page-login .auth-side-panel-subtle,
+    .auth-page-signup .auth-side-panel-subtle {
+        padding: 0.95rem;
+    }
+    .auth-panel-head,
+    .auth-side-item {
+        gap: 0.75rem;
+    }
+    .auth-inline-banner {
+        padding: 0.85rem 0.9rem;
+    }
+    .auth-social-shell {
+        padding: 0.85rem;
     }
     .team-page-kpi-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));

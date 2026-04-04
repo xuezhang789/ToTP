@@ -34,7 +34,12 @@
                    href="{% url 'accounts:profile' %}">个人资料</a>
                 <form method="post" action="{% url 'accounts:logout' %}">
                     {% csrf_token %}
-                    <button class="btn btn-outline-secondary" type="submit">退出</button>
+                    <button class="btn btn-outline-secondary" type="submit" id="navbarLogoutButton"
+                            data-confirm="确定退出当前账号吗？"
+                            data-confirm-title="退出登录"
+                            data-confirm-ok="安全退出"
+                            data-confirm-variant="warning"
+                            data-confirm-hint="退出后会回到登录页，当前设备上的工作会话将立即结束。">退出</button>
                 </form>
                 {% else %}
                 <a class="btn btn-primary" href="{% url 'accounts:login' %}">登录</a>

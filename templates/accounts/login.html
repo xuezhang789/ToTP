@@ -1,95 +1,132 @@
 {% extends 'base.html' %}
 {% block title %}登录 - TOTP管理平台{% endblock %}
 {% block head %}
+{{ block.super }}
 <meta name="google-signin-client_id" content="{{ GOOGLE_CLIENT_ID }}">
 <link rel="preconnect" href="https://accounts.google.com" crossorigin>
 <link rel="dns-prefetch" href="https://accounts.google.com">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 {% endblock %}
 {% block content %}
-<div class="team-page">
-    <section class="team-page-header">
-        <div class="team-page-header-bar">
-            <div class="team-page-header-main">
-                <div class="team-page-breadcrumb">
-                    <span class="fw-semibold">账号中心</span>
-                    <span>/</span>
-                    <span class="fw-semibold">登录</span>
-                </div>
-                <div class="team-page-title-row">
-                    <h1 class="app-section-title mb-0">登录</h1>
-                </div>
-                <p class="team-page-summary mb-0">进入你的个人与团队工作台，继续管理密钥、分享链接、资产和审计记录。</p>
+<div class="team-page auth-page auth-page-login">
+    <section class="auth-hero auth-hero-login auth-hero-login-focus">
+        <div class="auth-hero-main">
+            <div class="auth-hero-badge-row">
+                <span class="auth-hero-badge"><i class="bi bi-shield-lock"></i>账号中心</span>
+                {% if logged_out %}
+                <span class="auth-hero-state is-success"><i class="bi bi-check-circle-fill"></i>已安全退出</span>
+                {% endif %}
+                {% if login_challenge_required %}
+                <span class="auth-hero-state is-warning"><i class="bi bi-shield-exclamation"></i>已启用安全校验</span>
+                {% endif %}
+            </div>
+            <h1 class="auth-hero-title">登录工作台</h1>
+            <p class="auth-hero-copy">使用用户名、邮箱或 Google 登录，继续进入个人空间、团队空间和安全治理入口。</p>
+            <div class="auth-hero-pill-row">
+                <span class="auth-hero-pill"><i class="bi bi-box-arrow-in-right"></i>登录后直接回到原页面</span>
+                <span class="auth-hero-pill"><i class="bi bi-google"></i>支持 Google 快速登录</span>
+                <span class="auth-hero-pill"><i class="bi bi-shield-check"></i>异常尝试会触发额外校验</span>
             </div>
         </div>
     </section>
 
-    <div class="auth-shell">
-        <section class="auth-panel">
-            <div class="auth-icon"><i class="bi bi-shield-lock-fill"></i></div>
-            <div class="auth-eyebrow">安全登录</div>
-            <h2 class="auth-title">欢迎回来</h2>
-            <p class="auth-copy">使用账号密码或 Google 登录继续访问你的密钥工作台。</p>
-
-            <form method="post" action="{% url 'accounts:login' %}">{% csrf_token %}
-                <input type="hidden" name="next" value="{{ next|default:''|escape }}">
-                <div class="mb-3">
-                    <label class="form-label" for="loginUsername">用户名</label>
-                    <input class="form-control" id="loginUsername" name="username" placeholder="用户名" autocomplete="username" value="{{ username_value|default:''|escape }}" required>
+    <div class="auth-shell auth-shell-login">
+        <section class="auth-panel auth-panel-login">
+            <div class="auth-panel-head">
+                <div class="auth-icon"><i class="bi bi-shield-lock-fill"></i></div>
+                <div>
+                    <div class="auth-eyebrow">登录入口</div>
+                    <h2 class="auth-title">欢迎回来</h2>
+                    <p class="auth-copy">优先完成登录，其他信息都放在后面。</p>
                 </div>
-                <div class="mb-3">
+            </div>
+
+            {% if login_challenge_required %}
+            <div class="auth-inline-banner is-warning" role="status">
+                <i class="bi bi-shield-exclamation"></i>
+                <div>
+                    <strong>检测到当前网络尝试较多</strong>
+                    <span>请先完成安全校验，再继续登录。</span>
+                </div>
+            </div>
+            {% endif %}
+
+            <form method="post" action="{% url 'accounts:login' %}" class="auth-form-stack">{% csrf_token %}
+                <input type="hidden" name="next" value="{{ next|default:''|escape }}">
+                <div class="auth-field-wrap">
+                    <label class="form-label" for="loginUsername">用户名或邮箱</label>
+                    <input class="form-control" id="loginUsername" name="username" placeholder="请输入用户名或邮箱"
+                           autocomplete="username" value="{{ username_value|default:''|escape }}" autofocus required>
+                </div>
+                <div class="auth-field-wrap">
                     <label class="form-label" for="loginPassword">密码</label>
-                    <input type="password" class="form-control" id="loginPassword" name="password" placeholder="密码" autocomplete="current-password" required>
+                    <input type="password" class="form-control" id="loginPassword" name="password"
+                           placeholder="请输入密码" autocomplete="current-password" required>
                 </div>
                 {% if login_challenge_required %}
-                <div class="alert alert-warning py-2 small" role="alert">
-                    检测到当前网络登录尝试较多，请先完成安全校验后继续。
-                </div>
-                <div class="mb-3">
+                <div class="auth-field-wrap auth-security-check">
                     <label class="form-label" for="loginChallengeAnswer">安全校验</label>
                     <div class="input-group">
                         <span class="input-group-text">{{ login_challenge_prompt }}</span>
                         <input class="form-control" id="loginChallengeAnswer" name="challenge_answer"
-                               inputmode="numeric" autocomplete="off" placeholder="请输入结果" required>
+                               inputmode="numeric" autocomplete="off" placeholder="请输入结果"
+                               aria-describedby="loginChallengeHint" required>
                     </div>
-                    <div class="form-text">连续失败后会启用该挑战，用于阻挡异常登录尝试。</div>
+                    <div class="form-text" id="loginChallengeHint">连续失败后会启用该挑战，用于阻挡异常登录尝试。</div>
                 </div>
                 {% endif %}
-                <button class="btn btn-primary w-100" type="submit">登录</button>
+                <button class="btn btn-primary auth-submit-btn w-100" type="submit">登录工作台</button>
             </form>
 
-            <div class="auth-divider">或</div>
+            <div class="auth-divider">或使用 Google 登录</div>
 
-            <div id="g_id_onload"
-                 data-client_id="{{ GOOGLE_CLIENT_ID }}"
-                 data-context="signin"
-                 data-ux_mode="popup"
-                 data-callback="handleCredentialResponse"
-                 data-auto_prompt="true">
+            <div class="auth-social-shell">
+                <div id="g_id_onload"
+                     data-client_id="{{ GOOGLE_CLIENT_ID }}"
+                     data-context="signin"
+                     data-ux_mode="popup"
+                     data-callback="handleCredentialResponse"
+                     data-auto_prompt="true">
+                </div>
+                <div class="g_id_signin" data-type="standard" data-shape="rect" data-theme="outline"
+                     data-text="signin_with" data-size="large" data-logo_alignment="left"></div>
             </div>
-            <div class="g_id_signin" data-type="standard" data-shape="rect" data-theme="outline"
-                 data-text="signin_with" data-size="large" data-logo_alignment="left"></div>
 
-            <div class="text-center mt-3 small">没有账号？<a href="{% url 'accounts:signup' %}">去注册</a></div>
+            <div class="auth-panel-foot text-center small">没有账号？<a href="{% url 'accounts:signup' %}?next={{ next|urlencode }}">立即注册</a></div>
         </section>
 
-        <aside class="auth-side-panel">
-            <div class="team-section-kicker">工作台能力</div>
-            <h3 class="team-page-panel-title mt-2">登录后你可以做什么</h3>
-            <p class="auth-side-copy mb-0">同一套工作台里管理个人空间、团队空间、一次性分享和导出备份。</p>
+        <aside class="auth-side-panel auth-side-panel-subtle">
+            <div class="auth-side-block">
+                <div class="team-section-kicker">登录后可继续</div>
+                <h3 class="team-page-panel-title mt-2">回到你的工作区</h3>
+                <p class="auth-side-copy mb-0">登录后会直接继续原来的访问路径，不需要重新查找页面。</p>
+            </div>
             <div class="auth-side-list">
                 <div class="auth-side-item">
-                    <strong>个人与团队空间</strong>
-                    分组、资产、权限和审计入口都在同一平台里。
+                    <i class="bi bi-person-lines-fill"></i>
+                    <div>
+                        <strong>个人空间</strong>
+                        继续查看和整理自己的验证码。
+                    </div>
                 </div>
                 <div class="auth-side-item">
-                    <strong>一次性分享链接</strong>
-                    适合临时协作，可追踪、可批量失效。
+                    <i class="bi bi-people-fill"></i>
+                    <div>
+                        <strong>团队空间</strong>
+                        继续处理共享、权限和协作治理。
+                    </div>
                 </div>
                 <div class="auth-side-item">
-                    <strong>加密导出与回收站</strong>
-                    兼顾备份恢复和误操作兜底。
+                    <i class="bi bi-shield-check"></i>
+                    <div>
+                        <strong>安全保护</strong>
+                        异常登录和敏感操作会触发额外确认。
+                    </div>
                 </div>
+            </div>
+            <div class="auth-side-note">
+                <div class="auth-side-note-title">使用建议</div>
+                <p class="mb-0">如果当前设备为公共设备，完成操作后请及时退出登录。</p>
             </div>
         </aside>
     </div>

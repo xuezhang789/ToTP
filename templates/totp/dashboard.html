@@ -222,66 +222,124 @@
 {% include 'totp/add_modal.html' %}
 {% include 'totp/import_modal.html' %}
 {% else %}
-<section class="workspace-public-shell">
-    <div class="workspace-hero-card">
-        <div class="workspace-hero-grid">
-            <aside class="workspace-hero-side">
-                <span class="workspace-hero-chip"><i class="bi bi-shield-lock"></i> 个人与团队 2FA 工作台</span>
-                <h1 class="h2 fw-semibold mt-3 mb-3">把验证码管理做得更安全、更顺手</h1>
-                <p class="mb-4">密钥加密保存，支持团队权限、一次性分享和审计追踪；备份可使用加密导出与离线包。</p>
-                <ul class="list-unstyled small mb-0">
-                    <li class="mb-2"><i class="bi bi-collection me-2"></i>个人空间支持分组与回收站恢复</li>
-                    <li class="mb-2"><i class="bi bi-people me-2"></i>团队空间支持角色、资产和审计</li>
-                    <li><i class="bi bi-link-45deg me-2"></i>一次性访问链接适合临时协作</li>
-                </ul>
-            </aside>
-            <div class="workspace-hero-body workspace-stack">
+<section class="workspace-public-shell landing-page">
+    <section class="landing-hero">
+        <div class="landing-hero-main">
+            <div class="landing-brand-row">
+                <div class="landing-brand-mark"><i class="bi bi-shield-lock-fill"></i></div>
                 <div>
-                    <div class="team-section-kicker">开始使用</div>
-                    <h2 class="team-page-panel-title mt-2">用同一套工作台管理验证码</h2>
-                    <p class="text-muted small mb-4">敏感操作会要求再次确认密码。导出明文存在风险，建议优先使用加密导出。</p>
-                    <div class="d-flex flex-column flex-sm-row gap-2">
-                        <a href="{% url 'accounts:login' %}" class="btn btn-primary">登录开始</a>
-                        <a href="{% url 'accounts:signup' %}" class="btn btn-outline-primary">免费注册</a>
-                        <a href="{% url 'totp:external_totp_tool' %}" class="btn btn-outline-secondary">快速生成验证码</a>
-                    </div>
+                    <div class="landing-brand-name">TOTP 管理平台</div>
+                    <div class="landing-brand-tagline">个人与团队统一的 2FA 工作台</div>
                 </div>
-
-                <section class="team-page-panel">
-                    <div class="team-page-panel-head">
-                        <div>
-                            <div class="team-section-kicker">上手路径</div>
-                            <div class="team-page-panel-title">从 0 到可用</div>
-                        </div>
-                        <div class="team-page-panel-note">通常两分钟内即可完成首次配置</div>
-                    </div>
-                    <ul class="list-unstyled mb-0 quick-start-list">
-                        <li class="d-flex align-items-start gap-3 mb-3">
-                            <span class="quick-start-step">1</span>
-                            <div>
-                                <strong>添加或导入密钥</strong>
-                                <p class="mb-0 text-muted small">支持 otpauth:// 与常见导出格式，导入预览会提示重复项。</p>
-                            </div>
-                        </li>
-                        <li class="d-flex align-items-start gap-3 mb-3">
-                            <span class="quick-start-step">2</span>
-                            <div>
-                                <strong>整理空间与权限</strong>
-                                <p class="mb-0 text-muted small">个人空间用分组整理，团队空间用角色和资产保持协作秩序。</p>
-                            </div>
-                        </li>
-                        <li class="d-flex align-items-start gap-3">
-                            <span class="quick-start-step">3</span>
-                            <div>
-                                <strong>分享、备份与审计</strong>
-                                <p class="mb-0 text-muted small">用一次性链接临时协作，用加密导出做备份，并持续查看审计记录。</p>
-                            </div>
-                        </li>
-                    </ul>
-                </section>
+            </div>
+            <div class="landing-badge-row">
+                <span class="landing-badge"><i class="bi bi-stars"></i>个人与团队统一管理 2FA</span>
+                <span class="landing-badge is-muted"><i class="bi bi-shield-check"></i>加密保存 · 权限控制 · 审计留痕</span>
+            </div>
+            <h1 class="landing-title">专业的 TOTP 管理平台，支持个人与团队协同使用。</h1>
+            <div class="landing-action-row">
+                <a href="{% url 'accounts:login' %}" class="btn btn-primary">登录工作台</a>
+                <a href="{% url 'accounts:signup' %}" class="btn btn-outline-primary">注册账号</a>
+                <a href="{% url 'totp:external_totp_tool' %}" class="btn btn-outline-secondary">快速验证</a>
+            </div>
+            <div class="landing-proof-row">
+                <div class="landing-proof-item">
+                    <span class="label">长期保存</span>
+                    <span class="value">个人空间支持分组整理、回收站和加密导出</span>
+                </div>
+                <div class="landing-proof-item">
+                    <span class="label">团队协作</span>
+                    <span class="value">角色权限、资产归档和临时分享都能放在同一视图中</span>
+                </div>
+                <div class="landing-proof-item">
+                    <span class="label">安全治理</span>
+                    <span class="value">敏感操作确认、审计记录和恢复流程都可追溯</span>
+                </div>
             </div>
         </div>
-    </div>
+        <aside class="landing-hero-side">
+            <div class="landing-brand-card">
+                <div class="landing-brand-card-label">适用场景</div>
+                <h2>一套平台，覆盖个人保管、团队协作和临时验证。</h2>
+                <p>长期使用时登录进入正式工作台；只有短时验证需求时，再直接使用公开工具。</p>
+            </div>
+            <div class="landing-signal-stack">
+                <article class="landing-signal-card">
+                    <strong>个人使用</strong>
+                    <span>把自己的常用验证码按分组保存，避免散落在不同设备和文档里。</span>
+                </article>
+                <article class="landing-signal-card">
+                    <strong>团队协作</strong>
+                    <span>共享账号也能保留角色边界，分享、回收和审计都有记录。</span>
+                </article>
+                <article class="landing-signal-card">
+                    <strong>临时验证</strong>
+                    <span>不登录也能快速生成验证码，但不适合长期保存敏感密钥。</span>
+                </article>
+            </div>
+        </aside>
+    </section>
+
+    <section class="landing-entry-section">
+        <div class="landing-section-head">
+            <div>
+                <div class="team-section-kicker">核心入口</div>
+                <div class="team-page-panel-title">按你的使用方式直接开始</div>
+            </div>
+            <div class="team-page-panel-note">三个入口，覆盖长期管理、团队协作和临时验证</div>
+        </div>
+        <div class="landing-entry-grid">
+            <article class="landing-entry-card">
+                <div class="landing-entry-head">
+                    <span class="landing-entry-icon"><i class="bi bi-person-lines-fill"></i></span>
+                    <div>
+                        <div class="landing-entry-label">个人空间</div>
+                        <h3>整理并长期保存自己的验证码</h3>
+                    </div>
+                </div>
+                <p>适合个人长期使用。按分组维护条目，并配合回收站、导出与备份完成日常管理。</p>
+                <div class="landing-entry-meta">
+                    <span class="landing-entry-tag">分组整理</span>
+                    <span class="landing-entry-tag">加密导出</span>
+                    <span class="landing-entry-tag">回收站</span>
+                </div>
+                <a class="btn btn-outline-primary" href="{% url 'accounts:login' %}?next={% url 'totp:list' %}">进入个人空间</a>
+            </article>
+            <article class="landing-entry-card">
+                <div class="landing-entry-head">
+                    <span class="landing-entry-icon"><i class="bi bi-people-fill"></i></span>
+                    <div>
+                        <div class="landing-entry-label">团队空间</div>
+                        <h3>让共享验证码也有清晰边界</h3>
+                    </div>
+                </div>
+                <p>适合团队协作。成员角色、资产归档、分享治理与审计记录都能统一处理。</p>
+                <div class="landing-entry-meta">
+                    <span class="landing-entry-tag">角色权限</span>
+                    <span class="landing-entry-tag">资产归档</span>
+                    <span class="landing-entry-tag">审计记录</span>
+                </div>
+                <a class="btn btn-outline-primary" href="{% url 'accounts:login' %}?next={% url 'totp:teams' %}">进入团队空间</a>
+            </article>
+            <article class="landing-entry-card">
+                <div class="landing-entry-head">
+                    <span class="landing-entry-icon"><i class="bi bi-lightning-charge-fill"></i></span>
+                    <div>
+                        <div class="landing-entry-label">2FA 快速工具</div>
+                        <h3>临时生成验证码，不打断当前任务</h3>
+                    </div>
+                </div>
+                <p>适合短时验证。无需进入工作台即可生成验证码；长期密钥仍建议登录后保存。</p>
+                <div class="landing-entry-meta">
+                    <span class="landing-entry-tag">免登录</span>
+                    <span class="landing-entry-tag">临时验证</span>
+                    <span class="landing-entry-tag">即开即用</span>
+                </div>
+                <a class="btn btn-outline-primary" href="{% url 'totp:external_totp_tool' %}">打开快速工具</a>
+            </article>
+        </div>
+    </section>
+
 </section>
 {% endif %}
 {% endblock %}

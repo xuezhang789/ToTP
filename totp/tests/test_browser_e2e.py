@@ -417,6 +417,23 @@ class BrowserRegressionTests(BrowserLiveServerTestCase):
             "browser-google@example.com",
         )
 
+    def test_logout_browser_flow_confirms_and_returns_to_login(self):
+        self.user_model.objects.create_user(
+            username="browser_logout_user",
+            password="StrongPass123!",
+            email="browser-logout@example.com",
+        )
+
+        self._login_via_form(self.page, "browser_logout_user", "StrongPass123!")
+        self.page.locator("#navbarLogoutButton").click()
+        self.page.locator("#appConfirmModal.show").wait_for()
+
+        with self.page.expect_navigation(wait_until="domcontentloaded"):
+            self.page.locator("#appConfirmOkBtn").click()
+
+        self.assertIn("/auth/login/", self.page.url)
+        self.assertIn("你已安全退出", self.page.locator("body").text_content())
+
     def test_member_removal_browser_flow_revokes_member_access(self):
         owner = self.user_model.objects.create_user(
             username="browser_owner",
