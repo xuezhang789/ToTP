@@ -1,7 +1,10 @@
 import json
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.test import TestCase
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -174,3 +177,64 @@ class BatchImportTests(TestCase):
         self.assertIsNone(created_entry.group_id)
         self.assertEqual(created_entry.asset_id, asset.id)
         self.assertEqual(decrypt_str(created_entry.secret_encrypted), "JBSWY3DPEHPK3PXQ")
+
+    @override_settings(IMPORT_MAX_ENTRIES=1)
+    def test_preview_rejects_batches_that_exceed_entry_limit(self):
+        payload = "\n".join(
+            [
+                "JBSWY3DPEHPK3PXP|Entry One|Team",
+                "JBSWY3DPEHPK3PXQ|Entry Two|Team",
+            ]
+        )
+
+        preview = self._preview_manual(payload)
+
+        self.assertEqual(preview.status_code, 400)
+        self.assertIn("单次最多导入 1 条密钥", preview.json()["errors"][0])
+
+    @override_settings(IMPORT_MAX_ENTRIES=1)
+    def test_apply_rejects_batches_that_exceed_entry_limit(self):
+        response = self._apply_entries(
+            [
+                {
+                    "name": "Entry One",
+                    "group": "",
+                    "secret": "JBSWY3DPEHPK3PXP",
+                    "source": "manual",
+                },
+                {
+                    "name": "Entry Two",
+                    "group": "",
+                    "secret": "JBSWY3DPEHPK3PXQ",
+                    "source": "manual",
+                },
+            ]
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("单次最多导入 1 条密钥", response.json()["error"])
+        self.assertFalse(TOTPEntry.objects.filter(user=self.user).exists())
+
+    def test_apply_import_falls_back_when_bulk_insert_hits_integrity_error(self):
+        with patch.object(
+            TOTPEntry.objects,
+            "bulk_create",
+            side_effect=IntegrityError("simulated race"),
+        ):
+            response = self._apply_entries(
+                [
+                    {
+                        "name": "Race Safe Entry",
+                        "group": "Ops",
+                        "secret": "JBSWY3DPEHPK3PXP",
+                        "source": "manual",
+                    }
+                ]
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+
+        entry = TOTPEntry.objects.get(user=self.user, name="Race Safe Entry")
+        self.assertEqual(entry.group.name, "Ops")
+        self.assertEqual(decrypt_str(entry.secret_encrypted), "JBSWY3DPEHPK3PXP")

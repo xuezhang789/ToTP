@@ -4,6 +4,7 @@ from django.urls import reverse
 
 from totp.models import TOTPEntry, Team, TeamMembership
 from totp.utils import encrypt_str
+from django.utils import timezone
 
 
 class AccessibilitySmokeTests(TestCase):
@@ -20,6 +21,9 @@ class AccessibilitySmokeTests(TestCase):
         html = response.content.decode("utf-8")
         self.assertIn('href="/auth/login/"', html)
         self.assertIn('href="/auth/signup/"', html)
+        self.assertIn('viewport-fit=cover', html)
+        self.assertIn('name="theme-color"', html)
+        self.assertIn('name="format-detection"', html)
 
     def test_list_page_modals_have_aria_labels(self):
         self.client.force_login(self.user)
@@ -80,3 +84,27 @@ class AccessibilitySmokeTests(TestCase):
         self.assertIn('aria-labelledby="renameTeamModalLabel"', html)
         self.assertIn('id="teamActionsOffcanvas"', html)
         self.assertIn(reverse("totp:team_home", args=[team.id]), html)
+
+    def test_download_links_opt_out_of_nav_busy_feedback(self):
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["reauth_at"] = int(timezone.now().timestamp())
+        session.save()
+
+        export_response = self.client.get(
+            reverse("totp:export_download") + f"?kind=plain&return={reverse('totp:list')}"
+        )
+        self.assertEqual(export_response.status_code, 200)
+        export_html = export_response.content.decode("utf-8")
+        self.assertIn('data-app-no-nav="1"', export_html)
+        self.assertIn('hidden aria-hidden="true"', export_html)
+
+        audit_response = self.client.get(reverse("totp:one_time_audit"))
+        self.assertEqual(audit_response.status_code, 200)
+        self.assertIn('data-app-no-nav="1"', audit_response.content.decode("utf-8"))
+
+        team = Team.objects.create(owner=self.user, name="Export Team")
+        TeamMembership.objects.create(team=team, user=self.user, role=TeamMembership.Role.OWNER)
+        team_audit_response = self.client.get(reverse("totp:team_audit", args=[team.id]))
+        self.assertEqual(team_audit_response.status_code, 200)
+        self.assertIn('data-app-no-nav="1"', team_audit_response.content.decode("utf-8"))

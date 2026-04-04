@@ -93,6 +93,16 @@
       targetLabel: '',
       targetAssetId: '',
     };
+    const assetCache = new Map();
+    let assetRequestController = null;
+
+    function setAssetLoading(loading) {
+      if (!importAssetSelect) {
+        return;
+      }
+      importAssetSelect.disabled = loading;
+      importAssetSelect.classList.toggle('is-loading', loading);
+    }
 
     function getAvailableSpaceValues() {
       if (!importSpaceSelect) {
@@ -182,30 +192,60 @@
       if (importAssetField) {
         importAssetField.classList.toggle('d-none', !isTeam);
       }
+      if (assetRequestController) {
+        assetRequestController.abort();
+        assetRequestController = null;
+      }
       if (!isTeam) {
         state.targetAssetId = '';
         if (importAssetSelect) {
           importAssetSelect.value = '';
         }
+        setAssetLoading(false);
         setAssetOptions([]);
+        return;
+      }
+      if (assetCache.has(teamId)) {
+        setAssetOptions(assetCache.get(teamId));
+        if (importAssetSelect && state.targetAssetId) {
+          importAssetSelect.value = state.targetAssetId;
+        }
+        setAssetLoading(false);
         return;
       }
       const url = buildAssetUrl(teamId);
       if (!url) {
+        setAssetLoading(false);
         return;
       }
-      fetch(url, { headers: { 'X-Requested-With': 'fetch' }, credentials: 'same-origin' })
+      assetRequestController = new AbortController();
+      setAssetLoading(true);
+      fetch(url, {
+        headers: { 'X-Requested-With': 'fetch' },
+        credentials: 'same-origin',
+        signal: assetRequestController.signal,
+      })
         .then((resp) => resp.json())
         .then((data) => {
           if (!data || !data.ok) {
             return;
           }
-          setAssetOptions(data.assets || []);
+          const items = data.assets || [];
+          assetCache.set(teamId, items);
+          setAssetOptions(items);
           if (importAssetSelect && state.targetAssetId) {
             importAssetSelect.value = state.targetAssetId;
           }
         })
-        .catch(() => {});
+        .catch((error) => {
+          if (error && error.name === 'AbortError') {
+            return;
+          }
+        })
+        .finally(() => {
+          setAssetLoading(false);
+          assetRequestController = null;
+        });
     }
 
     function currentImportMode() {
@@ -282,10 +322,15 @@
       state.payload = null;
       state.targetLabel = '';
       state.targetAssetId = '';
+      if (assetRequestController) {
+        assetRequestController.abort();
+        assetRequestController = null;
+      }
       setSpaceValue(config.defaultSpace || 'personal');
       if (importAssetSelect) {
         importAssetSelect.value = '';
       }
+      setAssetLoading(false);
       refreshAssetField();
       if (importManualText) {
         importManualText.value = '';

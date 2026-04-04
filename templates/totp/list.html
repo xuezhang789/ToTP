@@ -251,12 +251,12 @@
             <div class="entry-list-head-main">
                 <div class="entry-list-title-row">
                     <div>
-                        <div class="entry-list-kicker">{% if selected_team %}团队密钥列表{% else %}个人密钥列表{% endif %}</div>
+                        <div class="entry-list-kicker">密钥列表</div>
                         <div class="entry-list-title">
                             {% if selected_team %}
-                            {{ selected_team.name }} 中可访问的密钥
+                            {{ selected_team.name }} 中的密钥
                             {% else %}
-                            个人空间中的全部密钥
+                            个人空间密钥
                             {% endif %}
                         </div>
                     </div>
@@ -278,7 +278,7 @@
                 <div class="entry-list-refresh-actions">
                     <span class="badge rounded-pill bg-light text-muted entry-list-refresh-badge" id="refreshStatus" role="button" tabindex="0">自动刷新中</span>
                     <button type="button" class="btn btn-outline-secondary btn-sm" id="manualRefreshBtn">
-                        刷新列表
+                        立即刷新
                     </button>
                 </div>
             </div>

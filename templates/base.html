@@ -3,7 +3,10 @@
 <html lang="zh-CN">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#f3f6fc">
+    <meta name="format-detection" content="telephone=no, date=no, email=no, address=no">
     <title>{% block title %}TOTP 管理平台 | 个人与团队统一工作台{% endblock %}</title>
     <meta name="keywords" content="TOTP管理平台,2FA管理,验证码工作台,团队验证码共享,一次性链接,安全审计,加密备份"/>
     <meta name="description" content="专业的 TOTP 管理平台，支持个人与团队协同使用，统一管理验证码、共享权限、审计记录与备份恢复。"/>
@@ -18,6 +21,7 @@
     {% block head %}{% endblock %}
 </head>
 <body>
+<div class="app-nav-progress" id="appNavProgress" aria-hidden="true"></div>
 {% include 'navbar.html' %}
 <main class="app-main container">
     {% include 'messages.html' %}

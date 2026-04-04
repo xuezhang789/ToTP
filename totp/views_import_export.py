@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError, transaction
 from django.http import Http404, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -28,6 +29,10 @@ from .views import (
     _resolve_import_target,
     _secret_preview,
 )
+
+
+def _import_entries_limit() -> int:
+    return int(getattr(settings, "IMPORT_MAX_ENTRIES", 500) or 500)
 
 
 @login_required
@@ -65,6 +70,15 @@ def batch_import_preview(request):
         return JsonResponse({"ok": False, "errors": result.errors}, status=400)
     if not result.entries:
         return JsonResponse({"ok": False, "errors": ["没有可导入的条目"]}, status=400)
+    import_limit = _import_entries_limit()
+    if import_limit > 0 and len(result.entries) > import_limit:
+        return JsonResponse(
+            {
+                "ok": False,
+                "errors": [f"单次最多导入 {import_limit} 条密钥，请分批处理"],
+            },
+            status=400,
+        )
 
     names = [entry.name for entry in result.entries]
     if target_team is None:
@@ -164,6 +178,12 @@ def batch_import_apply(request):
     raw_entries = payload.get("entries") or []
     if not isinstance(raw_entries, list) or not raw_entries:
         return JsonResponse({"ok": False, "error": "缺少有效的导入数据"}, status=400)
+    import_limit = _import_entries_limit()
+    if import_limit > 0 and len(raw_entries) > import_limit:
+        return JsonResponse(
+            {"ok": False, "error": f"单次最多导入 {import_limit} 条密钥，请分批处理"},
+            status=400,
+        )
 
     entries: list[importers.ParsedEntry] = []
     errors: list[str] = []
@@ -229,6 +249,25 @@ def batch_import_apply(request):
     return JsonResponse({"ok": True, "redirect": redirect_url, "space": space})
 
 
+def _bulk_create_entries_resilient(entries_to_create):
+    """并发下若撞上唯一约束，回退到逐条插入，避免整批导入直接 500。"""
+
+    if not entries_to_create:
+        return []
+    try:
+        return list(TOTPEntry.objects.bulk_create(entries_to_create))
+    except IntegrityError:
+        created_entries = []
+        for candidate in entries_to_create:
+            try:
+                with transaction.atomic():
+                    candidate.save(force_insert=True)
+            except IntegrityError:
+                continue
+            created_entries.append(candidate)
+        return created_entries
+
+
 def _apply_import_entries(user, entries, *, team=None, asset=None):
     """将解析后的条目写入数据库，返回 (新增数量, 跳过数量)。"""
 
@@ -263,7 +302,7 @@ def _apply_import_entries(user, entries, *, team=None, asset=None):
             existing_names.add(entry.name)
 
         if to_create:
-            created_entries = TOTPEntry.objects.bulk_create(to_create)
+            created_entries = _bulk_create_entries_resilient(to_create)
             created = len(created_entries)
             if created_entries:
                 actor_obj = user if getattr(user, "is_authenticated", False) else None
@@ -290,7 +329,7 @@ def _apply_import_entries(user, entries, *, team=None, asset=None):
     groups = {g.name: g for g in Group.objects.filter(user=user, name__in=group_names)}
     missing = [Group(user=user, name=name) for name in group_names if name not in groups]
     if missing:
-        Group.objects.bulk_create(missing)
+        Group.objects.bulk_create(missing, ignore_conflicts=True)
         groups.update(
             {g.name: g for g in Group.objects.filter(user=user, name__in=group_names)}
         )
@@ -321,7 +360,7 @@ def _apply_import_entries(user, entries, *, team=None, asset=None):
         existing_names.add(entry.name)
 
     if to_create:
-        created_entries = TOTPEntry.objects.bulk_create(to_create)
+        created_entries = _bulk_create_entries_resilient(to_create)
         created = len(created_entries)
         if created_entries:
             actor_obj = user if getattr(user, "is_authenticated", False) else None

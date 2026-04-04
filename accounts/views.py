@@ -530,6 +530,8 @@ def google_onetap(request):
             return _json({"ok": False, "error": str(exc)}, 400)
         except RuntimeError:
             return _json({"ok": False, "error": "user_creation_failed"}, 500)
+        if hasattr(user, "is_active") and not user.is_active:
+            return _json({"ok": False, "error": "account_disabled"}, 403)
         if not user.password:
             user.set_unusable_password()
             user.save(update_fields=["password"])

@@ -32,7 +32,8 @@
                     <i class="bi bi-arrow-left me-1"></i> 返回密钥列表
                 </a>
                 <a class="btn btn-outline-secondary"
-                   href="{{ export_url }}{% if querystring %}?{{ querystring }}{% endif %}">
+                   href="{{ export_url }}{% if querystring %}?{{ querystring }}{% endif %}"
+                   data-app-no-nav="1">
                     <i class="bi bi-download me-1"></i> 导出 CSV
                 </a>
             </div>

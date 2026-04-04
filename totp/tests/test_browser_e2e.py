@@ -434,6 +434,37 @@ class BrowserRegressionTests(BrowserLiveServerTestCase):
         self.assertIn("/auth/login/", self.page.url)
         self.assertIn("你已安全退出", self.page.locator("body").text_content())
 
+    def test_prevented_and_download_links_do_not_trigger_nav_busy_feedback(self):
+        self.page.goto(self._absolute_url(reverse("accounts:login")), wait_until="domcontentloaded")
+        self.page.evaluate(
+            """
+            () => {
+              const prevented = document.createElement('a');
+              prevented.id = 'prevented-link';
+              prevented.href = '/should-not-navigate/';
+              prevented.textContent = 'prevented';
+              prevented.addEventListener('click', (event) => event.preventDefault());
+              document.body.appendChild(prevented);
+
+              const skipped = document.createElement('a');
+              skipped.id = 'download-link';
+              skipped.href = '/download-like/';
+              skipped.textContent = 'download';
+              skipped.setAttribute('data-app-no-nav', '1');
+              skipped.addEventListener('click', (event) => event.preventDefault());
+              document.body.appendChild(skipped);
+            }
+            """
+        )
+
+        self.page.locator("#prevented-link").click()
+        self.page.wait_for_timeout(50)
+        self.assertFalse(self.page.evaluate("() => document.body.classList.contains('app-nav-busy')"))
+
+        self.page.locator("#download-link").click()
+        self.page.wait_for_timeout(50)
+        self.assertFalse(self.page.evaluate("() => document.body.classList.contains('app-nav-busy')"))
+
     def test_member_removal_browser_flow_revokes_member_access(self):
         owner = self.user_model.objects.create_user(
             username="browser_owner",

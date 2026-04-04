@@ -25,6 +25,9 @@
       return;
     }
     if (loading) {
+      if (!button.dataset.appOriginalDisabled) {
+        button.dataset.appOriginalDisabled = button.disabled ? '1' : '0';
+      }
       button.disabled = true;
       button.setAttribute('aria-busy', 'true');
       if (!button.dataset.appOriginalHtml) {
@@ -38,7 +41,7 @@
       }
       return;
     }
-    button.disabled = false;
+    button.disabled = button.dataset.appOriginalDisabled === '1';
     button.removeAttribute('aria-busy');
     if (button.dataset.appOriginalHtml != null) {
       button.innerHTML = button.dataset.appOriginalHtml;
@@ -218,11 +221,33 @@
     temp.focus({ preventScroll: true });
     temp.select();
     try {
-      document.execCommand('copy');
+      const copied = document.execCommand('copy');
+      if (!copied) {
+        throw new Error('copy_command_failed');
+      }
     } finally {
       document.body.removeChild(temp);
     }
     return Promise.resolve();
+  }
+
+  function isOptedOutOfNavFeedback(el) {
+    return Boolean(
+      el
+      && el instanceof Element
+      && (
+        el.hasAttribute('data-app-no-nav')
+        || el.closest('[data-app-no-nav]')
+      )
+    );
+  }
+
+  function hasNonSelfTarget(el) {
+    if (!el || !(el instanceof Element)) {
+      return false;
+    }
+    const target = (el.getAttribute('target') || '').trim();
+    return Boolean(target && target !== '_self');
   }
 
   function getConfirmElements() {
@@ -341,6 +366,119 @@
     form.submit();
   }
 
+  function resetNavBusyState() {
+    const body = document.body;
+    const main = document.querySelector('main.app-main');
+    const progress = document.getElementById('appNavProgress');
+    body?.classList.remove('app-nav-busy');
+    main?.removeAttribute('aria-busy');
+    progress?.classList.remove('is-active');
+    document.querySelectorAll('.app-nav-pending').forEach((el) => {
+      el.classList.remove('app-nav-pending');
+      el.removeAttribute('aria-disabled');
+    });
+  }
+
+  function isPlainPrimaryActivation(event) {
+    return !!event && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+  }
+
+  function isHandledByBootstrap(link) {
+    return Boolean(
+      link.hasAttribute('data-bs-toggle')
+      || link.hasAttribute('data-bs-dismiss')
+      || link.getAttribute('role') === 'tab'
+    );
+  }
+
+  function isEligibleNavigationLink(link, event) {
+    if (!link || !isPlainPrimaryActivation(event)) {
+      return false;
+    }
+    if (event.defaultPrevented || isOptedOutOfNavFeedback(link)) {
+      return false;
+    }
+    if (link.hasAttribute('download') || link.hasAttribute('data-confirm') || isHandledByBootstrap(link)) {
+      return false;
+    }
+    const rawHref = link.getAttribute('href') || '';
+    if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:')) {
+      return false;
+    }
+    if (hasNonSelfTarget(link) || /\bexternal\b/i.test(link.getAttribute('rel') || '')) {
+      return false;
+    }
+    let url;
+    try {
+      url = new URL(link.href, window.location.href);
+    } catch (e) {
+      return false;
+    }
+    if (!/^https?:$/.test(url.protocol) || url.origin !== window.location.origin) {
+      return false;
+    }
+    if (
+      url.pathname === window.location.pathname
+      && url.search === window.location.search
+      && url.hash
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  function markNavBusy(trigger) {
+    const body = document.body;
+    const main = document.querySelector('main.app-main');
+    const progress = document.getElementById('appNavProgress');
+    body?.classList.add('app-nav-busy');
+    main?.setAttribute('aria-busy', 'true');
+    progress?.classList.add('is-active');
+    if (trigger instanceof HTMLElement) {
+      trigger.classList.add('app-nav-pending');
+      trigger.setAttribute('aria-disabled', 'true');
+    }
+  }
+
+  function appInitNavigationFeedback() {
+    resetNavBusyState();
+    window.addEventListener('load', resetNavBusyState, { once: true });
+    window.addEventListener('pageshow', resetNavBusyState);
+
+    document.addEventListener('click', (event) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      const link = target ? target.closest('a[href]') : null;
+      if (!isEligibleNavigationLink(link, event)) {
+        return;
+      }
+      markNavBusy(link);
+    });
+
+    document.addEventListener('submit', (event) => {
+      const form = event.target instanceof HTMLFormElement ? event.target : null;
+      if (!form || event.defaultPrevented) {
+        return;
+      }
+      if (isOptedOutOfNavFeedback(form) || hasNonSelfTarget(form)) {
+        return;
+      }
+      if (typeof form.checkValidity === 'function' && !form.noValidate && !form.checkValidity()) {
+        if (window.appFocusFirstInvalid) {
+          window.appFocusFirstInvalid(form, { toastMessage: '请检查必填项后再继续。' });
+        }
+        return;
+      }
+      const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
+      if (submitter && (submitter.hasAttribute('data-bs-toggle') || isOptedOutOfNavFeedback(submitter))) {
+        return;
+      }
+      markNavBusy(submitter || form);
+    });
+  }
+
   function getConfirmPayload(el) {
     const message = el.getAttribute('data-confirm') || '';
     const title = el.getAttribute('data-confirm-title') || '请确认操作';
@@ -386,6 +524,7 @@
   window.appCopyToClipboard = appCopyToClipboard;
   window.appConfirm = appConfirm;
 
+  appInitNavigationFeedback();
   appInitModalAutoFocus();
   appAnnounceFirstMessage();
 })();

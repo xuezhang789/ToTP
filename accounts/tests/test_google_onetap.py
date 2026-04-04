@@ -66,3 +66,28 @@ class GoogleOneTapTests(TestCase):
         self.assertNotEqual(created.pk, existing.pk)
         self.assertEqual(created.username, "newuser1")
         self.assertEqual(self.client.session.get("_auth_user_id"), str(created.pk))
+
+    @patch("accounts.views.id_token.verify_oauth2_token")
+    def test_google_onetap_rejects_inactive_existing_user(self, verify_mock):
+        user_model = get_user_model()
+        inactive_user = user_model.objects.create_user(
+            username="inactive_google_user",
+            password="StrongPassword123!",
+            email="inactive@example.com",
+            is_active=False,
+        )
+        verify_mock.return_value = {
+            "email": inactive_user.email,
+            "email_verified": True,
+            "sub": "sub-inactive",
+        }
+
+        response = self.client.post(
+            reverse("accounts:google_onetap"),
+            data=json.dumps({"credential": "fake"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"], "account_disabled")
+        self.assertNotIn("_auth_user_id", self.client.session)

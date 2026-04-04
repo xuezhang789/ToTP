@@ -71,20 +71,29 @@
         </div>
     </section>
 
-    <div class="card app-table-card">
+    <div class="card app-table-card entry-list-card trash-list-card">
         <form method="post" action="{% url 'totp:trash_bulk' %}" id="trashForm">
             {% csrf_token %}
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <div>
-                    <strong class="text-uppercase small text-muted">已删除的密钥</strong>
-                    <div class="small text-muted mt-1">先勾选，再决定恢复或永久删除。</div>
-                </div>
-                <div class="d-flex flex-wrap align-items-center gap-3">
-                    <div class="form-check mb-0">
-                        <input class="form-check-input" type="checkbox" id="trashSelectAll">
-                        <label class="form-check-label small text-muted" for="trashSelectAll">全选</label>
+            <div class="card-header entry-list-head trash-list-head">
+                <div class="entry-list-head-main">
+                    <div class="entry-list-title-row">
+                        <div>
+                            <div class="entry-list-kicker">回收站密钥</div>
+                            <div class="entry-list-title">等待恢复或清理的密钥</div>
+                        </div>
+                        <div class="entry-list-chip-row">
+                            <span class="team-page-chip">{{ page_obj.paginator.count }} 条</span>
+                            <span class="team-page-chip">保留 30 天</span>
+                        </div>
                     </div>
-                    <div class="d-flex flex-wrap gap-2">
+                    <div class="trash-list-summary">优先恢复仍需使用的密钥，再清理无效条目。</div>
+                </div>
+                <div class="trash-list-tools">
+                    <div class="form-check mb-0 trash-list-toggle">
+                        <input class="form-check-input" type="checkbox" id="trashSelectAll">
+                        <label class="form-check-label small text-muted" for="trashSelectAll">全选当前页</label>
+                    </div>
+                    <div class="trash-list-action-row">
                         <button class="btn btn-outline-primary trash-action-btn" type="submit" name="action" value="restore" disabled>
                             批量恢复
                         </button>
@@ -99,13 +108,13 @@
                     </div>
                 </div>
             </div>
-            <div class="table-responsive table-cardify-wrapper">
-                <table class="table table-hover table-striped mb-0 align-middle table-cardify">
+            <div class="table-responsive table-cardify-wrapper entry-list-table-wrap">
+                <table class="table table-hover table-striped mb-0 align-middle table-cardify entry-list-table trash-list-table">
                     <thead>
                     <tr>
                         <th scope="col" style="width: 36px;"></th>
                         <th>名称</th>
-                        <th>分组</th>
+                        <th>归属</th>
                         <th>删除时间</th>
                         <th>剩余天数</th>
                         <th class="text-nowrap">操作</th>
@@ -118,30 +127,44 @@
                             <input class="form-check-input trash-checkbox" type="checkbox" name="selected" value="{{ e.id }}" aria-label="选择 {{ e.name }}">
                         </td>
                         <td class="trash-cell-name">
-                            <div class="d-flex align-items-center gap-2">
-                                {% if e.team %}
-                                <span class="badge rounded-pill bg-light text-muted fw-semibold">{{ e.team.name }}</span>
-                                {% endif %}
-                                <span class="fw-semibold">{{ e.name }}</span>
+                            <div class="entry-main trash-entry-main">
+                                <div class="entry-main-top">
+                                    <div class="entry-title-row">
+                                        <span class="entry-name text-truncate" title="{{ e.name }}">{{ e.name }}</span>
+                                    </div>
+                                    {% if e.team %}
+                                    <span class="entry-space-badge">{{ e.team.name }}</span>
+                                    {% endif %}
+                                </div>
+                                <div class="entry-meta-row">
+                                    <span class="entry-meta-copy">{% if e.team %}团队密钥{% else %}个人密钥{% endif %}</span>
+                                    <span class="entry-meta-sep" aria-hidden="true">•</span>
+                                    <span class="entry-meta-copy">删除于 {{ e.deleted_at|date:'m-d H:i' }}</span>
+                                </div>
                             </div>
                         </td>
-                        <td class="trash-cell-group">
+                        <td class="trash-cell-group" data-label="{% if e.team %}归属{% else %}分组{% endif %}">
                             {% if e.team %}
-                            <span class="badge rounded-pill bg-secondary-subtle text-secondary">团队共享</span>
+                            <span class="entry-assignment-pill">团队共享</span>
                             {% else %}
-                            {{ e.group.name|default:'未分组' }}
+                            <span class="entry-assignment-pill {% if not e.group %}is-muted{% endif %}">{{ e.group.name|default:'未分组' }}</span>
                             {% endif %}
                         </td>
-                        <td class="trash-cell-deleted">{{ e.deleted_at|date:'Y-m-d H:i' }}</td>
+                        <td class="trash-cell-deleted">
+                            <div class="trash-meta-stack">
+                                <span class="trash-meta-value">{{ e.deleted_at|date:'Y-m-d' }}</span>
+                                <span class="trash-meta-copy">{{ e.deleted_at|date:'H:i' }}</span>
+                            </div>
+                        </td>
                         <td class="trash-cell-remaining">
                             {% if e.recycle_remaining_days is not None %}
-                            约 {{ e.recycle_remaining_days }} 天
+                            <span class="trash-remaining-pill {% if e.recycle_remaining_days <= 7 %}is-urgent{% endif %}">剩余 {{ e.recycle_remaining_days }} 天</span>
                             {% else %}
-                            --
+                            <span class="trash-remaining-pill is-muted">--</span>
                             {% endif %}
                         </td>
-                        <td class="text-nowrap trash-cell-actions">
-                            <div class="d-flex flex-wrap gap-2">
+                        <td class="text-nowrap trash-cell-actions" data-label="操作">
+                            <div class="entry-actions trash-entry-actions">
                                 <button type="button" class="btn btn-sm btn-outline-primary restore-single-btn" data-entry-id="{{ e.id }}">
                                     恢复
                                 </button>
@@ -152,7 +175,7 @@
                         </td>
                     </tr>
                     {% empty %}
-                    <tr>
+                    <tr class="no-data">
                         <td colspan="6" class="text-center text-muted py-5">回收站为空</td>
                     </tr>
                     {% endfor %}

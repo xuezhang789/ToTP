@@ -1,10 +1,13 @@
 /* Mobile-specific styles */
 @media (max-width: 768px) {
     .app-main {
-        padding: 1rem;
+        padding:
+            1rem max(1rem, env(safe-area-inset-right))
+            max(1rem, calc(1rem + env(safe-area-inset-bottom)))
+            max(1rem, env(safe-area-inset-left));
     }
     .app-navbar {
-        padding-top: 0.75rem;
+        padding-top: max(0.75rem, env(safe-area-inset-top));
     }
     .app-navbar-shell {
         padding: 0.85rem;
@@ -104,7 +107,10 @@
         min-height: 44px;
     }
     .modal-dialog {
-        margin: 0.75rem;
+        margin:
+            max(0.75rem, env(safe-area-inset-top))
+            0.75rem
+            max(0.75rem, env(safe-area-inset-bottom));
     }
     .modal-content {
         border-radius: 1.1rem;
@@ -122,6 +128,11 @@
     .app-message-icon {
         width: 2.1rem;
         height: 2.1rem;
+    }
+    #appToastContainer {
+        padding-right: max(0.85rem, env(safe-area-inset-right));
+        padding-bottom: max(0.85rem, env(safe-area-inset-bottom));
+        padding-left: max(0.85rem, env(safe-area-inset-left));
     }
     .team-home-hero {
         padding: 1.05rem;
@@ -397,14 +408,14 @@
     }
     .entry-list-head,
     .entry-list-table-wrap {
-        padding-left: 0.9rem;
-        padding-right: 0.9rem;
+        padding-left: 0.8rem;
+        padding-right: 0.8rem;
     }
     .entry-list-title {
-        font-size: 1.12rem;
+        font-size: 1.04rem;
     }
     .entry-list-table-wrap {
-        padding-bottom: 0.9rem;
+        padding-bottom: 0.75rem;
     }
     .entry-list-refresh,
     .entry-list-refresh-copy {
@@ -419,6 +430,17 @@
         justify-content: flex-start;
     }
     .entry-list-refresh-actions .btn {
+        width: 100%;
+    }
+    .trash-list-tools {
+        min-width: 0;
+        justify-items: start;
+    }
+    .trash-list-action-row {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .trash-list-action-row .btn {
         width: 100%;
     }
     .team-audit-item-head .badge {
@@ -579,8 +601,8 @@
         background: #ffffff;
         border: 1px solid rgba(15, 23, 42, 0.08);
         border-radius: 1rem;
-        padding: 0.9rem 0.95rem;
-        margin: 0.75rem 0;
+        padding: 0.72rem 0.8rem;
+        margin: 0.55rem 0;
         box-shadow: 0 16px 34px -30px rgba(15, 23, 42, 0.25);
     }
     table.table-cardify tr.no-data {
@@ -593,7 +615,7 @@
         padding: 1.5rem 0.75rem;
     }
     table.table-cardify td {
-        padding: 0.35rem 0;
+        padding: 0.28rem 0;
         border-top: 0;
     }
     table.table-cardify td.entry-cell-name {
@@ -643,14 +665,19 @@
         flex-wrap: wrap;
     }
     table.entry-list-table.table-cardify td.entry-cell-actions .entry-actions {
-        gap: 0.55rem;
+        gap: 0.42rem;
     }
-    table.entry-list-table.table-cardify td.entry-cell-actions form,
-    table.entry-list-table.table-cardify td.entry-cell-actions .btn {
-        width: 100%;
+    table.entry-list-table.table-cardify td.entry-cell-actions form {
+        width: auto;
     }
+    table.entry-list-table.table-cardify td.entry-cell-actions .btn,
     table.entry-list-table.table-cardify td.entry-cell-actions form .btn {
-        width: 100%;
+        width: auto;
+        flex: 0 0 auto;
+    }
+    table.entry-list-table.table-cardify td.trash-cell-name .entry-main-top {
+        align-items: flex-start;
+        flex-direction: column;
     }
     table.entry-list-table.table-cardify td.entry-detail-select::before {
         content: "选择";
@@ -674,7 +701,7 @@
         margin-bottom: 0.35rem;
     }
     table.table-cardify td.trash-cell-group::before {
-        content: "分组";
+        content: attr(data-label);
         display: block;
         font-size: 0.8rem;
         color: rgba(100, 116, 139, 1);
@@ -708,5 +735,13 @@
     table.table-cardify td.trash-cell-actions .btn,
     table.table-cardify td.trash-cell-actions .btn-sm {
         flex: 1 1 auto;
+    }
+    table.entry-list-table.table-cardify td.trash-cell-actions .entry-actions {
+        justify-content: flex-start;
+        gap: 0.42rem;
+    }
+    table.entry-list-table.table-cardify td.trash-cell-actions .btn {
+        width: auto;
+        flex: 0 0 auto;
     }
 }

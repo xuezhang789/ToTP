@@ -62,13 +62,13 @@
             <div class="team-page-panel-note">如果浏览器拦截了下载，可手动重新开始</div>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <a class="btn btn-primary" href="{{ download_url }}">重新下载文件</a>
+            <a class="btn btn-primary" href="{{ download_url }}" data-app-no-nav="1">重新下载文件</a>
             <a class="btn btn-outline-secondary" href="{{ return_url }}">返回上一页</a>
         </div>
     </section>
 </div>
 
-<iframe src="{{ download_url }}" style="display:none" title="download"></iframe>
+<iframe src="{{ download_url }}" hidden aria-hidden="true" tabindex="-1" title="download"></iframe>
 {{ return_url|json_script:"returnUrl" }}
 <script nonce="{{ csp_nonce }}">
 (function () {
@@ -76,7 +76,7 @@
   if (value) {
     window.setTimeout(() => {
       window.location.replace(value);
-    }, 600);
+    }, 1200);
   }
 })();
 </script>
