@@ -51,6 +51,7 @@ class AccessibilitySmokeTests(TestCase):
         self.assertIn('aria-labelledby="renameModalLabel"', html)
         self.assertIn('aria-label="复制验证码"', html)
         self.assertIn('aria-label="生成一次性访问链接"', html)
+        self.assertIn("筛选与切换", html)
 
     def test_add_and_group_modals_have_aria_labels(self):
         self.client.force_login(self.user)

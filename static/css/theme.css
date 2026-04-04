@@ -4462,6 +4462,40 @@ footer.app-footer a:hover {
   color: var(--app-text-color);
 }
 
+.entry-list-filter-panel .team-page-panel-head {
+  align-items: center;
+}
+
+.entry-list-filter-panel .team-page-panel-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.entry-list-filter-panel .team-page-panel-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.92), rgba(191, 219, 254, 0.72));
+  color: var(--app-primary);
+  box-shadow: 0 16px 28px -22px rgba(37, 99, 235, 0.75);
+  flex: 0 0 auto;
+}
+
+.entry-list-filter-panel .team-page-panel-title {
+  font-size: 1.12rem;
+  color: var(--app-primary-dark);
+}
+
+.entry-list-filter-panel .team-page-panel-note {
+  max-width: 32rem;
+  font-weight: 600;
+  color: rgba(51, 65, 85, 0.76);
+}
+
 .team-page-panel-note,
 .team-page-section-copy {
   font-size: 0.84rem;
