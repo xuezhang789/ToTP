@@ -34,6 +34,7 @@ class TeamAssetTests(TestCase):
         res2 = self.client.get(reverse("totp:team_asset_detail", args=[self.team.id, asset.id]))
         self.assertEqual(res2.status_code, 200)
         self.assertContains(res2, asset.name)
+        self.assertContains(res2, "asset-entry-list")
 
     def test_member_cannot_create_asset(self):
         self.client.force_login(self.member)
