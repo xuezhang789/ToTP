@@ -7,7 +7,6 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import (
-    authenticate,
     get_user_model,
     login,
     logout,
@@ -28,36 +27,36 @@ from google.oauth2 import id_token
 from project.utils import client_ip
 from totp.models import OneTimeLink, TOTPEntry
 
+from . import auth_service
 from .forms import PasswordSetForm, PasswordUpdateForm, ProfileForm, password_strength_errors
+from .models import AuthAudit
 
 User = get_user_model()
 
-LOGIN_RATE_LIMIT = 10
-LOGIN_RATE_WINDOW_SECONDS = 300
+LOGIN_RATE_LIMIT = auth_service.LOGIN_RATE_LIMIT
+LOGIN_RATE_WINDOW_SECONDS = auth_service.LOGIN_RATE_WINDOW_SECONDS
 SIGNUP_RATE_LIMIT = 5
 SIGNUP_RATE_WINDOW_SECONDS = 600
-REAUTH_RATE_LIMIT = 8
-REAUTH_RATE_WINDOW_SECONDS = 300
-LOGIN_IP_RATE_LIMIT = 40
-LOGIN_IP_RATE_WINDOW_SECONDS = 300
-LOGIN_CHALLENGE_THRESHOLD = 5
-LOGIN_CHALLENGE_WINDOW_SECONDS = 900
-LOGIN_CHALLENGE_TTL_SECONDS = 600
-LOGIN_CHALLENGE_SESSION_KEY = "auth_login_challenge_v1"
+REAUTH_RATE_LIMIT = auth_service.REAUTH_RATE_LIMIT
+REAUTH_RATE_WINDOW_SECONDS = auth_service.REAUTH_RATE_WINDOW_SECONDS
+LOGIN_IP_RATE_LIMIT = auth_service.LOGIN_IP_RATE_LIMIT
+LOGIN_IP_RATE_WINDOW_SECONDS = auth_service.LOGIN_IP_RATE_WINDOW_SECONDS
+LOGIN_CHALLENGE_THRESHOLD = auth_service.LOGIN_CHALLENGE_THRESHOLD
+LOGIN_CHALLENGE_WINDOW_SECONDS = auth_service.LOGIN_CHALLENGE_WINDOW_SECONDS
+LOGIN_CHALLENGE_TTL_SECONDS = auth_service.LOGIN_CHALLENGE_TTL_SECONDS
+LOGIN_CHALLENGE_SESSION_KEY = auth_service.LOGIN_CHALLENGE_SESSION_KEY
 
-
-def _rate_limit_increment(cache_key: str, *, window_seconds: int) -> int:
-    if cache.add(cache_key, 1, window_seconds):
-        return 1
-    try:
-        return cache.incr(cache_key)
-    except ValueError:
-        cache.set(cache_key, 1, window_seconds)
-        return 1
-
-
-def _rate_limit_allow(cache_key: str, *, limit: int, window_seconds: int) -> bool:
-    return _rate_limit_increment(cache_key, window_seconds=window_seconds) <= limit
+_rate_limit_increment = auth_service.rate_limit_increment
+_rate_limit_allow = auth_service.rate_limit_allow
+_reauth_rate_limit_key = auth_service.reauth_rate_limit_key
+_auth_int_setting = auth_service.auth_int_setting
+_login_total_rate_limit_key = auth_service.login_total_rate_limit_key
+_login_failure_rate_limit_key = auth_service.login_failure_rate_limit_key
+_clear_login_challenge = auth_service.clear_login_challenge
+_ensure_login_challenge = auth_service.ensure_login_challenge
+_login_challenge_context = auth_service.login_challenge_context
+_record_login_failure = auth_service.record_login_failure
+_validate_login_challenge = auth_service.validate_login_challenge
 
 
 def _next_url(request, fallback="/"):
@@ -93,96 +92,6 @@ def _append_query_params(url: str, **params) -> str:
     )
 
 
-def _reauth_rate_limit_key(request) -> str:
-    return f"auth:reauth:v1:{request.user.pk}:{client_ip(request)}"
-
-
-def _auth_int_setting(name: str, default: int) -> int:
-    return int(getattr(settings, name, default) or default)
-
-
-def _login_total_rate_limit_key(ip: str) -> str:
-    return f"auth:login:v2:ip:{ip}"
-
-
-def _login_failure_rate_limit_key(ip: str) -> str:
-    return f"auth:login:v2:fail:{ip}"
-
-
-def _clear_login_challenge(request):
-    if LOGIN_CHALLENGE_SESSION_KEY in request.session:
-        del request.session[LOGIN_CHALLENGE_SESSION_KEY]
-        request.session.modified = True
-
-
-def _ensure_login_challenge(request, *, refresh: bool = False):
-    now_ts = int(timezone.now().timestamp())
-    ttl_seconds = _auth_int_setting(
-        "AUTH_LOGIN_CHALLENGE_TTL_SECONDS",
-        LOGIN_CHALLENGE_TTL_SECONDS,
-    )
-    stored = request.session.get(LOGIN_CHALLENGE_SESSION_KEY)
-    if (
-        not refresh
-        and isinstance(stored, dict)
-        and stored.get("prompt")
-        and stored.get("answer")
-        and now_ts - int(stored.get("created_at") or 0) <= ttl_seconds
-    ):
-        return stored
-
-    left = secrets.randbelow(8) + 1
-    right = secrets.randbelow(8) + 1
-    challenge = {
-        "prompt": f"{left} + {right} = ?",
-        "answer": str(left + right),
-        "created_at": now_ts,
-    }
-    request.session[LOGIN_CHALLENGE_SESSION_KEY] = challenge
-    request.session.modified = True
-    return challenge
-
-
-def _login_challenge_context(request, ip: str) -> dict:
-    failure_count = int(cache.get(_login_failure_rate_limit_key(ip)) or 0)
-    threshold = _auth_int_setting(
-        "AUTH_LOGIN_CHALLENGE_THRESHOLD",
-        LOGIN_CHALLENGE_THRESHOLD,
-    )
-    if failure_count < threshold:
-        _clear_login_challenge(request)
-        return {
-            "login_challenge_required": False,
-            "login_challenge_prompt": "",
-            "login_failure_count": failure_count,
-        }
-    challenge = _ensure_login_challenge(request)
-    return {
-        "login_challenge_required": True,
-        "login_challenge_prompt": challenge["prompt"],
-        "login_failure_count": failure_count,
-    }
-
-
-def _record_login_failure(ip: str) -> int:
-    return _rate_limit_increment(
-        _login_failure_rate_limit_key(ip),
-        window_seconds=_auth_int_setting(
-            "AUTH_LOGIN_CHALLENGE_WINDOW_SECONDS",
-            LOGIN_CHALLENGE_WINDOW_SECONDS,
-        ),
-    )
-
-
-def _validate_login_challenge(request) -> bool:
-    stored = request.session.get(LOGIN_CHALLENGE_SESSION_KEY)
-    if not isinstance(stored, dict):
-        return False
-    submitted = (request.POST.get("challenge_answer") or "").strip()
-    expected = str(stored.get("answer") or "")
-    return bool(submitted) and submitted == expected
-
-
 @require_http_methods(["GET", "POST"])
 def login_view(request):
     """处理用户登录逻辑。"""
@@ -206,6 +115,14 @@ def login_view(request):
                 LOGIN_IP_RATE_WINDOW_SECONDS,
             ),
         ):
+            auth_service.audit_auth_event(
+                AuthAudit.Action.LOGIN,
+                request,
+                method=AuthAudit.Method.PASSWORD,
+                status=AuthAudit.Status.RATE_LIMITED,
+                identifier=username,
+                metadata={"scope": "ip"},
+            )
             messages.error(request, "登录请求过于频繁，请稍后再试")
             return render(request, "accounts/login.html", context, status=429)
         if context.get("login_challenge_required"):
@@ -214,6 +131,14 @@ def login_view(request):
                 context.update(_login_challenge_context(request, ip))
                 _ensure_login_challenge(request, refresh=True)
                 context.update(_login_challenge_context(request, ip))
+                auth_service.audit_auth_event(
+                    AuthAudit.Action.LOGIN,
+                    request,
+                    method=AuthAudit.Method.PASSWORD,
+                    status=AuthAudit.Status.BLOCKED,
+                    identifier=username,
+                    metadata={"reason": "challenge_required"},
+                )
                 messages.error(request, "请先完成安全校验")
                 return render(request, "accounts/login.html", context, status=400)
         rl_key = f"auth:login:v1:{ip}:{username.lower()}"
@@ -222,14 +147,27 @@ def login_view(request):
             limit=LOGIN_RATE_LIMIT,
             window_seconds=LOGIN_RATE_WINDOW_SECONDS,
         ):
+            auth_service.audit_auth_event(
+                AuthAudit.Action.LOGIN,
+                request,
+                method=AuthAudit.Method.PASSWORD,
+                status=AuthAudit.Status.RATE_LIMITED,
+                identifier=username,
+                metadata={"scope": "identifier"},
+            )
             messages.error(request, "尝试次数过多，请稍后再试")
             return render(request, "accounts/login.html", context, status=429)
-        user = authenticate(request, username=username, password=password)
+        user = auth_service.authenticate_identifier(request, username, password)
         if user:
             cache.delete(rl_key)
             cache.delete(_login_failure_rate_limit_key(ip))
             _clear_login_challenge(request)
-            login(request, user)
+            auth_service.complete_login(
+                request,
+                user,
+                method=AuthAudit.Method.PASSWORD,
+                identifier=username,
+            )
             return redirect(_next_url(request))
         _record_login_failure(ip)
         if context.get("login_challenge_required"):
@@ -294,6 +232,15 @@ def signup_view(request):
 @require_POST
 def logout_view(request):
     """注销当前用户并跳转。"""
+    if request.user.is_authenticated:
+        auth_service.audit_auth_event(
+            AuthAudit.Action.LOGOUT,
+            request,
+            method=AuthAudit.Method.SESSION,
+            status=AuthAudit.Status.SUCCESS,
+            user=request.user,
+            identifier=request.user.username,
+        )
     logout(request)
     messages.success(request, "你已安全退出，可随时重新登录。")
     return redirect(_append_query_params(settings.LOGOUT_REDIRECT_URL, logged_out=1))
@@ -310,6 +257,14 @@ def reauth_view(request):
             limit=REAUTH_RATE_LIMIT,
             window_seconds=REAUTH_RATE_WINDOW_SECONDS,
         ):
+            auth_service.audit_auth_event(
+                AuthAudit.Action.REAUTH,
+                request,
+                method=AuthAudit.Method.PASSWORD,
+                status=AuthAudit.Status.RATE_LIMITED,
+                user=request.user,
+                identifier=request.user.username,
+            )
             messages.error(request, "确认次数过多，请稍后再试")
             return render(
                 request,
@@ -318,10 +273,22 @@ def reauth_view(request):
                 status=429,
             )
         password = request.POST.get("password") or ""
-        user = authenticate(request, username=request.user.username, password=password)
+        user = auth_service.authenticate_current_user_password(request, password)
         if user:
             cache.delete(rl_key)
-            request.session["reauth_at"] = int(timezone.now().timestamp())
+            if not auth_service.complete_reauth(
+                request,
+                request.user,
+                method=AuthAudit.Method.PASSWORD,
+                identifier=request.user.username,
+            ):
+                messages.error(request, "账号当前不可用，请联系管理员")
+                return render(
+                    request,
+                    "accounts/reauth.html",
+                    {"next": nxt, "has_password": request.user.has_usable_password()},
+                    status=403,
+                )
             return redirect(nxt)
         messages.error(request, "密码错误")
     return render(
@@ -344,17 +311,31 @@ def reauth_api(request):
         limit=REAUTH_RATE_LIMIT,
         window_seconds=REAUTH_RATE_WINDOW_SECONDS,
     ):
+        auth_service.audit_auth_event(
+            AuthAudit.Action.REAUTH,
+            request,
+            method=AuthAudit.Method.PASSWORD,
+            status=AuthAudit.Status.RATE_LIMITED,
+            user=request.user,
+            identifier=request.user.username,
+        )
         return _json({"ok": False, "error": "rate_limited"}, 429)
     password = data.get("password") or ""
     if not password:
         return _json({"ok": False, "error": "missing_password"}, 400)
     if not request.user.has_usable_password():
         return _json({"ok": False, "error": "no_password"}, 400)
-    user = authenticate(request, username=request.user.username, password=password)
+    user = auth_service.authenticate_current_user_password(request, password)
     if not user:
         return _json({"ok": False, "error": "wrong_password"}, 403)
     cache.delete(rl_key)
-    request.session["reauth_at"] = int(timezone.now().timestamp())
+    if not auth_service.complete_reauth(
+        request,
+        request.user,
+        method=AuthAudit.Method.PASSWORD,
+        identifier=request.user.username,
+    ):
+        return _json({"ok": False, "error": "account_disabled"}, 403)
     return _json({"ok": True})
 
 
@@ -367,6 +348,15 @@ def reauth_google(request):
         return _json({"ok": False, "error": "invalid_json"}, 400)
     cred = (data.get("credential") or "").strip()
     if not cred:
+        auth_service.audit_auth_event(
+            AuthAudit.Action.REAUTH,
+            request,
+            method=AuthAudit.Method.GOOGLE,
+            status=AuthAudit.Status.FAILED,
+            user=request.user,
+            identifier=request.user.email or request.user.username,
+            metadata={"reason": "missing_credential"},
+        )
         return _json({"ok": False, "error": "missing_credential"}, 400)
     rl_key = _reauth_rate_limit_key(request)
     if not _rate_limit_allow(
@@ -374,6 +364,14 @@ def reauth_google(request):
         limit=REAUTH_RATE_LIMIT,
         window_seconds=REAUTH_RATE_WINDOW_SECONDS,
     ):
+        auth_service.audit_auth_event(
+            AuthAudit.Action.REAUTH,
+            request,
+            method=AuthAudit.Method.GOOGLE,
+            status=AuthAudit.Status.RATE_LIMITED,
+            user=request.user,
+            identifier=request.user.email or request.user.username,
+        )
         return _json({"ok": False, "error": "rate_limited"}, 429)
     try:
         idinfo = id_token.verify_oauth2_token(
@@ -382,13 +380,46 @@ def reauth_google(request):
         email = idinfo.get("email") or ""
         email_verified = idinfo.get("email_verified", False)
         if not email or not email_verified:
+            auth_service.audit_auth_event(
+                AuthAudit.Action.REAUTH,
+                request,
+                method=AuthAudit.Method.GOOGLE,
+                status=AuthAudit.Status.FAILED,
+                user=request.user,
+                identifier=email,
+                metadata={"reason": "email_not_verified"},
+            )
             return _json({"ok": False, "error": "email_not_verified"}, 400)
         if not request.user.email or request.user.email.lower() != email.lower():
+            auth_service.audit_auth_event(
+                AuthAudit.Action.REAUTH,
+                request,
+                method=AuthAudit.Method.GOOGLE,
+                status=AuthAudit.Status.FAILED,
+                user=request.user,
+                identifier=email,
+                metadata={"reason": "email_mismatch"},
+            )
             return _json({"ok": False, "error": "email_mismatch"}, 403)
+        if not auth_service.complete_reauth(
+            request,
+            request.user,
+            method=AuthAudit.Method.GOOGLE,
+            identifier=email,
+        ):
+            return _json({"ok": False, "error": "account_disabled"}, 403)
         cache.delete(rl_key)
-        request.session["reauth_at"] = int(timezone.now().timestamp())
         return _json({"ok": True})
     except ValueError:
+        auth_service.audit_auth_event(
+            AuthAudit.Action.REAUTH,
+            request,
+            method=AuthAudit.Method.GOOGLE,
+            status=AuthAudit.Status.FAILED,
+            user=request.user,
+            identifier=request.user.email or request.user.username,
+            metadata={"reason": "invalid_token"},
+        )
         return _json({"ok": False, "error": "invalid_token"}, 400)
 
 
@@ -514,6 +545,13 @@ def google_onetap(request):
         return _json({"ok": False, "error": "invalid_json"}, 400)
     cred = (data.get("credential") or "").strip()
     if not cred:
+        auth_service.audit_auth_event(
+            AuthAudit.Action.LOGIN,
+            request,
+            method=AuthAudit.Method.GOOGLE,
+            status=AuthAudit.Status.FAILED,
+            metadata={"reason": "missing_credential"},
+        )
         return _json({"ok": False, "error": "missing_credential"}, 400)
     try:
         # 使用 Google 提供的 SDK 验证前端返回的身份凭证
@@ -523,14 +561,44 @@ def google_onetap(request):
         email = idinfo.get("email") or ""
         email_verified = idinfo.get("email_verified", False)
         if not email or not email_verified:
+            auth_service.audit_auth_event(
+                AuthAudit.Action.LOGIN,
+                request,
+                method=AuthAudit.Method.GOOGLE,
+                status=AuthAudit.Status.FAILED,
+                identifier=email,
+                metadata={"reason": "email_not_verified"},
+            )
             return _json({"ok": False, "error": "email_not_verified"}, 400)
         try:
             user, created = _get_or_create_google_user(email)
         except ValueError as exc:
+            auth_service.audit_auth_event(
+                AuthAudit.Action.LOGIN,
+                request,
+                method=AuthAudit.Method.GOOGLE,
+                status=AuthAudit.Status.FAILED,
+                identifier=email,
+                metadata={"reason": str(exc)},
+            )
             return _json({"ok": False, "error": str(exc)}, 400)
         except RuntimeError:
+            auth_service.audit_auth_event(
+                AuthAudit.Action.LOGIN,
+                request,
+                method=AuthAudit.Method.GOOGLE,
+                status=AuthAudit.Status.FAILED,
+                identifier=email,
+                metadata={"reason": "user_creation_failed"},
+            )
             return _json({"ok": False, "error": "user_creation_failed"}, 500)
-        if hasattr(user, "is_active") and not user.is_active:
+        if not auth_service.complete_login(
+            request,
+            user,
+            method=AuthAudit.Method.GOOGLE,
+            identifier=email,
+            metadata={"created": created},
+        ):
             return _json({"ok": False, "error": "account_disabled"}, 403)
         if not user.password:
             user.set_unusable_password()
@@ -539,10 +607,16 @@ def google_onetap(request):
         if not user.email:
             user.email = email
             user.save(update_fields=["email"])
-        login(request, user)
         return _json({"ok": True, "created": created})
     except ValueError:
         # 凭证验证失败
+        auth_service.audit_auth_event(
+            AuthAudit.Action.LOGIN,
+            request,
+            method=AuthAudit.Method.GOOGLE,
+            status=AuthAudit.Status.FAILED,
+            metadata={"reason": "invalid_token"},
+        )
         return _json({"ok": False, "error": "invalid_token"}, 400)
 
 

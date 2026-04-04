@@ -220,9 +220,8 @@
   }
 
   function renderRow(row, code, remain, period) {
-    if (code && code !== row.lastCode && row.codeEl) {
+    if (code && row.codeEl && row.codeEl.textContent !== code) {
       row.codeEl.textContent = code;
-      row.lastCode = code;
     }
     if (row.copyBtn && code && row.copyBtn.dataset.code !== code) {
       row.copyBtn.dataset.code = code;
@@ -230,11 +229,14 @@
     if (row.codeEl && code && row.codeEl.dataset.code !== code) {
       row.codeEl.dataset.code = code;
     }
-    if (row.remainEl && Number.isFinite(remain) && remain !== row.lastRemain) {
+    if (row.remainEl && Number.isFinite(remain) && row.remainEl.textContent !== `${remain}s`) {
       row.remainEl.textContent = `${remain}s`;
     }
-    if (row.remainMobileEl && Number.isFinite(remain) && remain !== row.lastRemain) {
+    if (row.remainMobileEl && Number.isFinite(remain) && row.remainMobileEl.textContent !== `${remain}s`) {
       row.remainMobileEl.textContent = `${remain}s`;
+    }
+    if (code) {
+      row.lastCode = code;
     }
     if (Number.isFinite(remain)) {
       row.lastRemain = remain;
@@ -242,7 +244,10 @@
     if (row.progressEl) {
       const safePeriod = period > 0 ? period : 30;
       const pct = Math.min(100, Math.max(0, Math.round(((safePeriod - remain) / safePeriod) * 100)));
-      row.progressEl.style.width = `${pct}%`;
+      const nextWidth = `${pct}%`;
+      if (row.progressEl.style.width !== nextWidth) {
+        row.progressEl.style.width = nextWidth;
+      }
       const progress = row.tr ? row.tr.querySelector('[role="progressbar"]') : null;
       if (progress) {
         progress.setAttribute('aria-valuenow', String(pct));

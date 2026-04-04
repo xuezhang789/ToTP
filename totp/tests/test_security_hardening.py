@@ -1,13 +1,19 @@
-from urllib.parse import quote
-import hashlib
 from datetime import timedelta
 from pathlib import Path
+import hashlib
+import json
+from urllib.parse import quote
 
 from django.contrib.auth import get_user_model
+from django.core import signing
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from totp.import_preview_service import (
+    IMPORT_PREVIEW_SESSION_KEY,
+    IMPORT_PREVIEW_SIGNING_SALT,
+)
 from totp.models import OneTimeLink, TOTPEntry
 from totp.utils import encrypt_str
 
@@ -17,6 +23,32 @@ class SecurityHardeningTests(TestCase):
         user_model = get_user_model()
         self.user = user_model.objects.create_user(username="secuser", password="StrongPassword123!")
         self.client.force_login(self.user)
+
+    def _make_import_preview_token(self) -> str:
+        preview_id = "security-preview"
+        session = self.client.session
+        session[IMPORT_PREVIEW_SESSION_KEY] = {
+            preview_id: {
+                "user_id": self.user.pk,
+                "space": "personal",
+                "target_label": "个人空间",
+                "asset_id": "",
+                "entries": [
+                    {
+                        "name": "Preview Entry",
+                        "group": "",
+                        "secret": "JBSWY3DPEHPK3PXP",
+                        "source": "manual",
+                    }
+                ],
+                "created_at": int(timezone.now().timestamp()),
+            }
+        }
+        session.save()
+        return signing.dumps(
+            {"preview_id": preview_id, "uid": self.user.pk},
+            salt=IMPORT_PREVIEW_SIGNING_SALT,
+        )
 
     def test_one_time_view_is_never_cached(self):
         entry = TOTPEntry.objects.create(
@@ -92,7 +124,7 @@ class SecurityHardeningTests(TestCase):
 
         response = self.client.post(
             url,
-            data={"space": "personal"},
+            data=json.dumps({"preview_token": self._make_import_preview_token()}),
             content_type="application/json",
             HTTP_REFERER=referer
         )
@@ -109,7 +141,7 @@ class SecurityHardeningTests(TestCase):
         url = reverse("totp:batch_import_apply")
         response = self.client.post(
             url,
-            data={"space": "personal"},
+            data=json.dumps({"preview_token": self._make_import_preview_token()}),
             content_type="application/json",
             HTTP_REFERER="https://evil.example/phish",
         )

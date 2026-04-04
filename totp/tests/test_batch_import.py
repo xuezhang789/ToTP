@@ -2,12 +2,17 @@ import json
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core import signing
 from django.db import IntegrityError
 from django.test import TestCase
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from totp.import_preview_service import (
+    IMPORT_PREVIEW_SESSION_KEY,
+    IMPORT_PREVIEW_SIGNING_SALT,
+)
 from totp.models import Group, Team, TeamAsset, TeamMembership, TOTPEntry
 from totp.utils import decrypt_str, encrypt_str
 
@@ -31,16 +36,11 @@ class BatchImportTests(TestCase):
             data["asset_id"] = asset_id
         return self.client.post(url, data, follow=False)
 
-    def _apply_entries(self, entries, space: str | None = None, asset_id: str | None = None):
+    def _apply_preview_token(self, preview_token: str):
         url = reverse("totp:batch_import_apply")
-        payload = {"entries": entries}
-        if space:
-            payload["space"] = space
-        if asset_id is not None:
-            payload["asset_id"] = asset_id
         return self.client.post(
             url,
-            data=json.dumps(payload),
+            data=json.dumps({"preview_token": preview_token}),
             content_type="application/json",
             follow=False,
         )
@@ -54,18 +54,10 @@ class BatchImportTests(TestCase):
         payload = preview.json()
         self.assertTrue(payload["ok"])
         self.assertEqual(len(payload["entries"]), 1)
+        self.assertTrue(payload["preview_token"])
+        self.assertNotIn("secret", payload["entries"][0])
 
-        entries = [
-            {
-                "name": item["name"],
-                "group": item["group"],
-                "secret": item["secret"],
-                "source": item["source"],
-            }
-            for item in payload["entries"]
-        ]
-
-        apply_resp = self._apply_entries(entries)
+        apply_resp = self._apply_preview_token(payload["preview_token"])
         self.assertEqual(apply_resp.status_code, 200)
         self.assertTrue(apply_resp.json()["ok"])
 
@@ -99,17 +91,7 @@ class BatchImportTests(TestCase):
         self.assertTrue(any("重复" in text for text in warnings))
         self.assertTrue(any("无效" in text for text in warnings))
 
-        entries = [
-            {
-                "name": item["name"],
-                "group": item["group"],
-                "secret": item["secret"],
-                "source": item["source"],
-            }
-            for item in data["entries"]
-        ]
-
-        apply_resp = self._apply_entries(entries)
+        apply_resp = self._apply_preview_token(data["preview_token"])
         self.assertEqual(apply_resp.status_code, 200)
         self.assertTrue(apply_resp.json()["ok"])
 
@@ -154,17 +136,8 @@ class BatchImportTests(TestCase):
         self.assertEqual(data.get("asset_id"), str(asset.id))
         warnings = data.get("warnings") or []
         self.assertTrue(any("团队空间不支持分组" in text for text in warnings))
-        entries = [
-            {
-                "name": item["name"],
-                "group": item["group"],
-                "secret": item["secret"],
-                "source": item["source"],
-            }
-            for item in data["entries"]
-        ]
 
-        apply_resp = self._apply_entries(entries, space=space, asset_id=str(asset.id))
+        apply_resp = self._apply_preview_token(data["preview_token"])
         self.assertEqual(apply_resp.status_code, 200)
         apply_data = apply_resp.json()
         self.assertTrue(apply_data["ok"])
@@ -194,43 +167,52 @@ class BatchImportTests(TestCase):
 
     @override_settings(IMPORT_MAX_ENTRIES=1)
     def test_apply_rejects_batches_that_exceed_entry_limit(self):
-        response = self._apply_entries(
-            [
-                {
-                    "name": "Entry One",
-                    "group": "",
-                    "secret": "JBSWY3DPEHPK3PXP",
-                    "source": "manual",
-                },
-                {
-                    "name": "Entry Two",
-                    "group": "",
-                    "secret": "JBSWY3DPEHPK3PXQ",
-                    "source": "manual",
-                },
-            ]
+        preview_id = "preview-limit"
+        session = self.client.session
+        session[IMPORT_PREVIEW_SESSION_KEY] = {
+            preview_id: {
+                "user_id": self.user.pk,
+                "space": "personal",
+                "target_label": "个人空间",
+                "asset_id": "",
+                "entries": [
+                    {
+                        "name": "Entry One",
+                        "group": "",
+                        "secret": "JBSWY3DPEHPK3PXP",
+                        "source": "manual",
+                    },
+                    {
+                        "name": "Entry Two",
+                        "group": "",
+                        "secret": "JBSWY3DPEHPK3PXQ",
+                        "source": "manual",
+                    },
+                ],
+                "created_at": int(timezone.now().timestamp()),
+            }
+        }
+        session.save()
+        preview_token = signing.dumps(
+            {"preview_id": preview_id, "uid": self.user.pk},
+            salt=IMPORT_PREVIEW_SIGNING_SALT,
         )
+        response = self._apply_preview_token(preview_token)
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("单次最多导入 1 条密钥", response.json()["error"])
         self.assertFalse(TOTPEntry.objects.filter(user=self.user).exists())
 
     def test_apply_import_falls_back_when_bulk_insert_hits_integrity_error(self):
+        preview = self._preview_manual("JBSWY3DPEHPK3PXP|Race Safe Entry|Ops")
+        preview_token = preview.json()["preview_token"]
+
         with patch.object(
             TOTPEntry.objects,
             "bulk_create",
             side_effect=IntegrityError("simulated race"),
         ):
-            response = self._apply_entries(
-                [
-                    {
-                        "name": "Race Safe Entry",
-                        "group": "Ops",
-                        "secret": "JBSWY3DPEHPK3PXP",
-                        "source": "manual",
-                    }
-                ]
-            )
+            response = self._apply_preview_token(preview_token)
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["ok"])
@@ -238,3 +220,20 @@ class BatchImportTests(TestCase):
         entry = TOTPEntry.objects.get(user=self.user, name="Race Safe Entry")
         self.assertEqual(entry.group.name, "Ops")
         self.assertEqual(decrypt_str(entry.secret_encrypted), "JBSWY3DPEHPK3PXP")
+
+    def test_apply_rejects_invalid_preview_token(self):
+        response = self._apply_preview_token("invalid-preview-token")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "preview_expired")
+
+    def test_preview_token_is_consumed_after_successful_apply(self):
+        preview = self._preview_manual("JBSWY3DPEHPK3PXP|One Shot Entry|Ops")
+        preview_token = preview.json()["preview_token"]
+
+        first = self._apply_preview_token(preview_token)
+        second = self._apply_preview_token(preview_token)
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 400)
+        self.assertEqual(second.json()["error"], "preview_expired")

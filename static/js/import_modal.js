@@ -88,7 +88,7 @@
     const importPreviewSummary = document.getElementById('importPreviewSummary');
 
     const state = {
-      payload: null,
+      previewToken: '',
       targetSpace: null,
       targetLabel: '',
       targetAssetId: '',
@@ -298,6 +298,18 @@
       }
     }
 
+    function clearPreviewState() {
+      state.previewToken = '';
+      importPreviewWrapper?.classList.add('d-none');
+      if (importPreviewSummary) {
+        importPreviewSummary.textContent = DEFAULT_TEXTS.previewSummary;
+      }
+      if (importApplyBtn) {
+        importApplyBtn.classList.add('d-none');
+        importApplyBtn.disabled = true;
+      }
+    }
+
     function setImportMode(mode) {
       if (mode === 'file') {
         importManualPanel?.classList.add('d-none');
@@ -307,11 +319,8 @@
         importFilePanel?.classList.add('d-none');
       }
       hideImportFeedback();
-      state.payload = null;
-      importPreviewWrapper?.classList.add('d-none');
+      clearPreviewState();
       if (importApplyBtn) {
-        importApplyBtn.classList.add('d-none');
-        importApplyBtn.disabled = true;
         delete importApplyBtn.dataset.originalLabel;
         importApplyBtn.innerHTML = '确认导入';
       }
@@ -319,7 +328,7 @@
     }
 
     function resetModal() {
-      state.payload = null;
+      state.previewToken = '';
       state.targetLabel = '';
       state.targetAssetId = '';
       if (assetRequestController) {
@@ -339,15 +348,8 @@
         importFileInput.value = '';
       }
       hideImportFeedback();
-      importPreviewWrapper?.classList.add('d-none');
       importPreviewBody?.replaceChildren();
-      if (importPreviewSummary) {
-        importPreviewSummary.textContent = DEFAULT_TEXTS.previewSummary;
-      }
-      if (importApplyBtn) {
-        importApplyBtn.classList.add('d-none');
-        importApplyBtn.disabled = true;
-      }
+      clearPreviewState();
       setButtonLoading(importPreviewBtn, false);
       if (importModeRadios.length) {
         importModeRadios.forEach((radio) => {
@@ -402,27 +404,24 @@
     function handleSpaceChange() {
       state.targetSpace = setSpaceValue(importSpaceSelect?.value);
       state.targetLabel = '';
-      state.payload = null;
       state.targetAssetId = '';
       if (importAssetSelect) {
         importAssetSelect.value = '';
       }
       refreshAssetField();
-      importPreviewWrapper?.classList.add('d-none');
-      if (importPreviewSummary) {
-        importPreviewSummary.textContent = DEFAULT_TEXTS.previewSummary;
-      }
-      if (importApplyBtn) {
-        importApplyBtn.classList.add('d-none');
-        importApplyBtn.disabled = true;
-      }
+      clearPreviewState();
+      hideImportFeedback();
+    }
+
+    function handleAssetChange() {
+      state.targetAssetId = (importAssetSelect?.value || '').trim();
+      clearPreviewState();
       hideImportFeedback();
     }
 
     function submitPreview() {
       hideImportFeedback();
-      importPreviewWrapper?.classList.add('d-none');
-      state.payload = null;
+      clearPreviewState();
       const mode = currentImportMode();
       const formData = new FormData();
       formData.append('mode', mode);
@@ -466,12 +465,7 @@
             const message = (data.errors && data.errors[0]) || data.error || DEFAULT_TEXTS.parseError;
             throw new Error(message);
           }
-          state.payload = data.entries.map((entry) => ({
-            name: entry.name,
-            group: entry.group,
-            secret: entry.secret,
-            source: entry.source,
-          }));
+          state.previewToken = data.preview_token || '';
           state.targetSpace = setSpaceValue(data.space || currentSpace);
           state.targetLabel = data.target_label || (state.targetSpace === 'personal' ? '个人空间' : '');
           state.targetAssetId = (data.asset_id || '').toString();
@@ -498,7 +492,7 @@
     }
 
     function submitApply() {
-      if (!state.payload || !state.payload.length) {
+      if (!state.previewToken) {
         showImportError('请先完成预览');
         return;
       }
@@ -509,7 +503,7 @@
           'Content-Type': 'application/json',
           'X-CSRFToken': getCsrfToken(),
         },
-        body: JSON.stringify({ space: state.targetSpace, asset_id: state.targetAssetId || '', entries: state.payload }),
+        body: JSON.stringify({ preview_token: state.previewToken }),
         credentials: 'same-origin',
       })
         .then(async (resp) => {
@@ -519,7 +513,9 @@
             return;
           }
           if (!resp.ok || !data.ok) {
-            const message = data.error || DEFAULT_TEXTS.applyError;
+            const message = (data.error === 'preview_expired' || data.error === 'preview_invalid')
+              ? '导入预览已失效，请重新预览后再导入'
+              : (data.error === 'preview_required' ? '请先完成预览' : (data.error || DEFAULT_TEXTS.applyError));
             throw new Error(message);
           }
           if (typeof config.onApplySuccess === 'function') {
@@ -547,6 +543,9 @@
 
     refreshAssetField();
     importSpaceSelect?.addEventListener('change', handleSpaceChange);
+    importAssetSelect?.addEventListener('change', handleAssetChange);
+    importManualText?.addEventListener('input', clearPreviewState);
+    importFileInput?.addEventListener('change', clearPreviewState);
     importPreviewBtn?.addEventListener('click', submitPreview);
     importApplyBtn?.addEventListener('click', submitApply);
     modalEl.addEventListener('hidden.bs.modal', resetModal);

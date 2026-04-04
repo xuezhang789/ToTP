@@ -335,6 +335,13 @@ class BrowserRegressionTests(BrowserLiveServerTestCase):
 
         self._login_via_form(self.page, "browser_share_owner", "StrongPass123!")
         self.page.goto(self._absolute_url(reverse("totp:list")), wait_until="domcontentloaded")
+        code_locator = self.page.locator(f"tr[data-id='{entry.id}'] .code-text")
+        self.page.wait_for_function(
+            "(entryId) => { const el = document.querySelector(`tr[data-id='${entryId}'] .code-text`); return !!el && el.textContent.trim() !== '••••••'; }",
+            arg=entry.id,
+        )
+        original_code = code_locator.text_content().strip()
+        self.assertRegex(original_code, r"^\d{6}$")
 
         self.page.locator(f"button.share-link-btn[data-entry-id='{entry.id}']").click()
         self.page.locator("#shareLinkModal.show").wait_for()
@@ -357,6 +364,11 @@ class BrowserRegressionTests(BrowserLiveServerTestCase):
             share_url,
         )
         self.assertIn("分享链接已生成", self.page.locator("#shareLinkResult").text_content())
+        self.page.wait_for_function(
+            "(entryId) => { const el = document.querySelector(`tr[data-id='${entryId}'] .code-text`); return !!el && el.textContent.trim() !== '••••••'; }",
+            arg=entry.id,
+        )
+        self.assertRegex(code_locator.text_content().strip(), r"^\d{6}$")
 
         self.page.locator("#shareLinkCopyBtn").click()
         self.page.wait_for_function(

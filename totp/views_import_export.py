@@ -20,6 +20,11 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from . import importers
+from .import_preview_service import (
+    discard_import_preview,
+    load_import_preview,
+    store_import_preview,
+)
 from .models import Group, TeamAsset, TOTPEntry, TOTPEntryAudit
 from .utils import decrypt_str, encrypt_str, normalize_google_secret
 from .views import (
@@ -100,6 +105,7 @@ def batch_import_preview(request):
         )
 
     entries_payload = []
+    stored_entries_payload = []
     duplicates = 0
     ignored_groups = False
     for entry in result.entries:
@@ -115,10 +121,17 @@ def batch_import_preview(request):
             {
                 "name": entry.name,
                 "group": group_value,
-                "secret": entry.secret,
                 "source": entry.source,
                 "exists": exists,
                 "secret_preview": _secret_preview(entry.secret),
+            }
+        )
+        stored_entries_payload.append(
+            {
+                "name": entry.name,
+                "group": group_value,
+                "secret": entry.secret,
+                "source": entry.source,
             }
         )
 
@@ -128,12 +141,21 @@ def batch_import_preview(request):
     if ignored_groups:
         warnings.append("团队空间不支持分组，已忽略导入数据中的分组信息")
 
+    preview_token = store_import_preview(
+        request,
+        space=space,
+        target_label=target_label,
+        asset_id=str(target_asset.id) if target_asset else "",
+        entries=stored_entries_payload,
+    )
+
     return JsonResponse(
         {
             "ok": True,
             "space": space,
             "target_label": target_label,
             "asset_id": str(target_asset.id) if target_asset else "",
+            "preview_token": preview_token,
             "entries": entries_payload,
             "warnings": warnings,
             "summary": {
@@ -155,19 +177,27 @@ def batch_import_apply(request):
     except (TypeError, ValueError):
         return JsonResponse({"ok": False, "error": "请求格式无效"}, status=400)
 
+    preview_token = (payload.get("preview_token") or "").strip()
+    if not preview_token:
+        return JsonResponse({"ok": False, "error": "preview_required"}, status=400)
+    try:
+        preview = load_import_preview(request, preview_token)
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
     if not _has_recent_reauth(request):
         return _reauth_json(request)
 
     try:
         space, target_team, _target_label = _resolve_import_target(
             request.user,
-            payload.get("space"),
+            preview.get("space"),
             require_manage=True,
         )
     except ValueError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
-    raw_asset_id = (payload.get("asset_id") or "").strip()
+    raw_asset_id = (preview.get("asset_id") or "").strip()
     target_asset = None
     if target_team is not None and raw_asset_id:
         try:
@@ -175,7 +205,7 @@ def batch_import_apply(request):
         except (TeamAsset.DoesNotExist, TypeError, ValueError):
             return JsonResponse({"ok": False, "error": "invalid_asset"}, status=400)
 
-    raw_entries = payload.get("entries") or []
+    raw_entries = preview.get("entries") or []
     if not isinstance(raw_entries, list) or not raw_entries:
         return JsonResponse({"ok": False, "error": "缺少有效的导入数据"}, status=400)
     import_limit = _import_entries_limit()
@@ -241,6 +271,8 @@ def batch_import_apply(request):
 
     for err in errors:
         messages.warning(request, err)
+
+    discard_import_preview(request, preview_token)
 
     redirect_url = reverse("totp:list")
     if target_team is not None:
