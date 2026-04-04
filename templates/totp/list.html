@@ -246,34 +246,45 @@
         </div>
     </section>
 
-    <div class="card app-table-card">
-        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div class="d-flex align-items-center gap-2">
-                <strong class="text-uppercase small text-muted">
-                    {% if selected_team %}
-                        {{ selected_team.name }} · 团队密钥
-                    {% else %}
-                        我的密钥
-                    {% endif %}
-                </strong>
-                {% if selected_team and selected_membership %}
-                <span class="badge rounded-pill bg-light text-muted fw-semibold">
-                    {{ selected_membership.get_role_display }}
-                </span>
-                {% endif %}
+    <div class="card app-table-card entry-list-card">
+        <div class="card-header entry-list-head">
+            <div class="entry-list-head-main">
+                <div class="entry-list-title-row">
+                    <div>
+                        <div class="entry-list-kicker">{% if selected_team %}团队密钥列表{% else %}个人密钥列表{% endif %}</div>
+                        <div class="entry-list-title">
+                            {% if selected_team %}
+                            {{ selected_team.name }} 中可访问的密钥
+                            {% else %}
+                            个人空间中的全部密钥
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="entry-list-chip-row">
+                        <span class="team-page-chip">{{ page_obj.paginator.count }} 条</span>
+                        {% if selected_team and selected_membership %}
+                        <span class="team-page-chip team-page-chip-primary">{{ selected_membership.get_role_display }}</span>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
-            <div class="d-flex align-items-center gap-2 text-muted small">
-                <span>
-                    下次刷新倒计时：<span class="fw-semibold text-dark" id="countdown">--</span>s
-                </span>
-                <span class="badge rounded-pill bg-light text-muted" id="refreshStatus" role="button" tabindex="0">自动刷新中</span>
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="manualRefreshBtn">
-                    手动刷新
-                </button>
+            <div class="entry-list-refresh">
+                <div class="entry-list-refresh-copy">
+                    <div class="entry-list-refresh-value">
+                        <span class="fw-semibold text-dark" id="countdown">--</span>
+                        <span class="entry-list-refresh-unit">秒后自动刷新</span>
+                    </div>
+                </div>
+                <div class="entry-list-refresh-actions">
+                    <span class="badge rounded-pill bg-light text-muted entry-list-refresh-badge" id="refreshStatus" role="button" tabindex="0">自动刷新中</span>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="manualRefreshBtn">
+                        刷新列表
+                    </button>
+                </div>
             </div>
         </div>
-        <div class="table-responsive table-cardify-wrapper">
-            <table class="table table-hover table-striped mb-0 align-middle table-cardify" id="totpTable">
+        <div class="table-responsive table-cardify-wrapper entry-list-table-wrap">
+            <table class="table table-hover table-striped mb-0 align-middle table-cardify entry-list-table" id="totpTable">
                 <thead>
                 <tr>
                     <th>名称</th>

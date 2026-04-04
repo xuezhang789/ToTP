@@ -380,12 +380,12 @@
     <div class="card">
         <div class="card-body">
             <h1 class="summary-title">离线验证码包</h1>
-            <p class="summary-meta">本离线包由 <strong>{{ owner.username }}</strong> 导出，生成于 {{ generated_at|date:"Y-m-d H:i" }}。所有验证码均在本地计算，使用完毕请及时销毁。</p>
+            <p class="summary-meta">本离线包由 <strong>{{ owner.username }}</strong> 导出，生成于 {{ generated_at|date:"Y-m-d H:i" }}。所有验证码都在当前文件内本地计算，完成验证后请及时销毁。</p>
             <ul class="meta-list">
                 <li>共 {{ entry_count }} 条</li>
                 <li>刷新周期 30 秒</li>
                 <li id="uaInfo">浏览器信息获取中...</li>
-                <li>主站域名：<strong>https://2fa.97.cx/</strong></li>
+                <li>来源工作台：<strong>{{ site_host }}</strong></li>
             </ul>
             <div class="action-group" style="margin-top:1.2rem;">
                 <button class="btn btn-primary" id="manualRefresh" type="button">手动刷新</button>
@@ -397,12 +397,11 @@
     <div class="card">
         <div class="card-body promo-card">
             <div class="promo-text">
-                <h2>随时访问 2FA 在线工具平台</h2>
-                <p>前往 <strong>https://2fa.97.cx/</strong> 管理团队或个人的 2FA 密钥，支持批量导入、一次性分享链接、离线包导出等丰富功能，助你掌控账号安全。</p>
+                <h2>回到工作台继续管理</h2>
+                <p>如需继续整理个人密钥、团队共享、审计记录或重新导出，可回到原始工作台继续处理。</p>
             </div>
             <div class="promo-actions">
-                <a class="btn btn-primary" href="https://2fa.97.cx/" target="_blank" rel="noopener">立即前往主站</a>
-                <a class="btn btn-sm btn-danger" href="https://2fa.97.cx/#features" target="_blank" rel="noopener">查看特色功能</a>
+                <a class="btn btn-primary" href="{{ site_url }}" target="_blank" rel="noopener">打开原始工作台</a>
             </div>
         </div>
     </div>
@@ -435,7 +434,7 @@
         </div>
     </div>
 
-    <p class="footer-note">&copy; {{ generated_at|date:"Y" }} 离线导出 · 无网络亦可安全使用 · 主站：<strong>https://2fa.97.cx/</strong></p>
+    <p class="footer-note">&copy; {{ generated_at|date:"Y" }} 离线导出 · 本地计算验证码 · 来源：<strong>{{ site_host }}</strong></p>
 </div>
 {{ entries_payload|json_script:"entries-data" }}
 <script nonce="{{ csp_nonce }}">

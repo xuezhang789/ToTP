@@ -136,7 +136,7 @@
 
                     {% if entries %}
                     <div class="table-responsive team-data-table-wrap">
-                        <table class="table align-middle mb-0 team-data-table">
+                        <table class="table align-middle mb-0 team-data-table entry-list-table entry-list-compact-table table-cardify">
                             <thead>
                             <tr>
                                 {% if can_manage %}<th class="text-nowrap">选择</th>{% endif %}
@@ -146,17 +146,27 @@
                             </thead>
                             <tbody>
                             {% for e in entries %}
-                            <tr>
+                            <tr class="entry-list-row">
                                 {% if can_manage %}
-                                <td class="text-nowrap">
+                                <td class="text-nowrap entry-detail-select">
                                     <input class="form-check-input" type="checkbox" name="entry_ids" value="{{ e.id }}">
                                 </td>
                                 {% endif %}
-                                <td>
-                                    <div class="fw-semibold">{{ e.name }}</div>
+                                <td class="entry-detail-name">
+                                    <div class="entry-main">
+                                        <div class="entry-badge-row">
+                                            <span class="entry-scope-chip">已归属</span>
+                                            <span class="entry-scope-chip is-manageable">当前资产</span>
+                                        </div>
+                                        <div class="entry-title-row">
+                                            <span class="entry-name">{{ e.name }}</span>
+                                        </div>
+                                    </div>
                                 </td>
-                                <td class="text-muted small">
-                                    {% if e.group %}{{ e.group.name }}{% else %}未分组{% endif %}
+                                <td class="entry-detail-group" data-label="分组">
+                                    <span class="entry-assignment-pill {% if not e.group %}is-muted{% endif %}">
+                                        {% if e.group %}{{ e.group.name }}{% else %}未分组{% endif %}
+                                    </span>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -192,7 +202,7 @@
 
                     {% if unassigned_entries %}
                     <div class="table-responsive team-data-table-wrap">
-                        <table class="table align-middle mb-0 team-data-table">
+                        <table class="table align-middle mb-0 team-data-table entry-list-table entry-list-compact-table table-cardify">
                             <thead>
                             <tr>
                                 {% if can_manage %}<th class="text-nowrap">选择</th>{% endif %}
@@ -201,15 +211,25 @@
                             </thead>
                             <tbody>
                             {% for e in unassigned_entries %}
-                            <tr>
+                            <tr class="entry-list-row">
                                 {% if can_manage %}
-                                <td class="text-nowrap">
+                                <td class="text-nowrap entry-detail-select">
                                     <input class="form-check-input" type="checkbox" name="entry_ids" value="{{ e.id }}">
                                 </td>
                                 {% endif %}
-                                <td>
-                                    <div class="fw-semibold">{{ e.name }}</div>
-                                    <div class="text-muted small">{% if e.group %}当前分组：{{ e.group.name }}{% else %}未分组{% endif %}</div>
+                                <td class="entry-detail-name" data-label="名称">
+                                    <div class="entry-main">
+                                        <div class="entry-badge-row">
+                                            <span class="entry-scope-chip is-readonly">待归档</span>
+                                            <span class="entry-scope-chip">团队密钥</span>
+                                        </div>
+                                        <div class="entry-title-row">
+                                            <span class="entry-name">{{ e.name }}</span>
+                                        </div>
+                                        <div class="entry-meta-row">
+                                            <span class="entry-meta-copy">{% if e.group %}当前分组：{{ e.group.name }}{% else %}未分组{% endif %}</span>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}

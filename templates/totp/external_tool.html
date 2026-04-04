@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}在线动态验证码生成器{% endblock %}
+{% block title %}TOTP 快速验证工具{% endblock %}
 
 {% block content %}
 <section class="workspace-public-shell">
@@ -7,18 +7,18 @@
     <div class="workspace-hero-grid">
       <aside class="workspace-hero-side">
         <span class="workspace-hero-chip"><i class="bi bi-lightning-charge"></i> 即时工具</span>
-        <h1 class="h3 fw-semibold mt-3 mb-3">在线动态验证码生成器</h1>
-        <p class="mb-4">输入 Base32 密钥后，即可在当前页面实时计算 TOTP 验证码。适合临时排查、切换设备或做应急核对。</p>
+        <h1 class="h3 fw-semibold mt-3 mb-3">TOTP 快速验证工具</h1>
+        <p class="mb-4">输入 Base32 密钥后即可立即生成验证码，适合临时排查、设备切换或应急核对。</p>
         <ul class="list-unstyled small mb-0">
           <li class="mb-2"><i class="bi bi-shield-lock-fill me-2"></i>无需登录，打开即可使用</li>
-          <li class="mb-2"><i class="bi bi-cpu me-2"></i>本地计算，不做持久化存储</li>
-          <li><i class="bi bi-phone me-2"></i>在桌面和手机上都能顺畅使用</li>
+          <li class="mb-2"><i class="bi bi-cpu me-2"></i>页面内本地计算，不做持久化保存</li>
+          <li><i class="bi bi-phone me-2"></i>兼容桌面与手机端操作</li>
         </ul>
       </aside>
       <div class="workspace-hero-body">
-        <div class="team-section-kicker">快速生成</div>
-        <h2 class="team-page-panel-title mt-2">填写密钥后立即计算</h2>
-        <p class="text-muted small mb-4">支持 4-8 位数字和常见周期。若这是长期使用的密钥，建议登录后加密保存到工作台。</p>
+        <div class="team-section-kicker">快速验证</div>
+        <h2 class="team-page-panel-title mt-2">填写密钥后立即生成验证码</h2>
+        <p class="text-muted small mb-4">支持常见位数与周期配置。若这是长期使用的密钥，建议登录后保存到个人或团队工作台。</p>
 
         <form id="totp-form" class="needs-validation" novalidate data-endpoint="{% url 'totp:external_totp' %}">
           <div class="mb-3">
@@ -47,7 +47,7 @@
           </div>
           <div class="d-flex flex-wrap gap-2">
             <button class="btn btn-primary px-4" type="submit">生成验证码</button>
-            <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">返回首页</a>
+            <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">回到首页</a>
           </div>
         </form>
 

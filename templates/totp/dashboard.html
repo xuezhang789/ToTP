@@ -10,171 +10,327 @@
 {% endblock %}
 {% block content %}
 {% if request.user.is_authenticated %}
-<div class="team-page">
-    <section class="team-page-header">
-        <div class="team-page-header-bar">
-            <div class="team-page-header-main">
-                <div class="team-page-breadcrumb">
-                    <span class="fw-semibold">工作台</span>
-                    <span>/</span>
-                    <span class="fw-semibold">总览</span>
-                </div>
-                <div class="team-page-title-row">
-                    <h1 class="app-section-title mb-0">欢迎回来，{{ request.user.username }}</h1>
-                </div>
-                <p class="team-page-summary mb-0">在同一套工作台里管理个人密钥、团队协作、分享链接、审计记录和导出备份。</p>
+<div class="team-page workspace-home">
+    <section class="workspace-home-hero">
+        <div class="workspace-home-hero-main">
+            <div class="team-page-breadcrumb">
+                <span class="fw-semibold">工作台</span>
+                <span>/</span>
+                <span class="fw-semibold">总览</span>
             </div>
-            <div class="team-page-header-actions">
+            <div class="workspace-home-title-row">
+                <h1 class="app-section-title mb-0">欢迎回来，{{ request.user.username }}</h1>
+                <span class="workspace-home-title-badge">登录后首页</span>
+            </div>
+            <p class="workspace-home-summary mb-0">把个人验证码、团队协作、分享治理和最近活动放在同一页里，先看状态，再直接进入操作。</p>
+            <div class="workspace-home-pill-row">
+                <span class="workspace-home-pill"><i class="bi bi-collection"></i>共 {{ stats.total_entries|default:0 }} 条验证码</span>
+                <span class="workspace-home-pill"><i class="bi bi-plus-circle"></i>今日新增 {{ stats.today_added|default:0 }}</span>
+                <span class="workspace-home-pill"><i class="bi bi-people"></i>{{ stats.team_count|default:0 }} 个团队空间</span>
+            </div>
+            <div class="workspace-home-action-row">
                 <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#addModal">
-                    <i class="bi bi-plus-lg me-1"></i> 添加密钥
+                    <i class="bi bi-plus-lg me-1"></i>添加密钥
                 </button>
                 <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#importModal">
-                    <i class="bi bi-arrow-bar-up me-1"></i> 批量导入
+                    <i class="bi bi-arrow-bar-up me-1"></i>批量导入
                 </button>
                 <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}">
-                    <i class="bi bi-grid me-1"></i> 打开列表
+                    <i class="bi bi-grid me-1"></i>个人空间
                 </a>
                 <a class="btn btn-outline-secondary" href="{% url 'totp:teams' %}">
-                    <i class="bi bi-people me-1"></i> 团队空间
+                    <i class="bi bi-people me-1"></i>团队空间
                 </a>
             </div>
         </div>
-
-        <div class="team-page-kpi-grid">
-            <div class="team-page-kpi">
-                <div class="team-page-kpi-head">
-                    <span class="team-page-kpi-label">全部密钥</span>
-                    <span class="team-page-kpi-icon"><i class="bi bi-collection"></i></span>
+        <aside class="workspace-home-hero-side">
+            <div class="workspace-home-focus-card">
+                <div class="workspace-home-focus-label">当前焦点</div>
+                {% if not stats.total_entries %}
+                <h2>先把第一条验证码放进工作台</h2>
+                <p>添加常用条目或批量导入旧数据后，首页的空间状态和最近活动才会开始变得有价值。</p>
+                <div class="workspace-home-focus-actions">
+                    <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addModal">添加密钥</button>
+                    <button class="btn btn-light btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#importModal">批量导入</button>
                 </div>
-                <div class="team-page-kpi-value">{{ stats.total_entries|default:0 }}</div>
-                <div class="team-page-kpi-meta">含个人与团队空间{% if stats.today_added %} · 今日新增 {{ stats.today_added }}{% endif %}</div>
-            </div>
-            <div class="team-page-kpi">
-                <div class="team-page-kpi-head">
-                    <span class="team-page-kpi-label">个人空间</span>
-                    <span class="team-page-kpi-icon"><i class="bi bi-person-lines-fill"></i></span>
+                {% elif stats.personal_entries and not stats.group_count %}
+                <h2>先把个人空间整理成分组</h2>
+                <p>已有个人条目，但还没有分组。补上结构后，后续查找、导出和维护都会更顺手。</p>
+                <div class="workspace-home-focus-actions">
+                    <a class="btn btn-primary btn-sm" href="{% url 'totp:list' %}">打开列表</a>
+                    <button class="btn btn-light btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#importModal">继续导入</button>
                 </div>
-                <div class="team-page-kpi-value">{{ stats.personal_entries|default:0 }}</div>
-                <div class="team-page-kpi-meta">{% if stats.group_count %}已用 {{ stats.group_count }} 个分组{% else %}尚未设置分组{% endif %}</div>
-            </div>
-            <div class="team-page-kpi" data-state="{% if stats.shared_entries %}primary{% else %}safe{% endif %}">
-                <div class="team-page-kpi-head">
-                    <span class="team-page-kpi-label">团队空间</span>
-                    <span class="team-page-kpi-icon"><i class="bi bi-people"></i></span>
+                {% elif not stats.team_count %}
+                <h2>如果需要协作，现在可以开始团队空间</h2>
+                <p>个人空间已经可用。接下来可以创建或加入团队，把共享验证码、权限边界和审计记录放到同一处管理。</p>
+                <div class="workspace-home-focus-actions">
+                    <a class="btn btn-primary btn-sm" href="{% url 'totp:teams' %}">进入团队空间</a>
+                    <a class="btn btn-light btn-sm" href="{% url 'totp:one_time_audit' %}">查看分享审计</a>
                 </div>
-                <div class="team-page-kpi-value">{{ stats.shared_entries|default:0 }}</div>
-                <div class="team-page-kpi-meta">{% if stats.team_count %}来自 {{ stats.team_count }} 个团队{% else %}尚未加入团队空间{% endif %}</div>
-            </div>
-            <div class="team-page-kpi" data-state="warning">
-                <div class="team-page-kpi-head">
-                    <span class="team-page-kpi-label">验证码刷新</span>
-                    <span class="team-page-kpi-icon"><i class="bi bi-stopwatch"></i></span>
+                {% elif stats.today_added %}
+                <h2>今天新增了 {{ stats.today_added }} 条，适合顺手检查结构</h2>
+                <p>可以先确认命名、归属和分享范围，再看最近审计，确保今天的改动都落在正确的空间里。</p>
+                <div class="workspace-home-focus-actions">
+                    <a class="btn btn-primary btn-sm" href="{% url 'totp:list' %}">查看条目</a>
+                    <a class="btn btn-light btn-sm" href="{% url 'totp:one_time_audit' %}">查看分享审计</a>
                 </div>
-                {% with remain=stats.current_cycle_remaining|default:0 total=stats.current_cycle_total|default:30 %}
-                {% if total > 0 %}
-                <div class="team-page-kpi-value"><span id="cycle-remaining-main">{{ remain|default:0 }}</span>s</div>
-                <div class="team-page-kpi-meta">周期 {{ total }}s · 剩余 <span id="cycle-remaining">{{ remain }}</span>s</div>
                 {% else %}
-                <div class="team-page-kpi-value">--</div>
-                <div class="team-page-kpi-meta">当前不可用</div>
+                <p>下面已经汇总了最近新增、团队状态和关键审计，你可以直接从首页判断下一步要处理什么。</p>
                 {% endif %}
-                {% endwith %}
-                {% with total=stats.current_cycle_total|default:30 %}
-                {% if total > 0 %}
-                <div class="progress progress-thin mt-2" role="progressbar" aria-label="当前周期剩余" aria-valuemin="0" aria-valuemax="100">
-                    <div id="cycle-progress" class="progress-bar bg-warning" style="width:0%" aria-valuenow="0"></div>
-                </div>
-                {% endif %}
-                {% endwith %}
             </div>
-        </div>
+            <div class="workspace-home-focus-stats">
+                <div class="workspace-home-focus-stat">
+                    <span class="label">个人分组</span>
+                    <strong>{{ stats.group_count|default:0 }}</strong>
+                </div>
+                <div class="workspace-home-focus-stat">
+                    <span class="label">团队空间</span>
+                    <strong>{{ stats.team_count|default:0 }}</strong>
+                </div>
+                <div class="workspace-home-focus-stat">
+                    <span class="label">最近审计</span>
+                    <strong>{{ recent_audits|length }}</strong>
+                </div>
+            </div>
+        </aside>
     </section>
 
-    <div class="team-page-layout">
-        <div class="team-page-main-column">
-            <section class="team-page-panel">
-                <div class="team-page-panel-head">
-                    <div>
-                        <div class="team-section-kicker">开始工作</div>
-                        <div class="team-page-panel-title">推荐操作</div>
-                    </div>
-                    <div class="team-page-panel-note">先整理空间，再处理分享和备份</div>
-                </div>
-                <ul class="list-unstyled mb-0 quick-start-list">
-                    <li class="d-flex align-items-start gap-3 mb-3">
-                        <span class="quick-start-step">1</span>
-                        <div>
-                            <strong>切换空间与结构</strong>
-                            <p class="mb-0 text-muted small">在列表页切换个人与团队空间，个人用分组、团队用资产保持结构清晰。</p>
-                        </div>
-                    </li>
-                    <li class="d-flex align-items-start gap-3 mb-3">
-                        <span class="quick-start-step">2</span>
-                        <div>
-                            <strong>添加或批量导入</strong>
-                            <p class="mb-0 text-muted small">支持 otpauth:// 和常见导出格式，导入预览会提示重复项和目标空间。</p>
-                        </div>
-                    </li>
-                    <li class="d-flex align-items-start gap-3 mb-3">
-                        <span class="quick-start-step">3</span>
-                        <div>
-                            <strong>按场景分享</strong>
-                            <p class="mb-0 text-muted small">临时协作用一次性访问链接，敏感内容建议缩短有效期并限制查看次数。</p>
-                        </div>
-                    </li>
-                    <li class="d-flex align-items-start gap-3">
-                        <span class="quick-start-step">4</span>
-                        <div>
-                            <strong>审计与备份</strong>
-                            <p class="mb-0 text-muted small">定期查看审计记录，并优先使用加密导出做备份。</p>
-                        </div>
-                    </li>
-                </ul>
-            </section>
-
-            <section class="team-page-panel">
-                <div class="team-page-panel-head">
-                    <div>
-                        <div class="team-section-kicker">能力</div>
-                        <div class="team-page-panel-title">当前工作台能做什么</div>
-                    </div>
-                    <div class="team-page-panel-note">围绕整理、协作、恢复三条主线设计</div>
-                </div>
-                <div class="team-note-stack">
-                    <div class="team-note-item"><strong class="text-body">个人空间</strong><br>用分组整理自己的验证码，配合回收站和加密导出做日常维护。</div>
-                    <div class="team-note-item"><strong class="text-body">团队空间</strong><br>按角色控制可见范围，用资产和审计记录保持协作过程清晰可追踪。</div>
-                    <div class="team-note-item"><strong class="text-body">分享与恢复</strong><br>一次性访问链接适合临时协作，误删内容可以在回收站内恢复。</div>
-                </div>
-            </section>
+    <div class="team-page-kpi-grid workspace-home-kpi-grid">
+        <div class="team-page-kpi">
+            <div class="team-page-kpi-head">
+                <span class="team-page-kpi-label">全部验证码</span>
+                <span class="team-page-kpi-icon"><i class="bi bi-collection"></i></span>
+            </div>
+            <div class="team-page-kpi-value">{{ stats.total_entries|default:0 }}</div>
+            <div class="team-page-kpi-meta">个人与团队空间统一统计</div>
         </div>
+        <div class="team-page-kpi" data-state="{% if stats.group_count %}primary{% else %}safe{% endif %}">
+            <div class="team-page-kpi-head">
+                <span class="team-page-kpi-label">个人空间</span>
+                <span class="team-page-kpi-icon"><i class="bi bi-person-lines-fill"></i></span>
+            </div>
+            <div class="team-page-kpi-value">{{ stats.personal_entries|default:0 }}</div>
+            <div class="team-page-kpi-meta">{% if stats.group_count %}已用 {{ stats.group_count }} 个分组整理{% else %}下一步可补充分组结构{% endif %}</div>
+        </div>
+        <div class="team-page-kpi" data-state="{% if stats.team_count %}primary{% else %}safe{% endif %}">
+            <div class="team-page-kpi-head">
+                <span class="team-page-kpi-label">团队协作</span>
+                <span class="team-page-kpi-icon"><i class="bi bi-people"></i></span>
+            </div>
+            <div class="team-page-kpi-value">{{ stats.shared_entries|default:0 }}</div>
+            <div class="team-page-kpi-meta">{% if stats.team_count %}分布在 {{ stats.team_count }} 个团队中{% else %}还没有团队协作内容{% endif %}</div>
+        </div>
+        <div class="team-page-kpi" data-state="warning">
+            <div class="team-page-kpi-head">
+                <span class="team-page-kpi-label">验证码刷新</span>
+                <span class="team-page-kpi-icon"><i class="bi bi-stopwatch"></i></span>
+            </div>
+            {% with remain=stats.current_cycle_remaining|default:0 total=stats.current_cycle_total|default:30 %}
+            {% if total > 0 %}
+            <div class="team-page-kpi-value"><span id="cycle-remaining-main">{{ remain|default:0 }}</span>s</div>
+            <div class="team-page-kpi-meta">当前周期 {{ total }}s · 剩余 <span id="cycle-remaining">{{ remain }}</span>s</div>
+            {% else %}
+            <div class="team-page-kpi-value">--</div>
+            <div class="team-page-kpi-meta">当前不可用</div>
+            {% endif %}
+            {% endwith %}
+            {% with total=stats.current_cycle_total|default:30 %}
+            {% if total > 0 %}
+            <div class="progress progress-thin mt-2" role="progressbar" aria-label="当前周期剩余" aria-valuemin="0" aria-valuemax="100">
+                <div id="cycle-progress" class="progress-bar bg-warning" style="width:0%" aria-valuenow="0"></div>
+            </div>
+            {% endif %}
+            {% endwith %}
+        </div>
+    </div>
 
-        <aside class="team-page-rail">
+    <div class="workspace-home-body">
+        <div class="workspace-home-main">
+            <section class="team-page-panel">
+                <div class="team-page-panel-head">
+                    <div>
+                        <div class="team-section-kicker">快捷入口</div>
+                        <div class="team-page-panel-title">最常用的操作，直接开始</div>
+                    </div>
+                    <div class="team-page-panel-note">把个人维护、团队协作和治理动作拆开显示</div>
+                </div>
+                <div class="workspace-home-action-grid">
+                    <article class="workspace-home-action-card">
+                        <div class="workspace-home-action-card-head">
+                            <span class="workspace-home-action-icon"><i class="bi bi-person-lines-fill"></i></span>
+                            <div>
+                                <div class="workspace-home-action-kicker">个人空间</div>
+                                <h3>整理自己的验证码</h3>
+                            </div>
+                        </div>
+                        <p>适合做日常查看、分组维护和命名整理。</p>
+                        <div class="team-page-chip-row">
+                            <span class="team-page-chip team-page-chip-primary">{{ stats.personal_entries|default:0 }} 条个人条目</span>
+                            <span class="team-page-chip">{{ stats.group_count|default:0 }} 个分组</span>
+                        </div>
+                        <a class="btn btn-outline-primary" href="{% url 'totp:list' %}">进入个人空间</a>
+                    </article>
+                    <article class="workspace-home-action-card">
+                        <div class="workspace-home-action-card-head">
+                            <span class="workspace-home-action-icon"><i class="bi bi-people-fill"></i></span>
+                            <div>
+                                <div class="workspace-home-action-kicker">团队空间</div>
+                                <h3>处理共享与权限边界</h3>
+                            </div>
+                        </div>
+                        <p>适合继续查看团队、资产归档和成员协作状态。</p>
+                        <div class="team-page-chip-row">
+                            <span class="team-page-chip team-page-chip-primary">{{ stats.team_count|default:0 }} 个团队</span>
+                            <span class="team-page-chip">{{ stats.shared_entries|default:0 }} 条共享条目</span>
+                        </div>
+                        <a class="btn btn-outline-primary" href="{% url 'totp:teams' %}">进入团队空间</a>
+                    </article>
+                    <article class="workspace-home-action-card">
+                        <div class="workspace-home-action-card-head">
+                            <span class="workspace-home-action-icon"><i class="bi bi-link-45deg"></i></span>
+                            <div>
+                                <div class="workspace-home-action-kicker">分享与审计</div>
+                                <h3>回看临时协作是否仍然安全</h3>
+                            </div>
+                        </div>
+                        <p>统一查看一次性链接记录，确认是否还需要继续保留。</p>
+                        <div class="team-page-chip-row">
+                            <span class="team-page-chip team-page-chip-primary">{{ recent_audits|length }} 条最近审计</span>
+                            <span class="team-page-chip">临时分享可回收</span>
+                        </div>
+                        <a class="btn btn-outline-primary" href="{% url 'totp:one_time_audit' %}">查看分享审计</a>
+                    </article>
+                    <article class="workspace-home-action-card">
+                        <div class="workspace-home-action-card-head">
+                            <span class="workspace-home-action-icon"><i class="bi bi-archive-fill"></i></span>
+                            <div>
+                                <div class="workspace-home-action-kicker">恢复与清理</div>
+                                <h3>处理回收站和误删恢复</h3>
+                            </div>
+                        </div>
+                        <p>需要恢复条目或做阶段性清理时，可以直接从这里进入。</p>
+                        <div class="team-page-chip-row">
+                            <span class="team-page-chip team-page-chip-primary">恢复入口</span>
+                            <span class="team-page-chip">误删可回退</span>
+                        </div>
+                        <a class="btn btn-outline-primary" href="{% url 'totp:trash' %}">打开回收站</a>
+                    </article>
+                </div>
+            </section>
+
+            <section class="team-page-panel">
+                <div class="team-page-panel-head">
+                    <div>
+                        <div class="team-section-kicker">空间状态</div>
+                        <div class="team-page-panel-title">个人结构、团队归属和治理入口</div>
+                    </div>
+                    <div class="team-page-panel-note">不用进入列表，也能先判断当前工作区是否清晰</div>
+                </div>
+                <div class="workspace-home-status-grid">
+                    <article class="workspace-home-status-card">
+                        <div class="workspace-home-status-head">
+                            <div>
+                                <div class="workspace-home-action-kicker">个人空间</div>
+                                <h3>当前结构</h3>
+                            </div>
+                            <span class="workspace-home-mini-badge">{{ stats.personal_entries|default:0 }} 条</span>
+                        </div>
+                        <p>{% if stats.group_count %}你已经在个人空间使用了 {{ stats.group_count }} 个分组。{% else %}你还没有给个人空间建立分组结构。{% endif %}</p>
+                        <div class="team-page-chip-row">
+                            {% if groups %}
+                                {% for group in groups|slice:":4" %}
+                                <a class="team-page-chip" href="{% url 'totp:list' %}?group={{ group.id }}">{{ group.name }}</a>
+                                {% endfor %}
+                                {% if groups|length > 4 %}
+                                <span class="team-page-chip">+{{ groups|length|add:"-4" }} 个分组</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="team-page-chip">未分组</span>
+                                <span class="team-page-chip">可在列表页补充结构</span>
+                            {% endif %}
+                        </div>
+                    </article>
+                    <article class="workspace-home-status-card">
+                        <div class="workspace-home-status-head">
+                            <div>
+                                <div class="workspace-home-action-kicker">团队空间</div>
+                                <h3>当前归属</h3>
+                            </div>
+                            <span class="workspace-home-mini-badge">{{ team_memberships|length }}</span>
+                        </div>
+                        <p>{% if team_memberships %}你已加入团队，可直接继续处理共享、权限和资产归档。{% else %}你还没有加入团队空间，当前工作台以个人使用为主。{% endif %}</p>
+                        <div class="workspace-home-link-list">
+                            {% if team_memberships %}
+                                {% for membership in team_memberships|slice:":4" %}
+                                <a class="workspace-home-inline-link" href="{% url 'totp:team_home' membership.team_id %}">
+                                    <span>{{ membership.team.name }}</span>
+                                    <small>{{ membership.get_role_display }}</small>
+                                </a>
+                                {% endfor %}
+                            {% else %}
+                                <a class="workspace-home-inline-link" href="{% url 'totp:teams' %}">
+                                    <span>进入团队空间</span>
+                                    <small>查看或创建团队</small>
+                                </a>
+                            {% endif %}
+                        </div>
+                    </article>
+                    <article class="workspace-home-status-card">
+                        <div class="workspace-home-status-head">
+                            <div>
+                                <div class="workspace-home-action-kicker">治理与恢复</div>
+                                <h3>常用入口</h3>
+                            </div>
+                            <span class="workspace-home-mini-badge">2 个入口</span>
+                        </div>
+                        <p>分享审计适合处理临时协作，回收站适合做恢复和阶段性清理。</p>
+                        <div class="workspace-home-link-list">
+                            <a class="workspace-home-inline-link" href="{% url 'totp:one_time_audit' %}">
+                                <span>分享审计</span>
+                                <small>检查临时链接是否仍需保留</small>
+                            </a>
+                            <a class="workspace-home-inline-link" href="{% url 'totp:trash' %}">
+                                <span>回收站</span>
+                                <small>恢复误删条目或完成清理</small>
+                            </a>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
             <section class="team-page-panel">
                 <div class="team-page-panel-head">
                     <div>
                         <div class="team-section-kicker">最近新增</div>
-                        <div class="team-page-panel-title">最近活动</div>
+                        <div class="team-page-panel-title">最近进入工作台的验证码</div>
                     </div>
-                    <div class="team-page-panel-note">刚刚加入工作台的密钥</div>
+                    <div class="team-page-panel-note">刚添加的条目通常最值得先检查命名、分组和归属</div>
                 </div>
                 {% if recent_entries %}
-                <div class="team-note-stack">
+                <div class="workspace-home-list">
                     {% for item in recent_entries %}
-                    <div class="team-note-item">
-                        <strong class="text-body">{{ item.name }}</strong><br>
-                        {% if item.team_name %}
-                        团队：{{ item.team_name }}
-                        {% else %}
-                        个人空间 · 分组：{{ item.group_name|default:"未分组" }}
-                        {% endif %}
-                        <div class="small text-muted mt-2">{{ item.created_at|date:"Y-m-d H:i" }}</div>
-                    </div>
+                    <article class="workspace-home-list-item">
+                        <div class="workspace-home-list-head">
+                            <div>
+                                <strong class="workspace-home-list-title">{{ item.name }}</strong>
+                                <div class="workspace-home-list-meta">
+                                    {% if item.team_name %}
+                                    团队空间 · {{ item.team_name }}
+                                    {% else %}
+                                    个人空间 · 分组：{{ item.group_name|default:"未分组" }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <span class="workspace-home-mini-badge">{% if item.team_name %}团队{% else %}个人{% endif %}</span>
+                        </div>
+                        <div class="workspace-home-list-foot">{{ item.created_at|date:"Y-m-d H:i" }}</div>
+                    </article>
                     {% endfor %}
                 </div>
                 {% else %}
                 <div class="team-page-empty compact">
-                    <p class="mb-2 fw-semibold">还没有活动记录</p>
-                    <p class="text-muted small mb-3">可以先添加一条密钥，或从其它工具批量导入。</p>
+                    <p class="mb-2 fw-semibold">还没有新增记录</p>
+                    <p class="text-muted small mb-3">可以先添加一条密钥，或从其他工具批量导入。</p>
                     <div class="d-flex flex-wrap gap-2 justify-content-center">
                         <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addModal">添加密钥</button>
                         <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#importModal">批量导入</button>
@@ -182,39 +338,67 @@
                 </div>
                 {% endif %}
             </section>
+        </div>
+
+        <aside class="workspace-home-rail">
+            <section class="team-page-panel">
+                <div class="team-page-panel-head">
+                    <div>
+                        <div class="team-section-kicker">最近审计</div>
+                        <div class="team-page-panel-title">关键动作时间线</div>
+                    </div>
+                    <div class="team-page-panel-note">导入、删除、分组调整和分享操作都会留痕</div>
+                </div>
+                {% if recent_audits %}
+                <div class="workspace-home-list">
+                    {% for audit in recent_audits|slice:":6" %}
+                    <article class="workspace-home-list-item is-compact">
+                        <div class="workspace-home-list-head">
+                            <div>
+                                <strong class="workspace-home-list-title">{{ audit.entry.name }}</strong>
+                                <div class="workspace-home-list-meta">
+                                    {% if audit.action == 'created' %}创建{% elif audit.action == 'renamed' %}重命名{% elif audit.action == 'group_changed' %}分组调整{% elif audit.action == 'trashed' %}移入回收站{% elif audit.action == 'restored' %}恢复{% elif audit.action == 'deleted' %}永久删除{% else %}操作{% endif %}
+                                    {% if audit.entry.team %} · 团队：{{ audit.entry.team.name }}{% else %} · 个人空间{% endif %}
+                                </div>
+                            </div>
+                            <span class="workspace-home-mini-badge">{% if audit.actor %}{{ audit.actor.username }}{% else %}系统{% endif %}</span>
+                        </div>
+                        <div class="workspace-home-list-foot">
+                            {{ audit.created_at|date:"Y-m-d H:i" }}
+                            {% if audit.old_value or audit.new_value %}
+                            · {{ audit.old_value|default:'—' }} → {{ audit.new_value|default:'—' }}
+                            {% endif %}
+                        </div>
+                    </article>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-muted small">暂无新的审计记录。导入、删除和分享链接等操作会显示在这里。</div>
+                {% endif %}
+            </section>
 
             <section class="team-page-panel">
                 <div class="team-page-panel-head">
                     <div>
-                        <div class="team-section-kicker">审计</div>
-                        <div class="team-page-panel-title">密钥时间线</div>
+                        <div class="team-section-kicker">使用建议</div>
+                        <div class="team-page-panel-title">保持工作台长期清晰</div>
                     </div>
-                    <div class="team-page-panel-note">导入、删除、分享等关键操作都会记录</div>
+                    <div class="team-page-panel-note">减少后续查找和治理成本</div>
                 </div>
-                {% if recent_audits %}
-                <div class="team-note-stack">
-                    {% for audit in recent_audits %}
-                    <div class="team-note-item">
-                        <strong class="text-body">{{ audit.entry.name }}</strong><br>
-                        {% if audit.action == 'created' %}创建{% elif audit.action == 'renamed' %}重命名{% elif audit.action == 'group_changed' %}分组调整{% elif audit.action == 'trashed' %}移入回收站{% elif audit.action == 'restored' %}恢复{% elif audit.action == 'deleted' %}永久删除{% else %}操作{% endif %}
-                        {% if audit.old_value or audit.new_value %}
-                        · {{ audit.old_value|default:'—' }} → {{ audit.new_value|default:'—' }}
-                        {% endif %}
-                        {% if audit.entry.team %}
-                        · 团队：{{ audit.entry.team.name }}
-                        {% else %}
-                        · 个人空间
-                        {% endif %}
-                        <div class="small text-muted mt-2">
-                            {{ audit.created_at|date:"Y-m-d H:i" }}
-                            {% if audit.actor %} · 由 {{ audit.actor.username }}{% endif %}
-                        </div>
+                <div class="workspace-home-note-list">
+                    <div class="workspace-home-note-item">
+                        <strong>个人条目先命名，再补分组</strong>
+                        <span>这样后续导出、查找和恢复时更容易定位。</span>
                     </div>
-                    {% endfor %}
+                    <div class="workspace-home-note-item">
+                        <strong>临时协作用一次性分享链接</strong>
+                        <span>协作完成后顺手检查审计，及时失效不再需要的链接。</span>
+                    </div>
+                    <div class="workspace-home-note-item">
+                        <strong>定期查看回收站和导出备份</strong>
+                        <span>误删可恢复，长期数据则更适合用加密导出做备份。</span>
+                    </div>
                 </div>
-                {% else %}
-                <div class="text-muted small">暂无新的审计记录。导入、删除、分享链接等操作都会记录在这里。</div>
-                {% endif %}
             </section>
         </aside>
     </div>

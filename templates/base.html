@@ -4,9 +4,9 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>{% block title %}2FA在线工具,TOTP管理平台,动态验证码助手{% endblock %}</title>
-    <meta name="keywords" content="2FA,2fa,2fa在线工具,2FA Auth,2FA live,2FA Code,双重验证工具,2FA在线工具"/>
-    <meta name="description" content="免费的TOTP管理平台,动态验证码助手OTP管理平台,2FA在线工具"/>
+    <title>{% block title %}TOTP 管理平台 | 个人与团队统一工作台{% endblock %}</title>
+    <meta name="keywords" content="TOTP管理平台,2FA管理,验证码工作台,团队验证码共享,一次性链接,安全审计,加密备份"/>
+    <meta name="description" content="专业的 TOTP 管理平台，支持个人与团队协同使用，统一管理验证码、共享权限、审计记录与备份恢复。"/>
     <!-- Bootstrap CSS -->
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
@@ -23,10 +23,20 @@
     {% include 'messages.html' %}
     {% block content %}{% endblock %}
 </main>
-<footer class="app-footer text-center py-4">
-    &copy; {% now "Y" %} GA RealTime
-    <a href="https://2fa.97.cx/" target="_blank" rel="noopener"
-       class="text-decoration-none">TOTP管理平台，2FA在线工具</a>
+<footer class="app-footer">
+    <div class="container app-footer-shell">
+        <div class="app-footer-brand">
+            <span class="app-footer-mark"><i class="bi bi-shield-lock-fill"></i></span>
+            <div>
+                <div class="app-footer-title">TOTP 管理平台</div>
+                <p class="app-footer-copy mb-0">个人与团队统一工作台，持续管理验证码、共享与审计。</p>
+            </div>
+        </div>
+        <div class="app-footer-meta">
+            <span>&copy; {% now "Y" %} TOTP 管理平台</span>
+            <a href="{% url 'dashboard' %}" class="text-decoration-none">返回首页</a>
+        </div>
+    </div>
 </footer>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 <div class="toast-container position-fixed bottom-0 end-0 p-3" id="appToastContainer"></div>

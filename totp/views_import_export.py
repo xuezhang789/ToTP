@@ -624,6 +624,8 @@ def export_offline_package(request):
             "owner": request.user,
             "entries_payload": entries_payload,
             "entry_count": len(entries_payload),
+            "site_url": request.build_absolute_uri(reverse("dashboard")),
+            "site_host": request.get_host(),
         },
     )
     response["Content-Type"] = "text/html; charset=utf-8"

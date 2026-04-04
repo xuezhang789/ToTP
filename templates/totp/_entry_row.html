@@ -3,36 +3,46 @@
     data-update-asset-url="{% url 'totp:update_asset' e.id %}"
     data-rename-url="{% url 'totp:rename_entry' e.id %}">
     <td class="entry-cell-name">
-        <div class="d-flex align-items-center gap-2 w-100" style="min-width:0;">
-            {% if e.team %}
-            <span class="badge rounded-pill bg-primary-subtle text-primary fw-semibold flex-shrink-0">
-                {{ e.team.name }}
-            </span>
-            {% endif %}
-            <span class="entry-name flex-grow-1 text-truncate" title="{{ e.name }}">{{ e.name }}</span>
-            {% if e.can_manage %}
-            <button class="btn btn-sm btn-outline-secondary btn-touch rename-btn" type="button"
-                    data-entry-id="{{ e.id }}" data-entry-name="{{ e.name }}"
-                    aria-label="重命名 {{ e.name }}" title="重命名">
-                <i class="bi bi-pencil-square"></i>
-            </button>
-            {% endif %}
+        <div class="entry-main" style="min-width:0;">
+            <div class="entry-main-top">
+                <div class="entry-title-row">
+                    <span class="entry-name text-truncate" title="{{ e.name }}">{{ e.name }}</span>
+                </div>
+                {% if e.can_manage %}
+                <button class="btn btn-sm btn-outline-secondary btn-touch rename-btn" type="button"
+                        data-entry-id="{{ e.id }}" data-entry-name="{{ e.name }}"
+                        aria-label="重命名 {{ e.name }}" title="重命名">
+                    <i class="bi bi-pencil-square"></i>
+                </button>
+                {% endif %}
+            </div>
+            <div class="entry-meta-row">
+                <span class="entry-meta-copy">{% if e.team %}团队密钥{% else %}个人密钥{% endif %}</span>
+                {% if e.can_manage %}
+                <span class="entry-meta-sep" aria-hidden="true">•</span>
+                <span class="entry-meta-copy">可管理</span>
+                {% elif e.team %}
+                <span class="entry-meta-sep" aria-hidden="true">•</span>
+                <span class="entry-meta-copy">只读</span>
+                {% endif %}
+            </div>
         </div>
     </td>
-    <td class="entry-cell-group">
+    <td class="entry-cell-group" data-label="{% if e.team %}资产{% else %}分组{% endif %}">
+        <div class="entry-assignment">
         {% if e.team %}
             {% if e.can_manage %}
             <select class="form-select form-select-sm asset-select" data-current="{{ e.asset_id|default_if_none:'' }}">
-                <option value="" {% if not e.asset_id %}selected{% endif %}>未归属</option>
+                <option value="" {% if not e.asset_id %}selected{% endif %}>未归属资产</option>
                 {% for a in assets %}
                 <option value="{{ a.id }}" {% if e.asset_id == a.id %}selected{% endif %}>{{ a.name }}</option>
                 {% endfor %}
             </select>
             {% else %}
                 {% if e.asset %}
-                    <span class="badge rounded-pill bg-light text-muted fw-semibold">{{ e.asset.name }}</span>
+                    <span class="entry-assignment-pill">{{ e.asset.name }}</span>
                 {% else %}
-                    <span class="badge rounded-pill bg-light text-muted fw-semibold">未归属</span>
+                    <span class="entry-assignment-pill is-muted">未归属资产</span>
                 {% endif %}
             {% endif %}
         {% else %}
@@ -44,22 +54,35 @@
             {% endfor %}
         </select>
         {% endif %}
+        </div>
     </td>
-    <td class="text-nowrap entry-cell-code">
-        <span class="badge text-bg-dark code-badge code-text" role="button" tabindex="0" aria-label="点击复制验证码" data-code-placeholder="••••••">••••••</span>
-        <button class="btn btn-sm btn-outline-secondary btn-touch copy-btn ms-1" type="button" data-code="" data-label-default="复制" title="复制" aria-label="复制验证码">
-            <i class="bi bi-clipboard"></i>
-        </button>
-        <div class="d-md-none text-muted small mt-1">剩余 <span class="remain-mobile">--s</span></div>
+    <td class="text-nowrap entry-cell-code" data-label="验证码">
+        <div class="entry-code-stack">
+            <div class="entry-code-row">
+                <span class="badge text-bg-dark code-badge code-text" role="button" tabindex="0" aria-label="点击复制验证码" data-code-placeholder="••••••">••••••</span>
+                <button class="btn btn-sm btn-outline-primary btn-touch copy-btn" type="button" data-code="" data-label-default="复制" title="复制" aria-label="复制验证码">
+                    <i class="bi bi-clipboard"></i>
+                </button>
+            </div>
+            <div class="entry-code-hint">
+                <span class="d-none d-md-inline">点击验证码即可复制</span>
+                <span class="d-md-none">剩余 <span class="remain-mobile">--s</span></span>
+            </div>
+        </div>
     </td>
     <td class="d-none d-md-table-cell entry-cell-expiry">
-        <div class="progress small" role="progressbar" aria-label="验证码有效期" aria-valuemin="0" aria-valuemax="100">
-            <div class="progress-bar" style="width:0%"></div>
+        <div class="entry-expiry-stack">
+            <div class="progress small" role="progressbar" aria-label="验证码有效期" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar" style="width:0%"></div>
+            </div>
+            <div class="entry-expiry-meta">
+                <small class="text-muted remain">--s</small>
+                <span>后刷新</span>
+            </div>
         </div>
-        <small class="text-muted remain">--s</small>
     </td>
-    <td class="text-nowrap entry-cell-actions">
-        <div class="d-flex flex-wrap gap-2">
+    <td class="text-nowrap entry-cell-actions" data-label="操作">
+        <div class="entry-actions">
             {% if e.can_manage %}
             <button class="btn btn-sm btn-outline-primary btn-touch share-link-btn" type="button"
                     data-entry-id="{{ e.id }}" data-entry-name="{{ e.name }}"

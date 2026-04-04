@@ -3,18 +3,37 @@
     .app-main {
         padding: 1rem;
     }
-    .navbar-brand span {
-        font-size: 1rem;
-    }
-    .navbar .navbar-collapse {
+    .app-navbar {
         padding-top: 0.75rem;
-        padding-bottom: 0.5rem;
     }
-    .navbar .navbar-nav .nav-link {
-        padding: 0.75rem 1rem;
+    .app-navbar-shell {
+        padding: 0.85rem;
+        border-radius: 1.15rem;
+    }
+    .app-navbar-brand-title {
+        font-size: 0.96rem;
+    }
+    .app-navbar-brand-subtitle {
+        font-size: 0.74rem;
+    }
+    .navbar .navbar-collapse,
+    .app-navbar-collapse {
+        padding-top: 0.85rem;
+        padding-bottom: 0.1rem;
+    }
+    .app-navbar-nav {
+        width: 100%;
+        padding: 0.25rem;
+        background: rgba(248, 250, 252, 0.72);
+    }
+    .navbar .navbar-nav .nav-link,
+    .app-navbar-nav .nav-link {
+        width: 100%;
+        padding: 0.78rem 1rem;
         border-radius: 0.9rem;
     }
-    .navbar .navbar-toggler {
+    .navbar .navbar-toggler,
+    .app-navbar-toggler {
         min-height: 44px;
         min-width: 44px;
     }
@@ -41,14 +60,25 @@
         min-width: auto;
     }
     .navbar .navbar-collapse .btn,
-    .navbar .navbar-collapse form {
+    .navbar .navbar-collapse form,
+    .app-navbar-collapse .btn,
+    .app-navbar-collapse form {
         width: 100%;
     }
-    .navbar .navbar-collapse .btn {
+    .navbar .navbar-collapse .btn,
+    .app-navbar-collapse .btn {
         justify-content: center;
     }
-    .navbar .navbar-collapse .navbar-actions {
+    .navbar .navbar-collapse .navbar-actions,
+    .app-navbar-collapse .navbar-actions {
         margin-top: 0.5rem;
+    }
+    .app-navbar-actions {
+        width: 100%;
+    }
+    .app-navbar-user {
+        width: 100%;
+        justify-content: center;
     }
     .table-responsive {
         -webkit-overflow-scrolling: touch;
@@ -64,6 +94,34 @@
     .nav-tabs .nav-link {
         min-height: 44px;
         border-radius: 0.8rem 0.8rem 0 0;
+    }
+    .dropdown-menu {
+        width: 100%;
+        max-width: 100%;
+        padding: 0.35rem;
+    }
+    .dropdown-item {
+        min-height: 44px;
+    }
+    .modal-dialog {
+        margin: 0.75rem;
+    }
+    .modal-content {
+        border-radius: 1.1rem;
+    }
+    .offcanvas-header,
+    .offcanvas-body {
+        padding: 0.95rem;
+    }
+    .app-message {
+        padding: 0.85rem 0.9rem;
+    }
+    .app-message-content {
+        gap: 0.7rem;
+    }
+    .app-message-icon {
+        width: 2.1rem;
+        height: 2.1rem;
     }
     .team-home-hero {
         padding: 1.05rem;
@@ -169,6 +227,15 @@
     .landing-entry-grid {
         grid-template-columns: 1fr;
     }
+    .landing-entry-card {
+        padding: 1rem;
+    }
+    .landing-entry-meta {
+        gap: 0.4rem;
+    }
+    .landing-entry-card .btn {
+        width: 100%;
+    }
     .landing-section-head {
         flex-direction: column;
         align-items: flex-start;
@@ -212,6 +279,22 @@
     .auth-side-panel {
         padding: 1rem;
     }
+    .auth-page-login .auth-hero,
+    .auth-page-signup .auth-hero {
+        padding: 0.95rem;
+    }
+    .auth-page-login .auth-hero-title,
+    .auth-page-signup .auth-hero-title {
+        font-size: 2rem;
+    }
+    .auth-page-login .auth-panel-login,
+    .auth-page-signup .auth-panel-signup {
+        padding: 1.15rem 1rem;
+    }
+    .auth-page-login .auth-side-panel-subtle,
+    .auth-page-signup .auth-side-panel-subtle {
+        padding: 0.95rem;
+    }
     .auth-panel-head,
     .auth-side-item {
         gap: 0.75rem;
@@ -224,6 +307,49 @@
     }
     .team-page-kpi-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .workspace-home-hero,
+    .workspace-home-body,
+    .workspace-home-action-grid,
+    .workspace-home-status-grid,
+    .workspace-home-focus-stats,
+    .workspace-hero-grid {
+        grid-template-columns: 1fr;
+    }
+    .workspace-home-hero {
+        padding: 1rem;
+    }
+    .workspace-hero-grid {
+        padding: 1rem;
+    }
+    .workspace-hero-side,
+    .workspace-hero-body {
+        padding: 1rem;
+    }
+    .workspace-hero-body .col-6 {
+        width: 100%;
+    }
+    .workspace-hero-body .btn {
+        width: 100%;
+    }
+    .workspace-home-title-row {
+        align-items: flex-start;
+    }
+    .workspace-home-action-row,
+    .workspace-home-focus-actions {
+        width: 100%;
+    }
+    .workspace-home-action-row .btn,
+    .workspace-home-focus-actions .btn,
+    .workspace-home-action-card .btn {
+        width: 100%;
+    }
+    .workspace-home-action-card,
+    .workspace-home-status-card,
+    .workspace-home-list-item,
+    .workspace-home-inline-link,
+    .workspace-home-note-item {
+        padding: 0.95rem;
     }
     .team-page-panel,
     .team-page-section,
@@ -265,6 +391,35 @@
     .profile-summary-grid,
     .team-page .app-table-card .card-header {
         grid-template-columns: 1fr;
+    }
+    .entry-list-head {
+        grid-template-columns: 1fr;
+    }
+    .entry-list-head,
+    .entry-list-table-wrap {
+        padding-left: 0.9rem;
+        padding-right: 0.9rem;
+    }
+    .entry-list-title {
+        font-size: 1.12rem;
+    }
+    .entry-list-table-wrap {
+        padding-bottom: 0.9rem;
+    }
+    .entry-list-refresh,
+    .entry-list-refresh-copy {
+        justify-items: start;
+        text-align: left;
+    }
+    .entry-list-refresh {
+        min-width: 0;
+    }
+    .entry-list-refresh-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .entry-list-refresh-actions .btn {
+        width: 100%;
     }
     .team-audit-item-head .badge {
         align-self: flex-start;
@@ -363,6 +518,18 @@
     .team-home-main-head {
         flex-direction: column;
     }
+    .app-footer-shell,
+    .app-footer-meta {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .app-footer-shell {
+        padding: 1rem;
+    }
+    .app-footer-brand,
+    .app-footer-meta {
+        width: 100%;
+    }
     .team-workspace-toolbar {
         flex-direction: column;
         padding: 0.9rem;
@@ -412,8 +579,9 @@
         background: #ffffff;
         border: 1px solid rgba(15, 23, 42, 0.08);
         border-radius: 1rem;
-        padding: 0.75rem 0.85rem;
-        margin: 0.75rem 0.75rem;
+        padding: 0.9rem 0.95rem;
+        margin: 0.75rem 0;
+        box-shadow: 0 16px 34px -30px rgba(15, 23, 42, 0.25);
     }
     table.table-cardify tr.no-data {
         background: transparent;
@@ -435,7 +603,7 @@
         padding-bottom: 0;
     }
     table.table-cardify td.entry-cell-group::before {
-        content: "分组";
+        content: attr(data-label);
         display: block;
         font-size: 0.8rem;
         color: rgba(100, 116, 139, 1);
@@ -458,6 +626,52 @@
     table.table-cardify td.entry-cell-actions .btn,
     table.table-cardify td.entry-cell-actions .btn-sm {
         flex: 1 1 auto;
+    }
+    table.entry-list-table.table-cardify td.entry-cell-name .entry-main-top,
+    table.entry-list-table.table-cardify td.entry-cell-name .entry-title-row {
+        align-items: flex-start;
+    }
+    table.entry-list-table.table-cardify td.entry-cell-name .entry-main-top {
+        flex-direction: column;
+    }
+    table.entry-list-table.table-cardify td.entry-cell-code .entry-code-row,
+    table.entry-list-table.table-cardify td.entry-cell-code .entry-code-hint,
+    table.entry-list-table.table-cardify td.entry-cell-actions .entry-actions {
+        justify-content: flex-start;
+    }
+    table.entry-list-table.table-cardify td.entry-cell-code .entry-code-row {
+        flex-wrap: wrap;
+    }
+    table.entry-list-table.table-cardify td.entry-cell-actions .entry-actions {
+        gap: 0.55rem;
+    }
+    table.entry-list-table.table-cardify td.entry-cell-actions form,
+    table.entry-list-table.table-cardify td.entry-cell-actions .btn {
+        width: 100%;
+    }
+    table.entry-list-table.table-cardify td.entry-cell-actions form .btn {
+        width: 100%;
+    }
+    table.entry-list-table.table-cardify td.entry-detail-select::before {
+        content: "选择";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.entry-list-table.table-cardify td.entry-detail-name::before {
+        content: "名称";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.entry-list-table.table-cardify td.entry-detail-group::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
     }
     table.table-cardify td.trash-cell-group::before {
         content: "分组";

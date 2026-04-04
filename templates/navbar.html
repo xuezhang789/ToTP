@@ -1,40 +1,62 @@
-<nav class="navbar navbar-expand-lg navbar-light">
-    <div class="container">
-        <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'dashboard' %}">
-            <i class="bi bi-shield-lock-fill text-primary fs-5"></i>
-            <span>2FA在线工具</span>
+<nav class="navbar navbar-expand-lg navbar-light app-navbar">
+    <div class="container app-navbar-shell">
+        <a class="navbar-brand app-navbar-brand" href="{% url 'dashboard' %}">
+            <span class="app-navbar-brand-mark"><i class="bi bi-shield-lock-fill"></i></span>
+            <span class="app-navbar-brand-copy">
+                <span class="app-navbar-brand-title">TOTP 管理平台</span>
+                <span class="app-navbar-brand-subtitle">个人与团队统一工作台</span>
+            </span>
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-controls="nav"
+        <button class="navbar-toggler app-navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-controls="nav"
                 aria-expanded="false" aria-label="展开导航">
             <span class="navbar-toggler-icon"></span>
         </button>
-        <div class="collapse navbar-collapse" id="nav">
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                {% if request.user.is_authenticated %}
-                {% with current=request.resolver_match.url_name %}
-                <li class="nav-item me-2">
-                    <a class="nav-link px-3 {% if current == 'list' %}active{% endif %}"
-                       href="{% url 'totp:list' %}">我的密钥</a>
+        <div class="collapse navbar-collapse app-navbar-collapse" id="nav">
+            {% with current=request.resolver_match.url_name %}
+            <ul class="navbar-nav app-navbar-nav me-auto mb-2 mb-lg-0">
+                <li class="nav-item">
+                    <a class="nav-link {% if current == 'dashboard' %}active{% endif %}"
+                       href="{% url 'dashboard' %}">
+                        <i class="bi bi-house-door"></i>
+                        <span>工作台</span>
+                    </a>
                 </li>
-                <li class="nav-item me-2">
-                    <a class="nav-link px-3 {% if current == 'teams' %}active{% endif %}"
-                       href="{% url 'totp:teams' %}">团队空间</a>
+                {% if request.user.is_authenticated %}
+                <li class="nav-item">
+                    <a class="nav-link {% if current == 'list' %}active{% endif %}"
+                       href="{% url 'totp:list' %}">
+                        <i class="bi bi-grid"></i>
+                        <span>个人空间</span>
+                    </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link px-3 {% if current == 'trash' %}active{% endif %}"
-                       href="{% url 'totp:trash' %}">回收站</a>
+                    <a class="nav-link {% if current == 'teams' or current == 'team_home' or current == 'team_audit' or current == 'team_assets' or current == 'team_asset_detail' or current == 'team_asset_create' or current == 'team_asset_edit' %}active{% endif %}"
+                       href="{% url 'totp:teams' %}">
+                        <i class="bi bi-people"></i>
+                        <span>团队空间</span>
+                    </a>
                 </li>
-                {% endwith %}
+                <li class="nav-item">
+                    <a class="nav-link {% if current == 'trash' %}active{% endif %}"
+                       href="{% url 'totp:trash' %}">
+                        <i class="bi bi-archive"></i>
+                        <span>回收站</span>
+                    </a>
+                </li>
                 {% endif %}
             </ul>
-            <div class="navbar-actions d-flex flex-column flex-lg-row gap-2 align-items-stretch align-items-lg-center mt-2 mt-lg-0">
+            {% endwith %}
+            <div class="navbar-actions app-navbar-actions d-flex flex-column flex-lg-row gap-2 align-items-stretch align-items-lg-center mt-2 mt-lg-0">
                 {% if request.user.is_authenticated %}
-                <span class="navbar-text small text-muted d-none d-lg-inline">Hi, {{ request.user.username }}</span>
-                <a class="btn btn-outline-primary {% if request.resolver_match and request.resolver_match.url_name == 'profile' %}active{% endif %}"
+                <span class="navbar-text app-navbar-user d-none d-lg-inline">
+                    <span class="app-navbar-user-dot">{{ request.user.username|slice:":1"|upper }}</span>
+                    <span>{{ request.user.username }}</span>
+                </span>
+                <a class="btn btn-outline-primary app-navbar-action {% if request.resolver_match and request.resolver_match.url_name == 'profile' %}active{% endif %}"
                    href="{% url 'accounts:profile' %}">个人资料</a>
                 <form method="post" action="{% url 'accounts:logout' %}">
                     {% csrf_token %}
-                    <button class="btn btn-outline-secondary" type="submit" id="navbarLogoutButton"
+                    <button class="btn btn-outline-secondary app-navbar-action" type="submit" id="navbarLogoutButton"
                             data-confirm="确定退出当前账号吗？"
                             data-confirm-title="退出登录"
                             data-confirm-ok="安全退出"
@@ -42,8 +64,8 @@
                             data-confirm-hint="退出后会回到登录页，当前设备上的工作会话将立即结束。">退出</button>
                 </form>
                 {% else %}
-                <a class="btn btn-primary" href="{% url 'accounts:login' %}">登录</a>
-                <a class="btn btn-outline-secondary" href="{% url 'accounts:signup' %}">注册</a>
+                <a class="btn btn-primary app-navbar-action" href="{% url 'accounts:login' %}">登录</a>
+                <a class="btn btn-outline-secondary app-navbar-action" href="{% url 'accounts:signup' %}">注册</a>
                 {% endif %}
             </div>
         </div>
