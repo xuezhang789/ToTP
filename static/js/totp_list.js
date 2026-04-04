@@ -1032,8 +1032,6 @@
   const shareLinkDuration = document.getElementById('shareLinkDuration');
   const shareLinkMaxViews = document.getElementById('shareLinkMaxViews');
   const shareLinkNote = document.getElementById('shareLinkNote');
-  const shareLinkPassword = document.getElementById('shareLinkPassword');
-  const shareLinkPasswordToggleBtn = document.getElementById('shareLinkPasswordToggleBtn');
   const shareLinkResult = document.getElementById('shareLinkResult');
   const shareLinkAlert = document.getElementById('shareLinkAlert');
   const shareLinkUrl = document.getElementById('shareLinkUrl');
@@ -1044,8 +1042,6 @@
   const shareLinkInvalidateBtn = document.getElementById('shareLinkInvalidateBtn');
   const paginationEl = document.getElementById('entryListPagination');
   let shareModalInstance = null;
-  let sharePendingCreate = null;
-  let googleReauthInitialized = false;
 
   function clearShareLinkAlert() {
     inlineAlert(shareLinkAlert, 'danger', '');
@@ -1077,15 +1073,6 @@
     if (shareLinkNote) {
       shareLinkNote.value = '';
     }
-    if (shareLinkPassword) {
-      shareLinkPassword.value = '';
-      shareLinkPassword.type = 'password';
-      shareLinkPassword.setCustomValidity('');
-    }
-    const icon = shareLinkPasswordToggleBtn?.querySelector('i');
-    if (icon) {
-      icon.className = 'bi bi-eye';
-    }
     if (shareLinkSpinner) {
       shareLinkSpinner.classList.add('d-none');
     }
@@ -1093,14 +1080,6 @@
       shareLinkSubmitBtn.disabled = false;
     }
     shareLinkForm?.classList.remove('was-validated');
-  }
-
-  function validateSharePassword(value) {
-    const pwd = (value || '').trim();
-    if (!pwd) {
-      return '请输入密码';
-    }
-    return '';
   }
 
   function refreshEntryListFragment() {
@@ -1131,10 +1110,62 @@
     if (!shareLinkSubmitBtn) {
       return;
     }
+    if (window.appSetButtonLoading) {
+      window.appSetButtonLoading(shareLinkSubmitBtn, flag, { label: '生成中' });
+      return;
+    }
     shareLinkSubmitBtn.disabled = flag;
     if (shareLinkSpinner) {
       shareLinkSpinner.classList.toggle('d-none', !flag);
     }
+  }
+
+  function resolveShareLinkUrl(payload) {
+    const rawValue = payload?.path || payload?.url || '';
+    if (!rawValue) {
+      return '';
+    }
+    try {
+      const absoluteUrl = new URL(rawValue, window.location.href);
+      return `${window.location.origin}${absoluteUrl.pathname}${absoluteUrl.search}${absoluteUrl.hash}`;
+    } catch (error) {
+      console.error('Resolve share link url failed:', error);
+      return rawValue;
+    }
+  }
+
+  function handleShareLinkCreateSuccess(data) {
+    const shareUrl = resolveShareLinkUrl(data);
+    if (shareLinkUrl) {
+      shareLinkUrl.value = shareUrl;
+    }
+    if (shareLinkResult) {
+      shareLinkResult.classList.remove('d-none');
+    }
+    renderShareSummary(data);
+    if (shareLinkInvalidateBtn) {
+      shareLinkInvalidateBtn.classList.remove('d-none');
+      shareLinkInvalidateBtn.dataset.linkId = String(data.id || '');
+    }
+    showShareLinkAlert('success', '分享链接已生成，可直接复制并发送。');
+
+    if (shareUrl && window.appCopyToClipboard) {
+      window.appCopyToClipboard(shareUrl)
+        .then(() => {
+          if (window.appToast) {
+            window.appToast('success', '分享链接已生成并复制。');
+          }
+        })
+        .catch(() => {
+          if (window.appToast) {
+            window.appToast('info', '分享链接已生成，请手动复制。');
+          }
+        });
+    }
+
+    refreshEntryListFragment().catch((err) => {
+      console.error('Refresh entries after link creation failed:', err);
+    });
   }
 
   function renderShareSummary(payload) {
@@ -1195,34 +1226,11 @@
     if (shareLinkEntryId) {
       shareLinkEntryId.value = '';
     }
-    sharePendingCreate = null;
     resetShareModal();
-  });
-
-  shareLinkPasswordToggleBtn?.addEventListener('click', () => {
-    if (!shareLinkPassword) {
-      return;
-    }
-    const isPassword = shareLinkPassword.type === 'password';
-    shareLinkPassword.type = isPassword ? 'text' : 'password';
-    const icon = shareLinkPasswordToggleBtn.querySelector('i');
-    if (icon) {
-      icon.className = isPassword ? 'bi bi-eye-slash' : 'bi bi-eye';
-    }
   });
 
   shareLinkSubmitBtn?.addEventListener('click', () => {
     if (!shareLinkEntryId?.value) {
-      return;
-    }
-    const passwordDisabled = Boolean(shareLinkPassword && shareLinkPassword.disabled);
-    const pwdError = passwordDisabled ? '' : validateSharePassword(shareLinkPassword?.value || '');
-    if (shareLinkPassword && !passwordDisabled) {
-      shareLinkPassword.setCustomValidity(pwdError ? 'invalid' : '');
-    }
-    if (shareLinkForm && typeof shareLinkForm.checkValidity === 'function' && !shareLinkForm.checkValidity()) {
-      shareLinkForm.classList.add('was-validated');
-      showShareLinkAlert('danger', pwdError || '请检查填写内容');
       return;
     }
     clearShareLinkAlert();
@@ -1233,150 +1241,27 @@
     formData.append('note', (shareLinkNote?.value || '').trim());
 
     const createUrl = (config.oneTimeCreateUrlTemplate || '').replace('/0/', `/${shareLinkEntryId.value}/`);
-    const reauthUrl = config.reauthApiUrl || '';
-    const password = (shareLinkPassword?.value || '').trim();
-    const doReauth = () => fetch(reauthUrl, {
-      method: 'POST',
-      headers: {
-        'X-CSRFToken': window.appGetCsrfToken ? window.appGetCsrfToken() : '',
-        'X-Requested-With': 'fetch',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ password }),
-    });
-    const doCreate = () => fetch(createUrl, {
+    fetch(createUrl, {
       method: 'POST',
       headers: {
         'X-CSRFToken': window.appGetCsrfToken ? window.appGetCsrfToken() : '',
         'X-Requested-With': 'fetch',
       },
       body: formData,
-    });
-
-    if (!config.hasPassword) {
-      const googleClientId = config.googleClientId || '';
-      const googleUrl = config.reauthGoogleUrl || '';
-      const googleApi = window.google?.accounts?.id;
-      if (!googleClientId || !googleUrl) {
-        showShareLinkAlert('danger', '未配置 Google 再确认参数，暂无法继续。');
-        setShareSubmitting(false);
-        return;
-      }
-      if (!googleApi) {
-        showShareLinkAlert('danger', 'Google 再确认尚未加载，请稍后重试。');
-        setShareSubmitting(false);
-        return;
-      }
-      sharePendingCreate = { createUrl, formData };
-      if (!googleReauthInitialized) {
-        googleApi.initialize({
-          client_id: googleClientId,
-          callback: window.handleShareLinkReauthCredential,
-          context: 'signin',
-          ux_mode: 'popup',
-        });
-        googleReauthInitialized = true;
-      }
-      googleApi.prompt();
-      return;
-    }
-
-    (reauthUrl ? doReauth() : Promise.reject(new Error('missing_reauth_api')))
-      .then(async (resp) => {
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok || !data.ok) {
-          if (data.error === 'wrong_password') {
-            throw new Error('密码错误');
-          }
-          if (data.error === 'no_password') {
-            throw new Error('该账号未设置本地密码，无法在弹窗内确认。请先设置密码。');
-          }
-          throw new Error('二次确认失败，请重试');
-        }
-        return doCreate();
-      })
+    })
       .then(async (resp) => {
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok || !data.ok) {
           const message = data.message || '生成链接失败，请稍后重试。';
           throw new Error(message);
         }
-        shareModalInstance?.hide();
-        const url = data.url || '';
-        if (url && window.appCopyToClipboard) {
-          window.appCopyToClipboard(url).catch(() => {});
-        }
-        if (window.appToast) {
-          window.appToast('success', url ? `链接已生成并复制：${url}` : '链接已生成');
-        }
-        return refreshEntryListFragment();
+        handleShareLinkCreateSuccess(data);
       })
       .catch((err) => {
         showShareLinkAlert('danger', err.message || '生成链接失败，请稍后重试。');
       })
       .finally(() => setShareSubmitting(false));
   });
-
-  window.handleShareLinkReauthCredential = async function (resp) {
-    let pending = sharePendingCreate;
-    sharePendingCreate = null;
-    if (!pending && shareLinkEntryId?.value) {
-      const createUrl = (config.oneTimeCreateUrlTemplate || '').replace('/0/', `/${shareLinkEntryId.value}/`);
-      const formData = new FormData();
-      formData.append('duration', shareLinkDuration?.value || '10');
-      formData.append('max_views', shareLinkMaxViews?.value || '3');
-      formData.append('note', (shareLinkNote?.value || '').trim());
-      pending = { createUrl, formData };
-    }
-    if (!pending) {
-      setShareSubmitting(false);
-      return;
-    }
-    const googleUrl = config.reauthGoogleUrl || '';
-    const csrf = window.appGetCsrfToken ? window.appGetCsrfToken() : '';
-    try {
-      setShareSubmitting(true);
-      const r = await fetch(googleUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': csrf,
-          'X-Requested-With': 'fetch',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ credential: resp.credential }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok || !data.ok) {
-        throw new Error('确认失败，请重试。');
-      }
-      const createResp = await fetch(pending.createUrl, {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': csrf,
-          'X-Requested-With': 'fetch',
-        },
-        body: pending.formData,
-      });
-      const createData = await createResp.json().catch(() => ({}));
-      if (!createResp.ok || !createData.ok) {
-        throw new Error(createData.message || '生成链接失败，请稍后重试。');
-      }
-      shareModalInstance?.hide();
-      const url = createData.url || '';
-      if (url && window.appCopyToClipboard) {
-        window.appCopyToClipboard(url).catch(() => {});
-      }
-      if (window.appToast) {
-        window.appToast('success', url ? `链接已生成并复制：${url}` : '链接已生成');
-      }
-      await refreshEntryListFragment();
-    } catch (e) {
-      showShareLinkAlert('danger', e?.message || '确认失败，请重试。');
-    } finally {
-      setShareSubmitting(false);
-    }
-  };
 
   shareLinkCopyBtn?.addEventListener('click', () => {
     if (!shareLinkUrl?.value) {

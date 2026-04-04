@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from totp.models import OneTimeLink, TOTPEntry
+from totp.models import OneTimeLink, Team, TeamMembership, TOTPEntry
 from totp.utils import encrypt_str
 
 
@@ -112,7 +112,6 @@ class ProfileViewTests(TestCase):
         self.assertEqual(summary["active_links"], 1)
 
     def test_change_password_strength_validation(self):
-        # 验证不再强制检查密码强度（用户要求）
         self.client.force_login(self.user)
         payload = {
             "password_submit": "1",
@@ -120,11 +119,16 @@ class ProfileViewTests(TestCase):
             "new_password1": "weakpass",
             "new_password2": "weakpass",
         }
-        response = self.client.post(reverse("accounts:profile"), payload, follow=True)
+        response = self.client.post(reverse("accounts:profile"), payload)
         self.assertEqual(response.status_code, 200)
-        messages = list(response.context["messages"])
-        # 应该成功更新，因为去掉了强度校验
-        self.assertTrue(any("密码已更新" in str(msg) for msg in messages))
+        password_form = response.context["password_form"]
+        self.assertTrue(password_form.errors)
+        self.assertIn(
+            "密码需至少包含大写字母、小写字母、数字、符号中的三类",
+            password_form.errors.get("new_password2", []),
+        )
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("StrongPass123!"))
 
     def test_passwordless_account_can_set_password(self):
         user = self.user_model.objects.create_user(
@@ -144,3 +148,49 @@ class ProfileViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         user.refresh_from_db()
         self.assertTrue(user.check_password("EvenStronger456!"))
+
+    def test_passwordless_account_rejects_weak_password(self):
+        user = self.user_model.objects.create_user(
+            username="googleweak",
+            password="temp12345",
+            email="googleweak@example.com",
+        )
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+        self.client.force_login(user)
+        payload = {
+            "password_submit": "1",
+            "new_password1": "weakpass",
+            "new_password2": "weakpass",
+        }
+        response = self.client.post(reverse("accounts:profile"), payload)
+        self.assertEqual(response.status_code, 200)
+        password_form = response.context["password_form"]
+        self.assertTrue(password_form.errors)
+        user.refresh_from_db()
+        self.assertFalse(user.has_usable_password())
+
+    def test_security_summary_counts_accessible_team_entries(self):
+        owner = self.user_model.objects.create_user(
+            username="teamowner",
+            password="StrongPass123!",
+            email="owner@example.com",
+        )
+        team = Team.objects.create(owner=owner, name="Shared Team")
+        TeamMembership.objects.create(team=team, user=owner, role=TeamMembership.Role.OWNER)
+        TeamMembership.objects.create(team=team, user=self.user, role=TeamMembership.Role.MEMBER)
+        TOTPEntry.objects.create(
+            user=owner,
+            team=team,
+            name="Shared Entry",
+            secret_encrypted=encrypt_str("JBSWY3DPEHPK3PXP"),
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("accounts:profile"))
+
+        self.assertEqual(response.status_code, 200)
+        summary = response.context["security_summary"]
+        self.assertEqual(summary["total_entries"], 1)
+        self.assertEqual(summary["personal_entries"], 0)
+        self.assertEqual(summary["team_entries"], 1)

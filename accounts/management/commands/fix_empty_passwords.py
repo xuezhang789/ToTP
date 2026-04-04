@@ -22,9 +22,15 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         apply_changes = bool(options.get("apply"))
         limit = int(options.get("limit") or 0)
+        blank_password = str()
 
         User = get_user_model()
-        queryset = User.objects.filter(password="").only("id", "username", "email", "password")
+        queryset = User.objects.filter(password=blank_password).only(
+            "id",
+            "username",
+            "email",
+            "password",
+        )
         total = queryset.count()
         if limit > 0:
             queryset = queryset.order_by("id")[:limit]
@@ -43,7 +49,7 @@ class Command(BaseCommand):
         updated = 0
         with transaction.atomic():
             for user in queryset.iterator(chunk_size=200):
-                if user.password != "":
+                if user.password:
                     continue
                 user.set_unusable_password()
                 user.save(update_fields=["password"])

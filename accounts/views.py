@@ -14,38 +14,49 @@ from django.contrib.auth import (
 )
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
+from django.db import IntegrityError, transaction
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST
-from django.views.decorators.http import require_http_methods
-
-from django.db.models import Count, Q
+from django.views.decorators.http import require_http_methods, require_POST
 from google.auth.transport import requests as grequests
 from google.oauth2 import id_token
 
-User = get_user_model()
+from project.utils import client_ip
+from totp.models import OneTimeLink, TOTPEntry
 
 from .forms import PasswordSetForm, PasswordUpdateForm, ProfileForm, password_strength_errors
-from totp.models import OneTimeLink, TOTPEntry
-from project.utils import client_ip
+
+User = get_user_model()
 
 LOGIN_RATE_LIMIT = 10
 LOGIN_RATE_WINDOW_SECONDS = 300
 SIGNUP_RATE_LIMIT = 5
 SIGNUP_RATE_WINDOW_SECONDS = 600
+REAUTH_RATE_LIMIT = 8
+REAUTH_RATE_WINDOW_SECONDS = 300
+LOGIN_IP_RATE_LIMIT = 40
+LOGIN_IP_RATE_WINDOW_SECONDS = 300
+LOGIN_CHALLENGE_THRESHOLD = 5
+LOGIN_CHALLENGE_WINDOW_SECONDS = 900
+LOGIN_CHALLENGE_TTL_SECONDS = 600
+LOGIN_CHALLENGE_SESSION_KEY = "auth_login_challenge_v1"
+
+
+def _rate_limit_increment(cache_key: str, *, window_seconds: int) -> int:
+    if cache.add(cache_key, 1, window_seconds):
+        return 1
+    try:
+        return cache.incr(cache_key)
+    except ValueError:
+        cache.set(cache_key, 1, window_seconds)
+        return 1
 
 
 def _rate_limit_allow(cache_key: str, *, limit: int, window_seconds: int) -> bool:
-    if cache.add(cache_key, 1, window_seconds):
-        return True
-    try:
-        count = cache.incr(cache_key)
-    except ValueError:
-        cache.set(cache_key, 1, window_seconds)
-        return True
-    return count <= limit
+    return _rate_limit_increment(cache_key, window_seconds=window_seconds) <= limit
 
 
 def _next_url(request, fallback="/"):
@@ -60,16 +71,129 @@ def _next_url(request, fallback="/"):
     return fallback
 
 
+def _reauth_rate_limit_key(request) -> str:
+    return f"auth:reauth:v1:{request.user.pk}:{client_ip(request)}"
+
+
+def _auth_int_setting(name: str, default: int) -> int:
+    return int(getattr(settings, name, default) or default)
+
+
+def _login_total_rate_limit_key(ip: str) -> str:
+    return f"auth:login:v2:ip:{ip}"
+
+
+def _login_failure_rate_limit_key(ip: str) -> str:
+    return f"auth:login:v2:fail:{ip}"
+
+
+def _clear_login_challenge(request):
+    if LOGIN_CHALLENGE_SESSION_KEY in request.session:
+        del request.session[LOGIN_CHALLENGE_SESSION_KEY]
+        request.session.modified = True
+
+
+def _ensure_login_challenge(request, *, refresh: bool = False):
+    now_ts = int(timezone.now().timestamp())
+    ttl_seconds = _auth_int_setting(
+        "AUTH_LOGIN_CHALLENGE_TTL_SECONDS",
+        LOGIN_CHALLENGE_TTL_SECONDS,
+    )
+    stored = request.session.get(LOGIN_CHALLENGE_SESSION_KEY)
+    if (
+        not refresh
+        and isinstance(stored, dict)
+        and stored.get("prompt")
+        and stored.get("answer")
+        and now_ts - int(stored.get("created_at") or 0) <= ttl_seconds
+    ):
+        return stored
+
+    left = secrets.randbelow(8) + 1
+    right = secrets.randbelow(8) + 1
+    challenge = {
+        "prompt": f"{left} + {right} = ?",
+        "answer": str(left + right),
+        "created_at": now_ts,
+    }
+    request.session[LOGIN_CHALLENGE_SESSION_KEY] = challenge
+    request.session.modified = True
+    return challenge
+
+
+def _login_challenge_context(request, ip: str) -> dict:
+    failure_count = int(cache.get(_login_failure_rate_limit_key(ip)) or 0)
+    threshold = _auth_int_setting(
+        "AUTH_LOGIN_CHALLENGE_THRESHOLD",
+        LOGIN_CHALLENGE_THRESHOLD,
+    )
+    if failure_count < threshold:
+        _clear_login_challenge(request)
+        return {
+            "login_challenge_required": False,
+            "login_challenge_prompt": "",
+            "login_failure_count": failure_count,
+        }
+    challenge = _ensure_login_challenge(request)
+    return {
+        "login_challenge_required": True,
+        "login_challenge_prompt": challenge["prompt"],
+        "login_failure_count": failure_count,
+    }
+
+
+def _record_login_failure(ip: str) -> int:
+    return _rate_limit_increment(
+        _login_failure_rate_limit_key(ip),
+        window_seconds=_auth_int_setting(
+            "AUTH_LOGIN_CHALLENGE_WINDOW_SECONDS",
+            LOGIN_CHALLENGE_WINDOW_SECONDS,
+        ),
+    )
+
+
+def _validate_login_challenge(request) -> bool:
+    stored = request.session.get(LOGIN_CHALLENGE_SESSION_KEY)
+    if not isinstance(stored, dict):
+        return False
+    submitted = (request.POST.get("challenge_answer") or "").strip()
+    expected = str(stored.get("answer") or "")
+    return bool(submitted) and submitted == expected
+
+
 @require_http_methods(["GET", "POST"])
 def login_view(request):
     """处理用户登录逻辑。"""
     if request.user.is_authenticated:
         return redirect(_next_url(request))
     nxt = _next_url(request)
+    ip = client_ip(request)
+    context = {"next": nxt}
+    context.update(_login_challenge_context(request, ip))
     if request.method == "POST":
         username = (request.POST.get("username") or "").strip()
-        password = (request.POST.get("password") or "").strip()
-        ip = client_ip(request)
+        password = request.POST.get("password") or ""
+        context["username_value"] = username
+        context.update(_login_challenge_context(request, ip))
+        total_limit_key = _login_total_rate_limit_key(ip)
+        if not _rate_limit_allow(
+            total_limit_key,
+            limit=_auth_int_setting("AUTH_LOGIN_IP_RATE_LIMIT", LOGIN_IP_RATE_LIMIT),
+            window_seconds=_auth_int_setting(
+                "AUTH_LOGIN_IP_RATE_WINDOW_SECONDS",
+                LOGIN_IP_RATE_WINDOW_SECONDS,
+            ),
+        ):
+            messages.error(request, "登录请求过于频繁，请稍后再试")
+            return render(request, "accounts/login.html", context, status=429)
+        if context.get("login_challenge_required"):
+            if not _validate_login_challenge(request):
+                _record_login_failure(ip)
+                context.update(_login_challenge_context(request, ip))
+                _ensure_login_challenge(request, refresh=True)
+                context.update(_login_challenge_context(request, ip))
+                messages.error(request, "请先完成安全校验")
+                return render(request, "accounts/login.html", context, status=400)
         rl_key = f"auth:login:v1:{ip}:{username.lower()}"
         if not _rate_limit_allow(
             rl_key,
@@ -77,14 +201,20 @@ def login_view(request):
             window_seconds=LOGIN_RATE_WINDOW_SECONDS,
         ):
             messages.error(request, "尝试次数过多，请稍后再试")
-            return render(request, "accounts/login.html", {"next": nxt}, status=429)
+            return render(request, "accounts/login.html", context, status=429)
         user = authenticate(request, username=username, password=password)
         if user:
             cache.delete(rl_key)
+            cache.delete(_login_failure_rate_limit_key(ip))
+            _clear_login_challenge(request)
             login(request, user)
             return redirect(_next_url(request))
+        _record_login_failure(ip)
+        if context.get("login_challenge_required"):
+            _ensure_login_challenge(request, refresh=True)
         messages.error(request, "用户名或密码错误")
-    return render(request, "accounts/login.html", {"next": nxt})
+        context.update(_login_challenge_context(request, ip))
+    return render(request, "accounts/login.html", context)
 
 
 @require_http_methods(["GET", "POST"])
@@ -105,7 +235,7 @@ def signup_view(request):
             return render(request, "accounts/signup.html", context, status=429)
         username = (request.POST.get("username") or "").strip()
         email = (request.POST.get("email") or "").strip()
-        password = (request.POST.get("password") or "").strip()
+        password = request.POST.get("password") or ""
         context.update({"username_value": username, "email_value": email})
         if not username or not password:
             messages.error(request, "用户名与密码必填")
@@ -123,9 +253,19 @@ def signup_view(request):
                 messages.error(request, msg)
             return render(request, "accounts/signup.html", context, status=400)
 
-        user = User.objects.create_user(username=username, email=email, password=password)
+        try:
+            with transaction.atomic():
+                user = User.objects.create_user(username=username, email=email, password=password)
+        except IntegrityError:
+            if User.objects.filter(username=username).exists():
+                messages.error(request, "用户名已存在")
+            elif email and User.objects.filter(email__iexact=email).exists():
+                messages.error(request, "邮箱已存在")
+            else:
+                messages.error(request, "创建账号失败，请稍后重试")
+            return render(request, "accounts/signup.html", context, status=400)
         login(request, user)
-        return redirect("/")
+        return redirect(_next_url(request, fallback="/"))
     return render(request, "accounts/signup.html", context)
 
 
@@ -141,9 +281,23 @@ def logout_view(request):
 def reauth_view(request):
     nxt = _next_url(request, fallback="/")
     if request.method == "POST":
-        password = (request.POST.get("password") or "").strip()
+        rl_key = _reauth_rate_limit_key(request)
+        if not _rate_limit_allow(
+            rl_key,
+            limit=REAUTH_RATE_LIMIT,
+            window_seconds=REAUTH_RATE_WINDOW_SECONDS,
+        ):
+            messages.error(request, "确认次数过多，请稍后再试")
+            return render(
+                request,
+                "accounts/reauth.html",
+                {"next": nxt, "has_password": request.user.has_usable_password()},
+                status=429,
+            )
+        password = request.POST.get("password") or ""
         user = authenticate(request, username=request.user.username, password=password)
         if user:
+            cache.delete(rl_key)
             request.session["reauth_at"] = int(timezone.now().timestamp())
             return redirect(nxt)
         messages.error(request, "密码错误")
@@ -161,7 +315,14 @@ def reauth_api(request):
         data = json.loads(request.body.decode("utf-8") or "{}")
     except json.JSONDecodeError:
         return _json({"ok": False, "error": "invalid_json"}, 400)
-    password = (data.get("password") or "").strip()
+    rl_key = _reauth_rate_limit_key(request)
+    if not _rate_limit_allow(
+        rl_key,
+        limit=REAUTH_RATE_LIMIT,
+        window_seconds=REAUTH_RATE_WINDOW_SECONDS,
+    ):
+        return _json({"ok": False, "error": "rate_limited"}, 429)
+    password = data.get("password") or ""
     if not password:
         return _json({"ok": False, "error": "missing_password"}, 400)
     if not request.user.has_usable_password():
@@ -169,6 +330,7 @@ def reauth_api(request):
     user = authenticate(request, username=request.user.username, password=password)
     if not user:
         return _json({"ok": False, "error": "wrong_password"}, 403)
+    cache.delete(rl_key)
     request.session["reauth_at"] = int(timezone.now().timestamp())
     return _json({"ok": True})
 
@@ -183,6 +345,13 @@ def reauth_google(request):
     cred = (data.get("credential") or "").strip()
     if not cred:
         return _json({"ok": False, "error": "missing_credential"}, 400)
+    rl_key = _reauth_rate_limit_key(request)
+    if not _rate_limit_allow(
+        rl_key,
+        limit=REAUTH_RATE_LIMIT,
+        window_seconds=REAUTH_RATE_WINDOW_SECONDS,
+    ):
+        return _json({"ok": False, "error": "rate_limited"}, 429)
     try:
         idinfo = id_token.verify_oauth2_token(
             cred, grequests.Request(), settings.GOOGLE_CLIENT_ID
@@ -193,6 +362,7 @@ def reauth_google(request):
             return _json({"ok": False, "error": "email_not_verified"}, 400)
         if not request.user.email or request.user.email.lower() != email.lower():
             return _json({"ok": False, "error": "email_mismatch"}, 403)
+        cache.delete(rl_key)
         request.session["reauth_at"] = int(timezone.now().timestamp())
         return _json({"ok": True})
     except ValueError:
@@ -226,7 +396,31 @@ def profile_view(request):
             else PasswordSetForm(user=user)
         )
         if form.is_valid():
-            form.save()
+            try:
+                with transaction.atomic():
+                    form.save()
+            except IntegrityError:
+                form.add_error("email", "该邮箱已被其他账号使用")
+                messages.error(request, "请检查填写内容")
+                return render(
+                    request,
+                    "accounts/profile.html",
+                    {
+                        "form": form,
+                        "user_obj": user,
+                        "password_form": password_form,
+                        "password_requires_old": password_requires_old,
+                        "security_alerts": [],
+                        "security_summary": {
+                            "total_entries": 0,
+                            "personal_entries": 0,
+                            "team_entries": 0,
+                            "active_links": 0,
+                            "last_login": user.last_login,
+                        },
+                    },
+                    status=400,
+                )
             messages.success(request, "个人资料已更新")
             return redirect("accounts:profile")
         messages.error(request, "请检查填写内容")
@@ -240,17 +434,25 @@ def profile_view(request):
 
     now = timezone.now()
     security_alerts: list[str] = []
-    entry_qs = TOTPEntry.objects.filter(user=user, is_deleted=False)
+    entry_qs = TOTPEntry.objects.for_user(user)
     stale_cutoff = now - timedelta(days=90)
     entry_counts = entry_qs.aggregate(
-        total_entries=Count("id"),
-        personal_entries=Count("id", filter=Q(team__isnull=True)),
-        stale_entries=Count("id", filter=Q(created_at__lt=stale_cutoff)),
+        total_entries=Count("id", distinct=True),
+        personal_entries=Count("id", filter=Q(team__isnull=True), distinct=True),
+        stale_entries=Count("id", filter=Q(created_at__lt=stale_cutoff), distinct=True),
     )
     total_entries = entry_counts.get("total_entries") or 0
     personal_entries = entry_counts.get("personal_entries") or 0
     team_entries = total_entries - personal_entries
-    active_links = OneTimeLink.active.filter(created_by=user).count()
+    active_links = (
+        OneTimeLink.active.filter(created_by=user)
+        .filter(
+            Q(entry__team__isnull=True, entry__user=user)
+            | Q(entry__team__isnull=False, entry__team__memberships__user=user)
+        )
+        .distinct()
+        .count()
+    )
     if not user.email:
         security_alerts.append("尚未设置邮箱，建议补充邮箱以便账号找回和安全通知。")
     if active_links:
@@ -297,20 +499,14 @@ def google_onetap(request):
         )
         email = idinfo.get("email") or ""
         email_verified = idinfo.get("email_verified", False)
-        name = idinfo.get("name") or ""
-        sub = idinfo.get("sub") or ""
         if not email or not email_verified:
             return _json({"ok": False, "error": "email_not_verified"}, 400)
-        users = list(User.objects.filter(email__iexact=email)[:2])
-        if len(users) > 1:
-            return _json({"ok": False, "error": "email_not_unique"}, 400)
-        user = users[0] if users else None
-        created = False
-        if not user:
-            username = _username_from_email(email)
-            user, created = User.objects.get_or_create(
-                username=username, defaults={"email": email}
-            )
+        try:
+            user, created = _get_or_create_google_user(email)
+        except ValueError as exc:
+            return _json({"ok": False, "error": str(exc)}, 400)
+        except RuntimeError:
+            return _json({"ok": False, "error": "user_creation_failed"}, 500)
         if not user.password:
             user.set_unusable_password()
             user.save(update_fields=["password"])
@@ -323,6 +519,34 @@ def google_onetap(request):
     except ValueError:
         # 凭证验证失败
         return _json({"ok": False, "error": "invalid_token"}, 400)
+
+
+def _get_or_create_google_user(email: str):
+    """按邮箱查找或创建 Google 登录用户，避免用户名碰撞时误绑到其他账号。"""
+
+    users = list(User.objects.filter(email__iexact=email)[:2])
+    if len(users) > 1:
+        raise ValueError("email_not_unique")
+    if users:
+        return users[0], False
+
+    for _ in range(6):
+        username = _username_from_email(email)
+        try:
+            with transaction.atomic():
+                user = User.objects.create_user(username=username, email=email)
+        except IntegrityError:
+            # 可能有并发请求刚好抢占了同一用户名；若邮箱已落库则直接复用，
+            # 否则重新生成用户名，避免错误登录到碰撞的旧账号。
+            users = list(User.objects.filter(email__iexact=email)[:2])
+            if len(users) > 1:
+                raise ValueError("email_not_unique")
+            if users:
+                return users[0], False
+            continue
+        return user, True
+
+    raise RuntimeError("google_user_creation_failed")
 
 
 def _username_from_email(email: str) -> str:

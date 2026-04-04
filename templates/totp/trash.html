@@ -1,134 +1,199 @@
 {% extends 'base.html' %}
 {% block title %}回收站-TOTP管理平台{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <h2 class="h4 mb-0">回收站</h2>
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}">返回我的密钥</a>
-    </div>
-</div>
-<div class="alert alert-info" role="alert">
-    回收站中的密钥会在 30 天后自动彻底删除，请在到期前完成恢复操作。
-</div>
-<div class="card app-table-card">
-    <form method="post" action="{% url 'totp:trash_bulk' %}" id="trashForm">
-        {% csrf_token %}
-        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <strong class="text-uppercase small text-muted">已删除的密钥</strong>
-            <div class="d-flex flex-wrap align-items-center gap-3">
-                <div class="form-check mb-0">
-                    <input class="form-check-input" type="checkbox" id="trashSelectAll">
-                    <label class="form-check-label small text-muted" for="trashSelectAll">全选</label>
+<div class="team-page">
+    <section class="team-page-header">
+        <div class="team-page-header-bar">
+            <div class="team-page-header-main">
+                <div class="team-page-breadcrumb">
+                    <a class="text-decoration-none" href="{% url 'totp:list' %}">密钥工作台</a>
+                    <span>/</span>
+                    <span class="fw-semibold">回收站</span>
                 </div>
-                <div class="d-flex flex-wrap gap-2">
-                    <button class="btn btn-outline-primary trash-action-btn" type="submit" name="action" value="restore" disabled>
-                        批量恢复
-                    </button>
-                    <button class="btn btn-outline-danger trash-action-btn" type="submit" name="action" value="delete" disabled
-                            data-confirm="确认永久删除选中的密钥？此操作不可恢复。"
-                            data-confirm-title="永久删除"
-                            data-confirm-ok="永久删除"
-                            data-confirm-variant="danger"
-                            data-confirm-hint="此操作会要求你先进行二次确认密码。">
-                        永久删除
-                    </button>
+                <div class="team-page-title-row">
+                    <h1 class="app-section-title mb-0">回收站</h1>
                 </div>
+                <p class="team-page-summary mb-0">集中处理误删条目，支持批量恢复和永久删除。回收站内容会在 30 天后自动清理。</p>
+            </div>
+            <div class="team-page-header-actions">
+                <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}">
+                    <i class="bi bi-arrow-left me-1"></i> 返回密钥列表
+                </a>
             </div>
         </div>
-        <div class="table-responsive table-cardify-wrapper">
-            <table class="table table-hover table-striped mb-0 align-middle table-cardify">
-                <thead>
-                <tr>
-                    <th scope="col" style="width: 36px;"></th>
-                    <th>名称</th>
-                    <th>分组</th>
-                    <th>删除时间</th>
-                    <th>剩余天数</th>
-                    <th class="text-nowrap">操作</th>
-                </tr>
-                </thead>
-                <tbody>
-                {% for e in entries %}
-                <tr>
-                    <td class="trash-cell-select">
-                        <input class="form-check-input trash-checkbox" type="checkbox" name="selected" value="{{ e.id }}" aria-label="选择 {{ e.name }}">
-                    </td>
-                    <td class="trash-cell-name">
-                        <div class="d-flex align-items-center gap-2">
-                            {% if e.team %}
-                            <span class="badge rounded-pill bg-light text-muted fw-semibold">{{ e.team.name }}</span>
-                            {% endif %}
-                            <span class="fw-semibold">{{ e.name }}</span>
-                        </div>
-                    </td>
-                    <td class="trash-cell-group">
-                        {% if e.team %}
-                        <span class="badge rounded-pill bg-secondary-subtle text-secondary">团队共享</span>
-                        {% else %}
-                        {{ e.group.name|default:'未分组' }}
-                        {% endif %}
-                    </td>
-                    <td class="trash-cell-deleted">{{ e.deleted_at|date:'Y-m-d H:i' }}</td>
-                    <td class="trash-cell-remaining">
-                        {% if e.recycle_remaining_days is not None %}
-                        约 {{ e.recycle_remaining_days }} 天
-                        {% else %}
-                        --
-                        {% endif %}
-                    </td>
-                    <td class="text-nowrap trash-cell-actions">
-                        <div class="d-flex flex-wrap gap-2">
-                            <button type="button" class="btn btn-sm btn-outline-primary restore-single-btn" data-entry-id="{{ e.id }}">
-                                恢复
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-danger delete-single-btn" data-entry-id="{{ e.id }}">
-                                删除
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="6" class="text-center text-muted py-5">回收站为空</td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
+
+        <div class="team-page-kpi-grid">
+            <div class="team-page-kpi" data-state="{% if page_obj.paginator.count %}warning{% else %}safe{% endif %}">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">待处理条目</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-trash3"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{{ page_obj.paginator.count }}</div>
+                <div class="team-page-kpi-meta">{% if page_obj.paginator.count %}建议尽快恢复或清理{% else %}当前为空{% endif %}</div>
+            </div>
+            <div class="team-page-kpi" data-state="primary">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">当前页条目</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-layout-text-window-reverse"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{{ entries|length }}</div>
+                <div class="team-page-kpi-meta">支持单条或批量操作</div>
+            </div>
+            <div class="team-page-kpi">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">保留策略</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-clock-history"></i></span>
+                </div>
+                <div class="team-page-kpi-value">30 天</div>
+                <div class="team-page-kpi-meta">到期后自动彻底删除</div>
+            </div>
+            <div class="team-page-kpi" data-state="safe">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">恢复入口</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-arrow-counterclockwise"></i></span>
+                </div>
+                <div class="team-page-kpi-value">批量</div>
+                <div class="team-page-kpi-meta">可先筛选、再统一处理</div>
+            </div>
         </div>
-    </form>
-    {% if page_obj.has_other_pages %}
-    <div class="card-footer">
-        <nav aria-label="Page navigation">
-            <ul class="pagination justify-content-center mb-0">
-                {% if page_obj.has_previous %}
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}" aria-label="Previous">
-                        <span aria-hidden="true">&laquo;</span>
-                    </a>
-                </li>
-                {% else %}
-                <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
-                {% endif %}
-                {% for num in page_obj.paginator.page_range %}
-                {% if num == page_obj.number %}
-                <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
-                {% else %}
-                <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
-                {% endif %}
-                {% endfor %}
-                {% if page_obj.has_next %}
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ page_obj.next_page_number }}" aria-label="Next">
-                        <span aria-hidden="true">&raquo;</span>
-                    </a>
-                </li>
-                {% else %}
-                <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
-                {% endif %}
-            </ul>
-        </nav>
+    </section>
+
+    <section class="team-page-panel">
+        <div class="team-page-panel-head">
+            <div>
+                <div class="team-section-kicker">说明</div>
+                <div class="team-page-panel-title">恢复与清理</div>
+            </div>
+            <div class="team-page-panel-note">永久删除会要求再次确认密码</div>
+        </div>
+        <div class="alert alert-info mb-0" role="alert">
+            回收站中的密钥会在 30 天后自动彻底删除，请在到期前完成恢复操作。
+        </div>
+    </section>
+
+    <div class="card app-table-card">
+        <form method="post" action="{% url 'totp:trash_bulk' %}" id="trashForm">
+            {% csrf_token %}
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <strong class="text-uppercase small text-muted">已删除的密钥</strong>
+                    <div class="small text-muted mt-1">先勾选，再决定恢复或永久删除。</div>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" id="trashSelectAll">
+                        <label class="form-check-label small text-muted" for="trashSelectAll">全选</label>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-outline-primary trash-action-btn" type="submit" name="action" value="restore" disabled>
+                            批量恢复
+                        </button>
+                        <button class="btn btn-outline-danger trash-action-btn" type="submit" name="action" value="delete" disabled
+                                data-confirm="确认永久删除选中的密钥？此操作不可恢复。"
+                                data-confirm-title="永久删除"
+                                data-confirm-ok="永久删除"
+                                data-confirm-variant="danger"
+                                data-confirm-hint="此操作会要求你先进行二次确认密码。">
+                            永久删除
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="table-responsive table-cardify-wrapper">
+                <table class="table table-hover table-striped mb-0 align-middle table-cardify">
+                    <thead>
+                    <tr>
+                        <th scope="col" style="width: 36px;"></th>
+                        <th>名称</th>
+                        <th>分组</th>
+                        <th>删除时间</th>
+                        <th>剩余天数</th>
+                        <th class="text-nowrap">操作</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for e in entries %}
+                    <tr>
+                        <td class="trash-cell-select">
+                            <input class="form-check-input trash-checkbox" type="checkbox" name="selected" value="{{ e.id }}" aria-label="选择 {{ e.name }}">
+                        </td>
+                        <td class="trash-cell-name">
+                            <div class="d-flex align-items-center gap-2">
+                                {% if e.team %}
+                                <span class="badge rounded-pill bg-light text-muted fw-semibold">{{ e.team.name }}</span>
+                                {% endif %}
+                                <span class="fw-semibold">{{ e.name }}</span>
+                            </div>
+                        </td>
+                        <td class="trash-cell-group">
+                            {% if e.team %}
+                            <span class="badge rounded-pill bg-secondary-subtle text-secondary">团队共享</span>
+                            {% else %}
+                            {{ e.group.name|default:'未分组' }}
+                            {% endif %}
+                        </td>
+                        <td class="trash-cell-deleted">{{ e.deleted_at|date:'Y-m-d H:i' }}</td>
+                        <td class="trash-cell-remaining">
+                            {% if e.recycle_remaining_days is not None %}
+                            约 {{ e.recycle_remaining_days }} 天
+                            {% else %}
+                            --
+                            {% endif %}
+                        </td>
+                        <td class="text-nowrap trash-cell-actions">
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary restore-single-btn" data-entry-id="{{ e.id }}">
+                                    恢复
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger delete-single-btn" data-entry-id="{{ e.id }}">
+                                    删除
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-5">回收站为空</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </form>
+        {% if page_obj.has_other_pages %}
+        <div class="card-footer">
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}" aria-label="Previous">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                    {% endif %}
+                    {% for num in page_obj.paginator.page_range %}
+                    {% if num == page_obj.number %}
+                    <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
+                    {% else %}
+                    <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+                    {% endif %}
+                    {% endfor %}
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}" aria-label="Next">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 {% block scripts %}
 {{ block.super }}

@@ -162,7 +162,7 @@ python manage.py runserver
 
 ## 7. 配置说明
 
-项目通过环境变量配置，核心配置位于 [settings.py](file:///Users/lingchong/Downloads/wwwroot/ToTP/project/settings.py)。
+项目通过环境变量配置，核心配置位于 `project/settings.py`。
 
 ### 7.1 必需配置（生产）
 
@@ -171,7 +171,7 @@ python manage.py runserver
 | `DJANGO_SECRET_KEY` | Django `SECRET_KEY`（强随机，务必保密） |
 | `DJANGO_DEBUG` | 调试模式（生产必须为 `False`） |
 | `DJANGO_ALLOWED_HOSTS` | 允许访问的 Host 列表（逗号分隔，生产禁止 `*`） |
-| `TOTP_ENC_KEY` 或 `TOTP_ENC_KEYS` | TOTP 密钥加密密钥（建议支持轮换） |
+| `TOTP_DATA_KEY` / `TOTP_DATA_KEYS` / `TOTP_DATA_KEY_FILE` / `TOTP_DATA_KEY_LOADER` 其一 | TOTP 数据加密主密钥来源，生产至少配置一种 |
 
 ### 7.2 可选配置（常用）
 
@@ -184,8 +184,24 @@ python manage.py runserver
 | `DJANGO_CSRF_COOKIE_SECURE` | Secure CSRF Cookie | 生产默认启用 |
 | `DJANGO_HSTS_SECONDS` | HSTS 秒数 | 生产默认 31536000 |
 | `DJANGO_TRUST_X_FORWARDED_FOR` | 是否信任 `X-Forwarded-For` | `False` |
+| `TOTP_ALLOW_LEGACY_ENCRYPTION_FALLBACK` | 是否允许继续读取旧 `TOTP_ENC_KEY(S)` | `True` |
+| `TOTP_ALLOW_SECRET_KEY_ENCRYPTION_FALLBACK` | 是否允许回退使用 `DJANGO_SECRET_KEY` 解密历史密文 | 开发默认 `True`，生产建议关闭 |
+| `AUTH_LOGIN_IP_RATE_LIMIT` | 单个 IP 登录总尝试上限 | `40` |
+| `AUTH_LOGIN_IP_RATE_WINDOW_SECONDS` | 登录总尝试限流窗口（秒） | `300` |
+| `AUTH_LOGIN_CHALLENGE_THRESHOLD` | 连续失败后触发登录挑战的阈值 | `5` |
+| `AUTH_LOGIN_CHALLENGE_WINDOW_SECONDS` | 失败次数统计窗口（秒） | `900` |
+| `AUTH_LOGIN_CHALLENGE_TTL_SECONDS` | 登录挑战有效期（秒） | `600` |
 | `TOTP_EXPORT_ENCRYPTED_MAX_ENTRIES` | 加密导出单次最大条目数 | `2000` |
 | `TOTP_EXPORT_OFFLINE_MAX_ENTRIES` | 离线包单次最大条目数 | `1000` |
+
+### 7.3 数据主密钥配置建议
+
+- 推荐优先级：`TOTP_DATA_KEY_LOADER` > `TOTP_DATA_KEY_FILE` > `TOTP_DATA_KEYS`
+- `TOTP_DATA_KEYS` 支持逗号分隔多把密钥，顺序为“当前主密钥在前，历史回退密钥在后”
+- `TOTP_DATA_KEY_FILE` 适合挂载到容器 Secret 或只读文件系统，每行一把密钥，第一行作为当前主密钥
+- `TOTP_DATA_KEY_LOADER` 适合对接 KMS、Vault 或公司内部密钥管理服务，值为可导入的 Python 路径，例如 `project.key_loader.load_totp_keys`
+- 新部署建议直接关闭 `TOTP_ALLOW_SECRET_KEY_ENCRYPTION_FALLBACK`；只有在迁移历史密文时才短暂保留旧回退
+- `TOTP_ENC_KEY` / `TOTP_ENC_KEYS` 仍可作为兼容回退读取历史数据，但不建议继续作为长期主方案
 
 ---
 
@@ -227,13 +243,36 @@ pip install gunicorn psycopg2-binary
 - `DJANGO_SECRET_KEY`
 - `DJANGO_DEBUG=False`
 - `DJANGO_ALLOWED_HOSTS`
-- `TOTP_ENC_KEY` 或 `TOTP_ENC_KEYS`
+- `TOTP_DATA_KEY` / `TOTP_DATA_KEYS` / `TOTP_DATA_KEY_FILE` / `TOTP_DATA_KEY_LOADER` 其一
 
-生成 `TOTP_ENC_KEY` 示例：
+生成高强度 `TOTP_DATA_KEY` 示例：
 
-```python
-from cryptography.fernet import Fernet
-print(Fernet.generate_key().decode())
+```bash
+python - <<'PY'
+import secrets
+print(secrets.token_urlsafe(48))
+PY
+```
+
+推荐的生产环境变量最小集合：
+
+```env
+DJANGO_SECRET_KEY=change-me
+DJANGO_DEBUG=False
+DJANGO_ALLOWED_HOSTS=2fa.example.com
+REDIS_URL=redis://127.0.0.1:6379/0
+TOTP_DATA_KEYS=current-primary-key
+TOTP_ALLOW_LEGACY_ENCRYPTION_FALLBACK=False
+TOTP_ALLOW_SECRET_KEY_ENCRYPTION_FALLBACK=False
+```
+
+如果你要从旧版本平滑迁移，也可以暂时这样配置：
+
+```env
+TOTP_DATA_KEYS=new-primary-key,old-primary-key
+TOTP_ENC_KEYS=old-primary-key
+TOTP_ALLOW_LEGACY_ENCRYPTION_FALLBACK=True
+TOTP_ALLOW_SECRET_KEY_ENCRYPTION_FALLBACK=False
 ```
 
 ### 8.5 数据库初始化
@@ -244,13 +283,41 @@ python manage.py migrate
 python manage.py createsuperuser
 ```
 
-### 8.6 静态文件
+### 8.6 存量密钥轮换
+
+如果当前实例仍在使用旧的 `TOTP_ENC_KEY(S)`，或你正在更换数据主密钥，建议按下面顺序执行：
+
+1. 先把新主密钥放到 `TOTP_DATA_KEYS` 第一位，并保留旧密钥作为回退。
+2. 执行 dry-run，确认没有历史异常密文：
+
+```bash
+python manage.py rotate_totp_data_keys
+```
+
+3. 输出正常后执行正式重加密：
+
+```bash
+python manage.py rotate_totp_data_keys --apply
+```
+
+4. 轮换完成后，删除旧回退密钥，仅保留新主密钥。
+5. 确认线上实例都已重启并通过验证后，关闭：
+   - `TOTP_ALLOW_LEGACY_ENCRYPTION_FALLBACK`
+   - `TOTP_ALLOW_SECRET_KEY_ENCRYPTION_FALLBACK`
+
+说明：
+
+- `rotate_totp_data_keys` 默认是 dry-run，不会写库。
+- `TOTP_DATA_KEYS` 的顺序很重要，第一把会作为新的写入主密钥。
+- 建议在维护窗口内执行，并先完成数据库备份。
+
+### 8.7 静态文件
 
 ```bash
 python manage.py collectstatic --noinput
 ```
 
-### 8.7 Gunicorn + systemd
+### 8.8 Gunicorn + systemd
 
 创建 `/etc/systemd/system/totp.service`：
 
@@ -270,7 +337,11 @@ ExecStart=/var/www/totp/venv/bin/gunicorn \
           project.wsgi:application
 Environment="DJANGO_SECRET_KEY=your-secret-key"
 Environment="DJANGO_DEBUG=False"
-Environment="TOTP_ENC_KEY=your-enc-key"
+Environment="DJANGO_ALLOWED_HOSTS=2fa.example.com"
+Environment="REDIS_URL=redis://127.0.0.1:6379/0"
+Environment="TOTP_DATA_KEYS=your-current-primary-key"
+Environment="TOTP_ALLOW_LEGACY_ENCRYPTION_FALLBACK=False"
+Environment="TOTP_ALLOW_SECRET_KEY_ENCRYPTION_FALLBACK=False"
 
 [Install]
 WantedBy=multi-user.target
@@ -281,7 +352,14 @@ sudo systemctl start totp
 sudo systemctl enable totp
 ```
 
-### 8.8 Nginx 反向代理
+如果你使用文件或加载器方式管理密钥，也可以改成：
+
+```ini
+Environment="TOTP_DATA_KEY_FILE=/run/secrets/totp_data_keys"
+Environment="TOTP_DATA_KEY_LOADER=project.key_loader.load_totp_keys"
+```
+
+### 8.9 Nginx 反向代理
 
 创建 `/etc/nginx/sites-available/totp`：
 
@@ -316,18 +394,28 @@ sudo apt install certbot python3-certbot-nginx
 sudo certbot --nginx -d 2fa.example.com
 ```
 
-### 8.9 验证测试与安全检查
+### 8.10 验证测试与安全检查
 
 ```bash
 python manage.py test
 python manage.py check --deploy
+python manage.py rotate_totp_data_keys
 ```
 
-### 8.10 监控与维护
+建议 CI / 上线前额外执行：
+
+```bash
+ruff check accounts project totp manage.py
+bandit -c pyproject.toml -r accounts project totp manage.py
+pip-audit -r requirements.txt
+```
+
+### 8.11 监控与维护
 
 - Gunicorn 日志：`journalctl -u totp -f`
 - Nginx 日志：`/var/log/nginx/access.log`、`/var/log/nginx/error.log`
 - 建议定期备份数据库与配置（见升级文档的备份策略）
+- 如果启用了登录限流和公开接口限流，生产建议使用 Redis，避免多进程下本地缓存导致计数不一致
 
 ---
 
@@ -365,6 +453,7 @@ git pull origin main
 source venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate
+python manage.py rotate_totp_data_keys
 python manage.py collectstatic --noinput
 sudo systemctl restart totp
 ```
@@ -375,6 +464,7 @@ sudo systemctl restart totp
 2. 列表页是否刷新验证码、无 JS 报错
 3. 添加/导入/导出是否可用
 4. 静态资源是否有 404（尤其开启 manifest 时）
+5. `python manage.py rotate_totp_data_keys` dry-run 是否无异常
 
 ### 9.5 回滚方案
 
@@ -394,14 +484,15 @@ psql -U postgres totp < totp_backup_YYYYMMDD.sql
 ```
 
 重要注意事项：
-- 升级过程中不要更改 `TOTP_ENC_KEY` / `TOTP_ENC_KEYS`，否则旧数据无法解密。
+- 升级过程中不要直接删除仍在使用的历史数据密钥。
+- 正确做法是：先把新主密钥放到 `TOTP_DATA_KEYS` 第一位，保留旧密钥回退，执行 `rotate_totp_data_keys --apply`，确认完成后再移除旧密钥。
 
 ---
 
 ## 10. 常见问题 FAQ
 
 **Q: 密钥安全吗？**
-- 数据库存储为加密形式；生产环境务必配置强随机 `DJANGO_SECRET_KEY` 与 `TOTP_ENC_KEY(S)` 并妥善保管。
+- 数据库存储为加密形式；生产环境务必配置强随机 `DJANGO_SECRET_KEY`，并使用独立的 `TOTP_DATA_KEY(S)` / `TOTP_DATA_KEY_FILE` / `TOTP_DATA_KEY_LOADER` 承载数据主密钥。
 
 **Q: 验证码不正确？**
 - 首先检查服务器时间是否准确（NTP），TOTP 强依赖时间同步。
@@ -416,6 +507,7 @@ psql -U postgres totp < totp_backup_YYYYMMDD.sql
 - 验证码不正确：检查服务器时间同步、浏览器/系统时间是否异常。
 - 无法发送邮件：检查 SMTP 配置是否正确（若启用）。
 - 导入失败：确认导入格式是否符合 `otpauth://` 或受支持的 CSV/JSON 格式。
+- 轮换命令报错无法解密：先保留旧回退密钥，执行 `python manage.py rotate_totp_data_keys` 做 dry-run，确认异常样本后再处理历史脏数据。
 
 ---
 
@@ -431,4 +523,3 @@ psql -U postgres totp < totp_backup_YYYYMMDD.sql
 4. 团队空间（成员角色与权限展示）
 5. 审计页（关键操作记录、导出审计）
 6. 加密导出弹窗与离线包生成提示
-

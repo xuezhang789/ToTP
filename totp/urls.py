@@ -1,5 +1,7 @@
 from django.urls import path
-from . import views, api
+
+from . import api, views
+
 app_name = "totp"
 # TOTP 功能相关路由
 urlpatterns = [

@@ -2,15 +2,71 @@
 {% block title %}个人资料{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-lg-8 col-xl-6">
-        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-            <h1 class="h4 mb-0">个人资料</h1>
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'totp:list' %}">返回我的密钥</a>
+<div class="team-page">
+    <section class="team-page-header">
+        <div class="team-page-header-bar">
+            <div class="team-page-header-main">
+                <div class="team-page-breadcrumb">
+                    <span class="fw-semibold">账号中心</span>
+                    <span>/</span>
+                    <span class="fw-semibold">个人资料</span>
+                </div>
+                <div class="team-page-title-row">
+                    <h1 class="app-section-title mb-0">个人资料</h1>
+                </div>
+                <p class="team-page-summary mb-0">在这里维护你的基础信息、本地密码和安全概览，后续团队协作与敏感操作都会基于这些设置。</p>
+            </div>
+            <div class="team-page-header-actions">
+                <a class="btn btn-outline-secondary btn-sm" href="{% url 'totp:list' %}">返回我的密钥</a>
+            </div>
         </div>
 
-        <div class="card shadow-sm">
-            <div class="card-body">
+        <div class="team-page-kpi-grid">
+            <div class="team-page-kpi">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">总密钥</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-key"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{{ security_summary.total_entries }}</div>
+                <div class="team-page-kpi-meta">个人与团队空间合计</div>
+            </div>
+            <div class="team-page-kpi">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">个人空间</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-person"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{{ security_summary.personal_entries }}</div>
+                <div class="team-page-kpi-meta">当前个人条目数</div>
+            </div>
+            <div class="team-page-kpi">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">团队空间</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-people"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{{ security_summary.team_entries }}</div>
+                <div class="team-page-kpi-meta">当前可访问的团队条目</div>
+            </div>
+            <div class="team-page-kpi" data-state="{% if security_summary.active_links %}warning{% else %}safe{% endif %}">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">有效分享链接</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-link-45deg"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{{ security_summary.active_links }}</div>
+                <div class="team-page-kpi-meta">{% if security_summary.active_links %}建议定期复核{% else %}当前无有效链接{% endif %}</div>
+            </div>
+        </div>
+    </section>
+
+    <div class="profile-grid">
+        <div class="team-page-main-column">
+            <section class="team-page-panel">
+                <div class="team-page-panel-head">
+                    <div>
+                        <div class="team-section-kicker">基础信息</div>
+                        <div class="team-page-panel-title">个人资料设置</div>
+                    </div>
+                </div>
+
                 <form method="post" novalidate>
                     {% csrf_token %}
                     <div class="mb-3">
@@ -52,58 +108,15 @@
                         <button class="btn btn-primary w-100" type="submit">保存修改</button>
                     </div>
                 </form>
-            </div>
-        </div>
+            </section>
 
-        <div class="card mt-3">
-            <div class="card-body">
-                <h2 class="h6 text-muted mb-3">安全概览</h2>
-                <div class="row g-3 text-center text-md-start">
-                    <div class="col-6 col-md-3">
-                        <div class="fw-semibold fs-5">{{ security_summary.total_entries }}</div>
-                        <div class="text-muted small">总密钥</div>
-                    </div>
-                    <div class="col-6 col-md-3">
-                        <div class="fw-semibold fs-5">{{ security_summary.personal_entries }}</div>
-                        <div class="text-muted small">个人空间</div>
-                    </div>
-                    <div class="col-6 col-md-3">
-                        <div class="fw-semibold fs-5">{{ security_summary.team_entries }}</div>
-                        <div class="text-muted small">团队空间</div>
-                    </div>
-                    <div class="col-6 col-md-3">
-                        <div class="fw-semibold fs-5">{{ security_summary.active_links }}</div>
-                        <div class="text-muted small">有效分享链接</div>
+            <section class="team-page-panel">
+                <div class="team-page-panel-head">
+                    <div>
+                        <div class="team-section-kicker">账号安全</div>
+                        <div class="team-page-panel-title">修改密码</div>
                     </div>
                 </div>
-                <hr class="my-3">
-                <dl class="row mb-0">
-                    <dt class="col-sm-4 text-muted">上次登录</dt>
-                    <dd class="col-sm-8">{{ security_summary.last_login|default:"--" }}</dd>
-                    <dt class="col-sm-4 text-muted">注册时间</dt>
-                    <dd class="col-sm-8">{{ user_obj.date_joined }}</dd>
-                </dl>
-            </div>
-        </div>
-
-        <div class="card mt-3">
-            <div class="card-body">
-                <h2 class="h6 text-muted mb-3">安全提醒</h2>
-                {% if security_alerts %}
-                <ul class="mb-0 small ps-3">
-                    {% for alert in security_alerts %}
-                    <li class="mb-1">{{ alert }}</li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <div class="text-muted small">当前没有需要处理的安全提醒。</div>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="card mt-3">
-            <div class="card-body">
-                <h2 class="h6 mb-3">修改密码</h2>
                 <form method="post" novalidate>
                     {% csrf_token %}
                     <input type="hidden" name="password_submit" value="1">
@@ -158,8 +171,53 @@
                     </div>
                     <button class="btn btn-outline-primary w-100" type="submit">更新密码</button>
                 </form>
-            </div>
+            </section>
         </div>
+
+        <aside class="team-page-rail">
+            <section class="team-page-panel">
+                <div class="team-page-panel-head">
+                    <div>
+                        <div class="team-section-kicker">安全概览</div>
+                        <div class="team-page-panel-title">关键状态</div>
+                    </div>
+                </div>
+                <div class="profile-summary-grid">
+                    <div class="profile-summary-card">
+                        <div class="profile-summary-value">{{ security_summary.total_entries }}</div>
+                        <div class="profile-summary-label">总密钥</div>
+                    </div>
+                    <div class="profile-summary-card">
+                        <div class="profile-summary-value">{{ security_summary.active_links }}</div>
+                        <div class="profile-summary-label">有效分享链接</div>
+                    </div>
+                </div>
+                <dl class="row mt-3 mb-0">
+                    <dt class="col-sm-4 text-muted">上次登录</dt>
+                    <dd class="col-sm-8">{{ security_summary.last_login|default:"--" }}</dd>
+                    <dt class="col-sm-4 text-muted">注册时间</dt>
+                    <dd class="col-sm-8">{{ user_obj.date_joined }}</dd>
+                </dl>
+            </section>
+
+            <section class="team-page-panel">
+                <div class="team-page-panel-head">
+                    <div>
+                        <div class="team-section-kicker">安全提醒</div>
+                        <div class="team-page-panel-title">建议处理项</div>
+                    </div>
+                </div>
+                {% if security_alerts %}
+                <div class="team-note-stack">
+                    {% for alert in security_alerts %}
+                    <div class="team-note-item">{{ alert }}</div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="team-note-item">当前没有需要处理的安全提醒。</div>
+                {% endif %}
+            </section>
+        </aside>
     </div>
 </div>
 {% endblock %}

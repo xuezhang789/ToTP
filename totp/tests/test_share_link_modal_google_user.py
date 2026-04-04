@@ -4,7 +4,7 @@ from django.urls import reverse
 
 
 class ShareLinkModalGoogleUserTests(TestCase):
-    def test_list_page_renders_google_reauth_box_for_users_without_password(self):
+    def test_list_page_renders_direct_share_link_controls_for_users_without_password(self):
         User = get_user_model()
         user = User.objects.create_user(username="google_user", password="StrongPassword123!")
         user.set_unusable_password()
@@ -14,6 +14,7 @@ class ShareLinkModalGoogleUserTests(TestCase):
         res = self.client.get(reverse("totp:list"))
         self.assertEqual(res.status_code, 200)
         html = res.content.decode("utf-8")
-        self.assertIn('id="shareLinkGoogleBox"', html)
-        self.assertIn('data-callback="handleShareLinkReauthCredential"', html)
-
+        self.assertNotIn('id="shareLinkGoogleBox"', html)
+        self.assertNotIn('handleShareLinkReauthCredential', html)
+        self.assertIn('id="shareLinkResult"', html)
+        self.assertIn('id="shareLinkUrl"', html)

@@ -43,9 +43,9 @@ def parse_manual_text(text: str) -> ParseResult:
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
     seen_names: set[str] = set()
     for idx, raw in enumerate(lines, 1):
-        name = ""
-        secret = ""
-        group = ""
+        name = str()
+        secret = str()
+        group = str()
         if raw.lower().startswith("otpauth://"):
             # 支持直接粘贴 otpauth URI，将标签用作名称
             label, parsed_secret = parse_otpauth(raw)

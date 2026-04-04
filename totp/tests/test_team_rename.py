@@ -89,3 +89,12 @@ class TeamRenameTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.team.refresh_from_db()
         self.assertEqual(self.team.name, "Alpha Team")
+
+    def test_create_rejects_overlong_name(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("totp:team_create"),
+            {"name": "X" * 81},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Team.objects.filter(owner=self.owner, name="X" * 81).exists())

@@ -40,6 +40,7 @@
   const form = document.getElementById('searchForm');
   const qInput = document.getElementById('q');
   const groupSelect = document.getElementById('group');
+  const assetSelect = document.getElementById('asset');
   const clearBtn = document.getElementById('clearBtn');
   const searchBtn = document.getElementById('searchBtn');
   const spinner = document.getElementById('searchSpinner');
@@ -93,6 +94,7 @@
         existing.copyBtn = tr.querySelector('.copy-btn');
         existing.progressEl = tr.querySelector('.progress-bar');
         existing.remainEl = tr.querySelector('.remain');
+        existing.remainMobileEl = tr.querySelector('.remain-mobile');
         existing.period = Number(tr.dataset.period) || existing.period || 30;
         return;
       }
@@ -102,6 +104,7 @@
         copyBtn: tr.querySelector('.copy-btn'),
         progressEl: tr.querySelector('.progress-bar'),
         remainEl: tr.querySelector('.remain'),
+        remainMobileEl: tr.querySelector('.remain-mobile'),
         period: Number(tr.dataset.period) || 30,
         lastCode: null,
         lastRemain: null,
@@ -201,6 +204,10 @@
     if (!manualRefreshBtn) {
       return;
     }
+    if (window.appSetButtonLoading) {
+      window.appSetButtonLoading(manualRefreshBtn, flag, { label: '刷新中' });
+      return;
+    }
     if (!manualRefreshOriginalLabel) {
       manualRefreshOriginalLabel = manualRefreshBtn.innerHTML;
     }
@@ -220,8 +227,14 @@
     if (row.copyBtn && code && row.copyBtn.dataset.code !== code) {
       row.copyBtn.dataset.code = code;
     }
+    if (row.codeEl && code && row.codeEl.dataset.code !== code) {
+      row.codeEl.dataset.code = code;
+    }
     if (row.remainEl && Number.isFinite(remain) && remain !== row.lastRemain) {
       row.remainEl.textContent = `${remain}s`;
+    }
+    if (row.remainMobileEl && Number.isFinite(remain) && remain !== row.lastRemain) {
+      row.remainMobileEl.textContent = `${remain}s`;
     }
     if (Number.isFinite(remain)) {
       row.lastRemain = remain;
@@ -230,11 +243,19 @@
       const safePeriod = period > 0 ? period : 30;
       const pct = Math.min(100, Math.max(0, Math.round(((safePeriod - remain) / safePeriod) * 100)));
       row.progressEl.style.width = `${pct}%`;
+      const progress = row.tr ? row.tr.querySelector('[role="progressbar"]') : null;
+      if (progress) {
+        progress.setAttribute('aria-valuenow', String(pct));
+      }
     }
   }
 
   function setRenameLoading(flag) {
     if (!renameSubmitBtn) {
+      return;
+    }
+    if (window.appSetButtonLoading) {
+      window.appSetButtonLoading(renameSubmitBtn, flag, { label: '保存中' });
       return;
     }
     renameSubmitBtn.disabled = flag;
@@ -312,6 +333,9 @@
         if (window.appToast) {
           window.appToast('danger', '验证码刷新失败，可点击“刷新失败”状态重试。');
         }
+        if (window.appAnnounce) {
+          window.appAnnounce('验证码刷新失败');
+        }
       })
       .finally(() => {
         pendingRequest = null;
@@ -359,8 +383,31 @@
   });
 
   tbody.addEventListener('click', (event) => {
+    const badge = event.target.closest('.code-badge');
+    if (badge && badge.dataset.code) {
+      const row = badge.closest('tr');
+      const btn = row ? row.querySelector('.copy-btn') : null;
+      if (btn && btn.dataset.code) {
+        btn.click();
+      }
+      return;
+    }
     const btn = event.target.closest('.copy-btn');
     if (!btn || !btn.dataset.code) {
+      return;
+    }
+    if (window.appCopyWithFeedback) {
+      window.appCopyWithFeedback(btn, btn.dataset.code, {
+        successHtml: '已复制',
+        failureHtml: '复制失败',
+        successAnnounce: '验证码已复制',
+        failureAnnounce: '复制失败',
+        restoreMs: 1200,
+        successClass: 'btn-success',
+        failureClass: 'btn-danger',
+        clearClasses: ['btn-outline-secondary'],
+        toastFailure: '复制失败，请检查浏览器权限或手动复制。',
+      }).catch((err) => console.error('Copy failed:', err));
       return;
     }
     const original = btn.dataset.labelDefault || btn.innerHTML;
@@ -369,6 +416,9 @@
         btn.classList.remove('btn-outline-secondary');
         btn.classList.add('btn-success');
         btn.innerHTML = '已复制';
+        if (window.appAnnounce) {
+          window.appAnnounce('验证码已复制');
+        }
         setTimeout(() => {
           btn.classList.remove('btn-success');
           btn.classList.add('btn-outline-secondary');
@@ -383,12 +433,30 @@
         if (window.appToast) {
           window.appToast('danger', '复制失败，请检查浏览器权限或手动复制。');
         }
+        if (window.appAnnounce) {
+          window.appAnnounce('复制失败');
+        }
         setTimeout(() => {
           btn.classList.remove('btn-danger');
           btn.classList.add('btn-outline-secondary');
           btn.innerHTML = original;
         }, 1400);
       });
+  });
+
+  tbody.addEventListener('keydown', (event) => {
+    const badge = event.target && event.target.closest ? event.target.closest('.code-badge') : null;
+    if (!badge || !badge.dataset.code) {
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      const row = badge.closest('tr');
+      const btn = row ? row.querySelector('.copy-btn') : null;
+      if (btn && btn.dataset.code) {
+        btn.click();
+      }
+    }
   });
 
   tbody.addEventListener('click', (event) => {
@@ -472,7 +540,14 @@
     }
     if (renameForm && typeof renameForm.checkValidity === 'function' && !renameForm.checkValidity()) {
       renameForm.classList.add('was-validated');
-      renameNameInput.focus({ preventScroll: true });
+      if (window.appFocusFirstInvalid) {
+        window.appFocusFirstInvalid(renameForm, { toastMessage: '请检查填写内容后再提交。' });
+      } else {
+        renameNameInput.focus({ preventScroll: true });
+      }
+      if (window.appNotify) {
+        window.appNotify({ alertEl: renameAlert, variant: 'warning', message: '请检查填写内容后再提交。' });
+      }
       return;
     }
     const value = renameNameInput.value.trim();
@@ -602,8 +677,57 @@
       });
   });
 
+  tbody.addEventListener('change', (event) => {
+    const select = event.target.closest('.asset-select');
+    if (!select) {
+      return;
+    }
+    const tr = select.closest('tr[data-update-asset-url]');
+    if (!tr) {
+      return;
+    }
+    const url = tr.dataset.updateAssetUrl;
+    const previous = select.dataset.current ?? '';
+    const value = select.value;
+    select.disabled = true;
+    select.classList.remove('is-valid', 'is-invalid');
+    const formData = new FormData();
+    formData.append('asset_id', value);
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'fetch',
+        'X-CSRFToken': window.appGetCsrfToken ? window.appGetCsrfToken() : '',
+      },
+      body: formData,
+    })
+      .then((resp) => {
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        return resp.json();
+      })
+      .then(() => {
+        select.dataset.current = value;
+        select.classList.add('is-valid');
+        setTimeout(() => select.classList.remove('is-valid'), 1200);
+      })
+      .catch((err) => {
+        console.error('Update asset failed:', err);
+        if (window.appToast) {
+          window.appToast('danger', '更新资产归属失败，请稍后再试。');
+        }
+        select.value = previous;
+        select.classList.add('is-invalid');
+        setTimeout(() => select.classList.remove('is-invalid'), 1500);
+      })
+      .finally(() => {
+        select.disabled = false;
+      });
+  });
+
   function updateClearButton() {
-    const hasValue = (qInput && qInput.value.trim()) || (groupSelect && groupSelect.value);
+    const hasValue = (qInput && qInput.value.trim()) || (groupSelect && groupSelect.value) || (assetSelect && assetSelect.value);
     if (clearBtn) {
       clearBtn.classList.toggle('d-none', !hasValue);
     }
@@ -617,6 +741,9 @@
   if (groupSelect) {
     groupSelect.addEventListener('change', updateClearButton);
   }
+  if (assetSelect) {
+    assetSelect.addEventListener('change', updateClearButton);
+  }
 
   if (clearBtn) {
     clearBtn.addEventListener('click', () => {
@@ -625,6 +752,9 @@
       }
       if (groupSelect) {
         groupSelect.value = '';
+      }
+      if (assetSelect) {
+        assetSelect.value = '';
       }
       updateClearButton();
       if (form) {
@@ -646,6 +776,28 @@
       }
     });
   }
+
+  document.addEventListener('keydown', (event) => {
+    const key = event.key;
+    const target = event.target;
+    const isTypingTarget = target instanceof HTMLElement
+      && (target.isContentEditable
+        || target.tagName === 'INPUT'
+        || target.tagName === 'TEXTAREA'
+        || target.tagName === 'SELECT');
+    if (key === '/' && !isTypingTarget) {
+      if (qInput) {
+        event.preventDefault();
+        qInput.focus({ preventScroll: true });
+        qInput.select();
+      }
+      return;
+    }
+    if (key === 'Escape' && qInput && document.activeElement === qInput && qInput.value) {
+      qInput.value = '';
+      updateClearButton();
+    }
+  });
 
   const addGroupModalEl = document.getElementById('addGroupModal');
   const groupManageList = document.getElementById('groupManageList');
@@ -676,19 +828,20 @@
     }
     row.querySelectorAll('button').forEach((btn) => {
       if (pending) {
-        btn.disabled = true;
-        if (btn === activeBtn) {
-          if (!btn.dataset.originalLabel) {
-            btn.dataset.originalLabel = btn.innerHTML;
-          }
-          const spinnerHtml = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>';
-          btn.innerHTML = `${spinnerHtml}${label || ''}`;
+        if (btn === activeBtn && window.appSetButtonLoading) {
+          window.appSetButtonLoading(btn, true, { label: label || '' });
+        } else {
+          btn.disabled = true;
         }
       } else {
-        btn.disabled = false;
-        if (btn.dataset.originalLabel) {
-          btn.innerHTML = btn.dataset.originalLabel;
-          delete btn.dataset.originalLabel;
+        if (window.appSetButtonLoading) {
+          window.appSetButtonLoading(btn, false);
+        } else {
+          btn.disabled = false;
+          if (btn.dataset.originalLabel) {
+            btn.innerHTML = btn.dataset.originalLabel;
+            delete btn.dataset.originalLabel;
+          }
         }
       }
     });
@@ -878,6 +1031,7 @@
   const shareLinkEntryId = document.getElementById('shareLinkEntryId');
   const shareLinkDuration = document.getElementById('shareLinkDuration');
   const shareLinkMaxViews = document.getElementById('shareLinkMaxViews');
+  const shareLinkNote = document.getElementById('shareLinkNote');
   const shareLinkResult = document.getElementById('shareLinkResult');
   const shareLinkAlert = document.getElementById('shareLinkAlert');
   const shareLinkUrl = document.getElementById('shareLinkUrl');
@@ -886,6 +1040,8 @@
   const shareLinkSpinner = document.getElementById('shareLinkSpinner');
   const shareLinkSummary = document.getElementById('shareLinkSummary');
   const shareLinkInvalidateBtn = document.getElementById('shareLinkInvalidateBtn');
+  const paginationEl = document.getElementById('entryListPagination');
+  let shareModalInstance = null;
 
   function clearShareLinkAlert() {
     inlineAlert(shareLinkAlert, 'danger', '');
@@ -914,22 +1070,102 @@
     if (shareLinkMaxViews) {
       shareLinkMaxViews.value = '3';
     }
+    if (shareLinkNote) {
+      shareLinkNote.value = '';
+    }
     if (shareLinkSpinner) {
       shareLinkSpinner.classList.add('d-none');
     }
     if (shareLinkSubmitBtn) {
       shareLinkSubmitBtn.disabled = false;
     }
+    shareLinkForm?.classList.remove('was-validated');
+  }
+
+  function refreshEntryListFragment() {
+    const url = window.location.href.split('#')[0];
+    return fetch(url, { headers: { 'X-Requested-With': 'fetch' }, credentials: 'same-origin' })
+      .then((resp) => {
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        return resp.text();
+      })
+      .then((html) => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const nextTbody = doc.getElementById('tbody');
+        if (nextTbody) {
+          tbody.innerHTML = nextTbody.innerHTML;
+        }
+        const nextPagination = doc.getElementById('entryListPagination');
+        if (paginationEl) {
+          paginationEl.innerHTML = nextPagination ? nextPagination.innerHTML : '';
+          paginationEl.classList.toggle('d-none', !nextPagination);
+        }
+        initRows();
+      });
   }
 
   function setShareSubmitting(flag) {
     if (!shareLinkSubmitBtn) {
       return;
     }
+    if (window.appSetButtonLoading) {
+      window.appSetButtonLoading(shareLinkSubmitBtn, flag, { label: '生成中' });
+      return;
+    }
     shareLinkSubmitBtn.disabled = flag;
     if (shareLinkSpinner) {
       shareLinkSpinner.classList.toggle('d-none', !flag);
     }
+  }
+
+  function resolveShareLinkUrl(payload) {
+    const rawValue = payload?.path || payload?.url || '';
+    if (!rawValue) {
+      return '';
+    }
+    try {
+      const absoluteUrl = new URL(rawValue, window.location.href);
+      return `${window.location.origin}${absoluteUrl.pathname}${absoluteUrl.search}${absoluteUrl.hash}`;
+    } catch (error) {
+      console.error('Resolve share link url failed:', error);
+      return rawValue;
+    }
+  }
+
+  function handleShareLinkCreateSuccess(data) {
+    const shareUrl = resolveShareLinkUrl(data);
+    if (shareLinkUrl) {
+      shareLinkUrl.value = shareUrl;
+    }
+    if (shareLinkResult) {
+      shareLinkResult.classList.remove('d-none');
+    }
+    renderShareSummary(data);
+    if (shareLinkInvalidateBtn) {
+      shareLinkInvalidateBtn.classList.remove('d-none');
+      shareLinkInvalidateBtn.dataset.linkId = String(data.id || '');
+    }
+    showShareLinkAlert('success', '分享链接已生成，可直接复制并发送。');
+
+    if (shareUrl && window.appCopyToClipboard) {
+      window.appCopyToClipboard(shareUrl)
+        .then(() => {
+          if (window.appToast) {
+            window.appToast('success', '分享链接已生成并复制。');
+          }
+        })
+        .catch(() => {
+          if (window.appToast) {
+            window.appToast('info', '分享链接已生成，请手动复制。');
+          }
+        });
+    }
+
+    refreshEntryListFragment().catch((err) => {
+      console.error('Refresh entries after link creation failed:', err);
+    });
   }
 
   function renderShareSummary(payload) {
@@ -940,16 +1176,32 @@
     if (!payload) {
       return;
     }
+    if (payload.created_at) {
+      const created = new Date(payload.created_at);
+      const li = document.createElement('li');
+      li.textContent = `创建时间：${created.toLocaleString()}`;
+      shareLinkSummary.appendChild(li);
+    }
     if (payload.expires_at) {
       const expires = new Date(payload.expires_at);
       const li = document.createElement('li');
       li.textContent = `有效期至：${expires.toLocaleString()}`;
       shareLinkSummary.appendChild(li);
     }
+    if (payload.duration_minutes) {
+      const li = document.createElement('li');
+      li.textContent = `有效期：${payload.duration_minutes} 分钟`;
+      shareLinkSummary.appendChild(li);
+    }
     if (typeof payload.max_views !== 'undefined') {
       const remaining = payload.remaining_views ?? Math.max(0, payload.max_views - 1);
       const li = document.createElement('li');
       li.textContent = `最多查看 ${payload.max_views} 次，目前还可查看 ${remaining} 次。`;
+      shareLinkSummary.appendChild(li);
+    }
+    if (payload.note) {
+      const li = document.createElement('li');
+      li.textContent = `备注：${payload.note}`;
       shareLinkSummary.appendChild(li);
     }
   }
@@ -965,7 +1217,8 @@
     shareLinkEntryLabel.textContent = entryName;
     resetShareModal();
     if (window.bootstrap && typeof window.bootstrap.Modal === 'function') {
-      window.bootstrap.Modal.getOrCreateInstance(shareModalEl).show();
+      shareModalInstance = window.bootstrap.Modal.getOrCreateInstance(shareModalEl);
+      shareModalInstance.show();
     }
   });
 
@@ -980,19 +1233,14 @@
     if (!shareLinkEntryId?.value) {
       return;
     }
-    if (shareLinkForm && typeof shareLinkForm.checkValidity === 'function' && !shareLinkForm.checkValidity()) {
-      shareLinkForm.classList.add('was-validated');
-      showShareLinkAlert('danger', '请检查填写内容');
-      return;
-    }
     clearShareLinkAlert();
     setShareSubmitting(true);
     const formData = new FormData();
     formData.append('duration', shareLinkDuration?.value || '10');
     formData.append('max_views', shareLinkMaxViews?.value || '3');
+    formData.append('note', (shareLinkNote?.value || '').trim());
 
     const createUrl = (config.oneTimeCreateUrlTemplate || '').replace('/0/', `/${shareLinkEntryId.value}/`);
-
     fetch(createUrl, {
       method: 'POST',
       headers: {
@@ -1003,23 +1251,11 @@
     })
       .then(async (resp) => {
         const data = await resp.json().catch(() => ({}));
-        if (data?.error === 'reauth_required' && data?.redirect) {
-          window.location.href = data.redirect;
-          return;
-        }
         if (!resp.ok || !data.ok) {
           const message = data.message || '生成链接失败，请稍后重试。';
           throw new Error(message);
         }
-        if (shareLinkUrl) {
-          shareLinkUrl.value = data.url;
-        }
-        renderShareSummary(data);
-        shareLinkResult?.classList.remove('d-none');
-        if (shareLinkInvalidateBtn) {
-          shareLinkInvalidateBtn.classList.remove('d-none');
-          shareLinkInvalidateBtn.dataset.linkId = String(data.id);
-        }
+        handleShareLinkCreateSuccess(data);
       })
       .catch((err) => {
         showShareLinkAlert('danger', err.message || '生成链接失败，请稍后重试。');
@@ -1092,4 +1328,3 @@
     }
   }
 })();
-

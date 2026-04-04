@@ -35,8 +35,9 @@ class AccessibilitySmokeTests(TestCase):
         self.assertIn('id="shareLinkModal"', html)
         self.assertIn('aria-labelledby="shareLinkModalLabel"', html)
         self.assertIn('id="shareLinkModalLabel"', html)
-        self.assertIn('id="shareLinkPassword"', html)
-        self.assertIn('id="shareLinkPasswordToggleBtn"', html)
+        self.assertIn('id="shareLinkResult"', html)
+        self.assertIn('id="shareLinkUrl"', html)
+        self.assertIn('id="shareLinkCopyBtn"', html)
 
         self.assertIn('id="exportEncryptedModal"', html)
         self.assertIn('aria-labelledby="exportEncryptedModalLabel"', html)

@@ -1,5 +1,5 @@
-from pathlib import Path
 import os
+from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -27,13 +27,31 @@ _enc_keys = os.environ.get("TOTP_ENC_KEYS", "").strip()
 if _enc_keys:
     TOTP_ENC_KEYS.extend([k.strip() for k in _enc_keys.split(",") if k.strip()])
 
+TOTP_DATA_KEYS: list[str] = []
+_data_key = os.environ.get("TOTP_DATA_KEY", "").strip()
+if _data_key:
+    TOTP_DATA_KEYS.append(_data_key)
+_data_keys = os.environ.get("TOTP_DATA_KEYS", "").strip()
+if _data_keys:
+    TOTP_DATA_KEYS.extend([k.strip() for k in _data_keys.split(",") if k.strip()])
+TOTP_DATA_KEY_FILE = os.environ.get("TOTP_DATA_KEY_FILE", "").strip()
+TOTP_DATA_KEY_LOADER = os.environ.get("TOTP_DATA_KEY_LOADER", "").strip()
+TOTP_ALLOW_LEGACY_ENCRYPTION_FALLBACK = _env_bool("TOTP_ALLOW_LEGACY_ENCRYPTION_FALLBACK", True)
+TOTP_ALLOW_SECRET_KEY_ENCRYPTION_FALLBACK = _env_bool(
+    "TOTP_ALLOW_SECRET_KEY_ENCRYPTION_FALLBACK",
+    DEBUG,
+)
+
 if not DEBUG:
     if SECRET_KEY.strip() == "dev-secret-key-change-me":
         raise RuntimeError("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is false")
     if "*" in ALLOWED_HOSTS:
         raise RuntimeError("DJANGO_ALLOWED_HOSTS must not contain '*' in production")
-    if not TOTP_ENC_KEYS:
-        raise RuntimeError("TOTP_ENC_KEY or TOTP_ENC_KEYS must be set when DJANGO_DEBUG is false")
+    if not (TOTP_DATA_KEYS or TOTP_DATA_KEY_FILE or TOTP_DATA_KEY_LOADER or TOTP_ENC_KEYS):
+        raise RuntimeError(
+            "TOTP_DATA_KEY/TOTP_DATA_KEYS/TOTP_DATA_KEY_FILE/TOTP_DATA_KEY_LOADER "
+            "or legacy TOTP_ENC_KEY/TOTP_ENC_KEYS must be set when DJANGO_DEBUG is false"
+        )
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -120,7 +138,15 @@ EXTERNAL_TOTP_RATE_LIMIT = int(os.environ.get("TOTP_EXTERNAL_TOTP_RATE_LIMIT", "
 EXTERNAL_TOTP_RATE_WINDOW_SECONDS = int(os.environ.get("TOTP_EXTERNAL_TOTP_RATE_WINDOW_SECONDS", "60"))
 EXTERNAL_TOTP_RATE_LIMIT_LONG = int(os.environ.get("TOTP_EXTERNAL_TOTP_RATE_LIMIT_LONG", "60"))
 EXTERNAL_TOTP_RATE_WINDOW_SECONDS_LONG = int(os.environ.get("TOTP_EXTERNAL_TOTP_RATE_WINDOW_SECONDS_LONG", "600"))
+EXTERNAL_TOTP_MAX_BODY_BYTES = int(os.environ.get("TOTP_EXTERNAL_TOTP_MAX_BODY_BYTES", "4096"))
+EXTERNAL_TOTP_MAX_SECRET_LENGTH = int(os.environ.get("TOTP_EXTERNAL_TOTP_MAX_SECRET_LENGTH", "256"))
 EXTERNAL_TOOL_ALLOW_SECRET_PREFILL = _env_bool("TOTP_EXTERNAL_TOOL_ALLOW_SECRET_PREFILL", False)
+
+AUTH_LOGIN_IP_RATE_LIMIT = int(os.environ.get("AUTH_LOGIN_IP_RATE_LIMIT", "40"))
+AUTH_LOGIN_IP_RATE_WINDOW_SECONDS = int(os.environ.get("AUTH_LOGIN_IP_RATE_WINDOW_SECONDS", "300"))
+AUTH_LOGIN_CHALLENGE_THRESHOLD = int(os.environ.get("AUTH_LOGIN_CHALLENGE_THRESHOLD", "5"))
+AUTH_LOGIN_CHALLENGE_WINDOW_SECONDS = int(os.environ.get("AUTH_LOGIN_CHALLENGE_WINDOW_SECONDS", "900"))
+AUTH_LOGIN_CHALLENGE_TTL_SECONDS = int(os.environ.get("AUTH_LOGIN_CHALLENGE_TTL_SECONDS", "600"))
 
 TRUST_X_FORWARDED_FOR = _env_bool("DJANGO_TRUST_X_FORWARDED_FOR", False)
 

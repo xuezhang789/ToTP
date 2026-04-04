@@ -104,3 +104,17 @@ class SecurityHardeningTests(TestCase):
         # 验证 redirect URL 中包含 referer
         expected_next = quote(referer)
         self.assertIn(f"next={expected_next}", data["redirect"])
+
+    def test_reauth_json_rejects_external_referer(self):
+        url = reverse("totp:batch_import_apply")
+        response = self.client.post(
+            url,
+            data={"space": "personal"},
+            content_type="application/json",
+            HTTP_REFERER="https://evil.example/phish",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        data = response.json()
+        expected_next = quote(reverse("totp:list"))
+        self.assertIn(f"next={expected_next}", data["redirect"])

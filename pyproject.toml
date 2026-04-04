@@ -1,0 +1,25 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [
+  ".venv",
+  "accounts/migrations",
+  "accounts/tests",
+  "staticfiles",
+  "totp/migrations",
+  "totp/tests",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+[tool.bandit]
+exclude_dirs = [
+  ".venv",
+  "staticfiles",
+  "accounts/tests",
+  "totp/tests",
+  "totp/migrations",
+]
+skips = ["B101"]

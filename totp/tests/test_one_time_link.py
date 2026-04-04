@@ -27,9 +27,6 @@ class OneTimeLinkTests(TestCase):
 
     def _create_link(self, **payload):
         self.client.force_login(self.user)
-        session = self.client.session
-        session["reauth_at"] = int(timezone.now().timestamp())
-        session.save()
         response = self.client.post(
             reverse("totp:one_time_create", args=[self.entry.pk]),
             payload or {"duration": 5, "max_views": 2},
@@ -48,6 +45,8 @@ class OneTimeLinkTests(TestCase):
         self.assertEqual(link.note, "for oncall")
         self.assertTrue(link.expires_at)
         self.assertEqual(link.view_count, 0)
+        self.assertTrue(data["path"].startswith("/totp/link/"))
+        self.assertTrue(data["url"].endswith(data["path"]))
         self.assertTrue(self.entry.audits.filter(action="one_time_link_created").exists())
 
     def test_create_link_supports_12_hours_and_10_views(self):
@@ -56,6 +55,15 @@ class OneTimeLinkTests(TestCase):
         self.assertEqual(link.max_views, 10)
         delta = link.expires_at - link.created_at
         self.assertGreaterEqual(delta.total_seconds(), 11.5 * 60 * 60)
+
+    def test_create_link_does_not_require_reauth(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("totp:one_time_create", args=[self.entry.pk]),
+            {"duration": 5, "max_views": 2},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
 
     def test_create_link_clamps_duration_and_views(self):
         data = self._create_link(duration=99999, max_views=999)

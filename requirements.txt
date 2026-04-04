@@ -1,5 +1,5 @@
-cryptography==45.0.6
-Django==4.2.23
+cryptography==46.0.6
+Django==4.2.29
 django-redis==5.4.0
 google-auth==2.40.3
-requests==2.32.4
+requests==2.33.0

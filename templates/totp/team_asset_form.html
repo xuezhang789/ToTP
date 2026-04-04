@@ -3,67 +3,108 @@
 {% block title %}资产设置 - TOTP管理平台{% endblock %}
 
 {% block content %}
-<div class="mb-3">
-    <a class="btn btn-link p-0" href="{% url 'totp:team_assets' team.id %}">
-        ← 返回资产目录
-    </a>
-</div>
-
-<div class="card app-panel border-0 shadow-sm">
-    <div class="card-body p-4">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-            <div>
-                <h1 class="h5 mb-1">{% if asset %}编辑资产{% else %}新建资产{% endif %}</h1>
-                <div class="text-muted small">团队：{{ team.name }}</div>
+<div class="team-page">
+    <section class="team-page-header">
+        <div class="team-page-header-bar">
+            <div class="team-page-header-main">
+                <div class="team-page-breadcrumb">
+                    <a class="text-decoration-none" href="{% url 'totp:teams' %}">团队空间</a>
+                    <span>/</span>
+                    <a class="text-decoration-none" href="{% url 'totp:team_assets' team.id %}">{{ team.name }}</a>
+                    <span>/</span>
+                    <span class="fw-semibold">{% if asset %}编辑资产{% else %}新建资产{% endif %}</span>
+                </div>
+                <div class="team-page-title-row">
+                    <h1 class="app-section-title mb-0">{% if asset %}编辑资产{% else %}新建资产{% endif %}</h1>
+                </div>
+                <p class="team-page-summary mb-0">用统一命名、负责人和关注人把团队密钥整理成可维护的资产目录。</p>
             </div>
-            {% if asset %}
-            <a class="btn btn-outline-secondary" href="{% url 'totp:team_asset_detail' team.id asset.id %}">查看详情</a>
-            {% endif %}
+            <div class="team-page-header-actions">
+                <a class="btn btn-outline-secondary" href="{% url 'totp:team_assets' team.id %}">
+                    <i class="bi bi-arrow-left me-1"></i> 返回资产目录
+                </a>
+                {% if asset %}
+                <a class="btn btn-outline-secondary" href="{% url 'totp:team_asset_detail' team.id asset.id %}">查看详情</a>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <div class="team-page-layout team-page-form-layout">
+        <div class="team-page-main-column">
+            <section class="team-page-panel">
+                <div class="team-page-panel-head">
+                    <div>
+                        <div class="team-section-kicker">表单</div>
+                        <div class="team-page-panel-title">资产信息</div>
+                    </div>
+                    <div class="team-page-panel-note">团队：{{ team.name }}</div>
+                </div>
+
+                <form method="post" class="needs-validation team-form-stack" novalidate>
+                    {% csrf_token %}
+                    <div class="team-form-field">
+                        <label class="form-label" for="assetName">资产名称</label>
+                        <input id="assetName" name="name" class="form-control" maxlength="80" required
+                               value="{{ form.name|default:'' }}" placeholder="例如：GitHub / AWS / 生产堡垒机" data-autofocus>
+                        <div class="form-text">建议使用系统、项目或服务名称，方便团队统一归档。</div>
+                    </div>
+
+                    <div class="team-form-field">
+                        <label class="form-label" for="assetDesc">描述（可选）</label>
+                        <textarea id="assetDesc" name="description" class="form-control" rows="4"
+                                  placeholder="用途、使用范围、轮换规则等">{{ form.description|default:'' }}</textarea>
+                    </div>
+
+                    <div class="team-form-split">
+                        <div class="team-form-field">
+                            <label class="form-label" for="assetOwners">负责人（可多选）</label>
+                            <select id="assetOwners" name="owners" class="form-select" multiple size="8">
+                                {% for m in members %}
+                                <option value="{{ m.user_id }}" {% if m.user_id|stringformat:"s" in form.owners %}selected{% endif %}>
+                                    {{ m.user.username }}（{{ m.get_role_display }}）
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">负责人用于明确维护责任，可结合审计与提醒策略使用。</div>
+                        </div>
+
+                        <div class="team-form-field">
+                            <label class="form-label" for="assetWatchers">关注人（可多选）</label>
+                            <select id="assetWatchers" name="watchers" class="form-select" multiple size="8">
+                                {% for m in members %}
+                                <option value="{{ m.user_id }}" {% if m.user_id|stringformat:"s" in form.watchers %}selected{% endif %}>
+                                    {{ m.user.username }}（{{ m.get_role_display }}）
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">关注人用于接收提醒或参与协作，不建议填写敏感信息。</div>
+                        </div>
+                    </div>
+
+                    <div class="team-form-actions">
+                        <a class="btn btn-outline-secondary" href="{% url 'totp:team_assets' team.id %}">取消</a>
+                        <button class="btn btn-primary" type="submit">保存</button>
+                    </div>
+                </form>
+            </section>
         </div>
 
-        <form method="post" class="needs-validation" novalidate>
-            {% csrf_token %}
-            <div class="mb-3">
-                <label class="form-label" for="assetName">资产名称</label>
-                <input id="assetName" name="name" class="form-control" maxlength="80" required
-                       value="{{ form.name|default:'' }}" placeholder="例如：GitHub / AWS / 生产堡垒机" data-autofocus>
-                <div class="form-text">建议使用系统/项目/服务名称，方便团队统一归档。</div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label" for="assetDesc">描述（可选）</label>
-                <textarea id="assetDesc" name="description" class="form-control" rows="3"
-                          placeholder="用途、使用范围、轮换规则等">{{ form.description|default:'' }}</textarea>
-            </div>
-            <div class="row g-3">
-                <div class="col-12 col-lg-6">
-                    <label class="form-label" for="assetOwners">负责人（可多选）</label>
-                    <select id="assetOwners" name="owners" class="form-select" multiple size="8">
-                        {% for m in members %}
-                            <option value="{{ m.user_id }}" {% if m.user_id|stringformat:"s" in form.owners %}selected{% endif %}>
-                                {{ m.user.username }}（{{ m.get_role_display }}）
-                            </option>
-                        {% endfor %}
-                    </select>
-                    <div class="form-text">负责人用于明确维护责任，可结合审计与提醒策略使用。</div>
+        <aside class="team-page-rail">
+            <section class="team-page-panel">
+                <div class="team-page-panel-head">
+                    <div>
+                        <div class="team-section-kicker">建议</div>
+                        <div class="team-page-panel-title">填写规范</div>
+                    </div>
                 </div>
-                <div class="col-12 col-lg-6">
-                    <label class="form-label" for="assetWatchers">关注人（可多选）</label>
-                    <select id="assetWatchers" name="watchers" class="form-select" multiple size="8">
-                        {% for m in members %}
-                            <option value="{{ m.user_id }}" {% if m.user_id|stringformat:"s" in form.watchers %}selected{% endif %}>
-                                {{ m.user.username }}（{{ m.get_role_display }}）
-                            </option>
-                        {% endfor %}
-                    </select>
-                    <div class="form-text">关注人用于接收提醒或参与协作，不建议填写敏感信息。</div>
+                <div class="team-note-stack">
+                    <div class="team-note-item">名称尽量与团队内部常用叫法一致，避免重复资产或模糊命名。</div>
+                    <div class="team-note-item">负责人建议填写真正会维护这组密钥的人，避免只写管理员账号。</div>
+                    <div class="team-note-item">描述里可以记录用途、访问边界和轮换规则，后续审计会更顺手。</div>
                 </div>
-            </div>
-            <div class="d-flex flex-wrap gap-2 justify-content-end mt-4">
-                <a class="btn btn-outline-secondary" href="{% url 'totp:team_assets' team.id %}">取消</a>
-                <button class="btn btn-primary" type="submit">保存</button>
-            </div>
-        </form>
+            </section>
+        </aside>
     </div>
 </div>
 {% endblock %}
-

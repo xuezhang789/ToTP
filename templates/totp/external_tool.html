@@ -2,94 +2,89 @@
 {% block title %}在线动态验证码生成器{% endblock %}
 
 {% block content %}
-<section class="py-5 py-lg-6 bg-gradient" style="background: radial-gradient(circle at top, #eef2ff 0, #e2e8f0 45%, #f8fafc 100%);">
-  <div class="container">
-    <div class="row justify-content-center">
-      <div class="col-12 col-lg-10 col-xl-8">
-        <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
-          <div class="row g-0">
-            <div class="col-12 col-md-5 bg-primary text-white d-flex flex-column justify-content-center p-4 p-lg-5">
-              <div>
-                <h1 class="h3 fw-semibold mb-3">即时生成动态验证码</h1>
-                <p class="text-white-50 mb-4">输入 Base32 格式的密钥，即可实时计算 TOTP 验证码。支持 4-8 位数字、自定义周期,更多功能请登录使用。</p>
-                <ul class="list-unstyled small text-white-75 mb-0">
-                  <li class="mb-2"><i class="bi bi-lightning-charge-fill me-2"></i>无需登录，随时可用</li>
-                  <li class="mb-2"><i class="bi bi-shield-lock-fill me-2"></i>本地计算，无敏感数据持久化</li>
-                  <li><i class="bi bi-phone me-2"></i>自适应界面，手机上也能顺畅使用</li>
-                </ul>
-              </div>
+<section class="workspace-public-shell">
+  <div class="workspace-hero-card">
+    <div class="workspace-hero-grid">
+      <aside class="workspace-hero-side">
+        <span class="workspace-hero-chip"><i class="bi bi-lightning-charge"></i> 即时工具</span>
+        <h1 class="h3 fw-semibold mt-3 mb-3">在线动态验证码生成器</h1>
+        <p class="mb-4">输入 Base32 密钥后，即可在当前页面实时计算 TOTP 验证码。适合临时排查、切换设备或做应急核对。</p>
+        <ul class="list-unstyled small mb-0">
+          <li class="mb-2"><i class="bi bi-shield-lock-fill me-2"></i>无需登录，打开即可使用</li>
+          <li class="mb-2"><i class="bi bi-cpu me-2"></i>本地计算，不做持久化存储</li>
+          <li><i class="bi bi-phone me-2"></i>在桌面和手机上都能顺畅使用</li>
+        </ul>
+      </aside>
+      <div class="workspace-hero-body">
+        <div class="team-section-kicker">快速生成</div>
+        <h2 class="team-page-panel-title mt-2">填写密钥后立即计算</h2>
+        <p class="text-muted small mb-4">支持 4-8 位数字和常见周期。若这是长期使用的密钥，建议登录后加密保存到工作台。</p>
+
+        <form id="totp-form" class="needs-validation" novalidate data-endpoint="{% url 'totp:external_totp' %}">
+          <div class="mb-3">
+            <label for="secret-input" class="form-label fw-semibold">TOTP 密钥（Base32）</label>
+            <textarea id="secret-input" name="secret" class="form-control" rows="3" placeholder="例如：JBSWY3DPEHPK3PXP"
+                      required>{{ prefill_secret }}</textarea>
+            <div class="invalid-feedback">请输入有效的 Base32 密钥。</div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-6">
+              <label for="digits-input" class="form-label fw-semibold">验证码位数</label>
+              <select id="digits-input" name="digits" class="form-select">
+                {% for val in digits_choices %}
+                <option value="{{ val }}" {% if prefill_digits == val %}selected{% endif %}>{{ val }} 位</option>
+                {% endfor %}
+              </select>
             </div>
-            <div class="col-12 col-md-7 bg-white">
-              <div class="p-4 p-lg-5">
-                <form id="totp-form" class="needs-validation" novalidate data-endpoint="{% url 'totp:external_totp' %}">
-                  <div class="mb-3">
-                    <label for="secret-input" class="form-label fw-semibold">TOTP 密钥（Base32）</label>
-                    <textarea id="secret-input" name="secret" class="form-control" rows="3" placeholder="例如：JBSWY3DPEHPK3PXP"
-                              required>{{ prefill_secret }}</textarea>
-                    <div class="invalid-feedback">请输入有效的 Base32 密钥。</div>
-                  </div>
-                  <div class="row g-3 mb-3">
-                    <div class="col-6">
-                      <label for="digits-input" class="form-label fw-semibold">验证码位数</label>
-                      <select id="digits-input" name="digits" class="form-select">
-                        {% for val in digits_choices %}
-                        <option value="{{ val }}" {% if prefill_digits == val %}selected{% endif %}>{{ val }} 位</option>
-                        {% endfor %}
-                      </select>
-                    </div>
-                    <div class="col-6">
-                      <label for="period-input" class="form-label fw-semibold">周期（秒）</label>
-                      <select id="period-input" name="period" class="form-select">
-                        {% for val in period_choices %}
-                        <option value="{{ val }}" {% if prefill_period == val %}selected{% endif %}>每 {{ val }} 秒</option>
-                        {% endfor %}
-                      </select>
-                    </div>
-                  </div>
-                  <div class="d-grid d-md-block">
-                    <button class="btn btn-primary px-4" type="submit">生成验证码</button>
-                    <a class="btn btn-link text-decoration-none mt-3 mt-md-0 ms-md-3" href="{% url 'dashboard' %}">
-                      返回首页
-                    </a>
-                  </div>
-                </form>
-
-                <div id="result-card" class="mt-4 d-none">
-                  <div class="card border-0 shadow-sm">
-                    <div class="card-body">
-                      <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
-                        <div>
-                          <p class="text-muted mb-1 small">当前验证码</p>
-                          <p id="otp-code" class="display-4 fw-bold mb-0">000000</p>
-                        </div>
-                        <div class="text-end">
-                          <p class="text-muted mb-1 small">剩余时间</p>
-                          <p id="otp-remaining" class="h4 fw-semibold text-primary mb-0">-- 秒</p>
-                        </div>
-                      </div>
-                      <div class="d-flex flex-wrap align-items-center gap-3 mt-3">
-                        <span class="badge rounded-pill bg-secondary-subtle text-secondary" id="otp-period">周期 30 秒</span>
-                        <span class="badge rounded-pill bg-secondary-subtle text-secondary" id="otp-digits">6 位</span>
-                        <span class="badge rounded-pill bg-secondary-subtle text-secondary" id="otp-preview">密钥 ****</span>
-                      </div>
-                      <div class="d-flex flex-wrap gap-2 mt-3">
-                        <button id="copy-btn" class="btn btn-outline-secondary w-100 w-md-auto" type="button">
-                          <i class="bi bi-clipboard"></i> 复制验证码
-                        </button>
-                        <button id="refresh-btn" class="btn btn-outline-primary w-100 w-md-auto" type="button">
-                          <i class="bi bi-arrow-clockwise"></i> 立即刷新
-                        </button>
-                      </div>
-                      <p id="generated-at" class="text-muted small mt-3 mb-0">生成时间：--</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div id="form-alert" class="alert alert-danger mt-4 d-none" role="alert"></div>
-              </div>
+            <div class="col-6">
+              <label for="period-input" class="form-label fw-semibold">周期（秒）</label>
+              <select id="period-input" name="period" class="form-select">
+                {% for val in period_choices %}
+                <option value="{{ val }}" {% if prefill_period == val %}selected{% endif %}>每 {{ val }} 秒</option>
+                {% endfor %}
+              </select>
             </div>
           </div>
+          <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-primary px-4" type="submit">生成验证码</button>
+            <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}">返回首页</a>
+          </div>
+        </form>
+
+        <div id="result-card" class="team-page-panel mt-4 d-none">
+          <div class="team-page-panel-head">
+            <div>
+              <div class="team-section-kicker">结果</div>
+              <div class="team-page-panel-title">当前验证码</div>
+            </div>
+            <div class="team-page-panel-note" id="generated-at">生成时间：--</div>
+          </div>
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+              <p class="text-muted mb-1 small">验证码</p>
+              <p id="otp-code" class="display-4 fw-bold mb-0">000000</p>
+            </div>
+            <div class="text-md-end">
+              <p class="text-muted mb-1 small">剩余时间</p>
+              <p id="otp-remaining" class="h4 fw-semibold text-primary mb-0">-- 秒</p>
+            </div>
+          </div>
+          <div class="d-flex flex-wrap align-items-center gap-3 mt-3">
+            <span class="badge rounded-pill bg-secondary-subtle text-secondary" id="otp-period">周期 30 秒</span>
+            <span class="badge rounded-pill bg-secondary-subtle text-secondary" id="otp-digits">6 位</span>
+            <span class="badge rounded-pill bg-secondary-subtle text-secondary" id="otp-preview">密钥 ****</span>
+          </div>
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <button id="copy-btn" class="btn btn-outline-secondary w-100 w-md-auto" type="button">
+              <i class="bi bi-clipboard"></i> 复制验证码
+            </button>
+            <button id="refresh-btn" class="btn btn-outline-primary w-100 w-md-auto" type="button">
+              <i class="bi bi-arrow-clockwise"></i> 立即刷新
+            </button>
+          </div>
         </div>
+
+        <div id="form-alert" class="alert alert-danger mt-4 d-none" role="alert"></div>
       </div>
     </div>
   </div>

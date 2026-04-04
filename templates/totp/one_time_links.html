@@ -3,45 +3,85 @@
 {% load static %}
 
 {% block content %}
-<div class="mb-3">
-    <a class="btn btn-link p-0" href="{% url 'totp:list' %}">
-        ← 返回密钥列表
-    </a>
-</div>
+<div class="team-page">
+    <section class="team-page-header">
+        <div class="team-page-header-bar">
+            <div class="team-page-header-main">
+                <div class="team-page-breadcrumb">
+                    <a class="text-decoration-none" href="{% url 'totp:list' %}">密钥工作台</a>
+                    <span>/</span>
+                    {% if is_team_audit and team %}
+                    <a class="text-decoration-none" href="{% url 'totp:team_home' team.id %}">{{ team.name }}</a>
+                    <span>/</span>
+                    {% endif %}
+                    <span class="fw-semibold">分享链接审计</span>
+                </div>
+                <div class="team-page-title-row">
+                    <h1 class="app-section-title mb-0">分享链接审计</h1>
+                </div>
+                <p class="team-page-summary mb-0">
+                    {% if is_team_audit and team %}
+                    查看 {{ team.name }} 团队内的一次性访问链接状态、访问记录和待失效项。
+                    {% else %}
+                    统一审计个人与团队空间里由你创建的一次性访问链接，快速定位未访问、临期和高风险链接。
+                    {% endif %}
+                </p>
+            </div>
+            <div class="team-page-header-actions">
+                <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}">
+                    <i class="bi bi-arrow-left me-1"></i> 返回密钥列表
+                </a>
+                <a class="btn btn-outline-secondary"
+                   href="{{ export_url }}{% if querystring %}?{{ querystring }}{% endif %}">
+                    <i class="bi bi-download me-1"></i> 导出 CSV
+                </a>
+            </div>
+        </div>
 
-<div class="card app-table-card">
-    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <div>
-            <strong>一次性访问链接审计</strong>
-            {% if is_team_audit and team %}
-                <span class="text-muted small ms-2">团队：{{ team.name }}</span>
-            {% endif %}
-        </div>
-        <div class="d-flex flex-wrap gap-2 align-items-center">
-            <div class="d-md-none form-check mb-0">
-                <input class="form-check-input" type="checkbox" id="selectAllLinksMobile" aria-label="全选">
-                <label class="form-check-label small text-muted" for="selectAllLinksMobile">全选</label>
+        <div class="team-page-kpi-grid">
+            <div class="team-page-kpi" data-state="{% if active_count %}warning{% else %}safe{% endif %}">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">当前有效</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-link-45deg"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{{ active_count }}</div>
+                <div class="team-page-kpi-meta">{% if active_count %}建议关注高频分享链接{% else %}暂无可用链接{% endif %}</div>
             </div>
-            <div class="small text-muted">
-                共 {{ total_count }} 条，当前有效 {{ active_count }} 条
+            <div class="team-page-kpi">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">全部记录</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-journal-text"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{{ total_count }}</div>
+                <div class="team-page-kpi-meta">包含已过期、已撤销和已用尽</div>
             </div>
-            <a class="btn btn-sm btn-outline-secondary"
-               href="{{ export_url }}{% if querystring %}?{{ querystring }}{% endif %}">
-                导出 CSV
-            </a>
-            <button type="button" class="btn btn-sm btn-outline-danger" id="batchInvalidateBtn"
-                    data-url="{{ batch_invalidate_url }}" disabled>
-                批量失效（已选 <span id="selectedCount">0</span>，可失效 <span id="selectedActiveCount">0</span>）
-            </button>
-            {% if is_team_audit and batch_remind_url %}
-            <button type="button" class="btn btn-sm btn-outline-primary" id="batchRemindBtn"
-                    data-url="{{ batch_remind_url }}" disabled>
-                批量提醒失效
-            </button>
-            {% endif %}
+            <div class="team-page-kpi" data-state="{% if is_filtered %}primary{% else %}safe{% endif %}">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">筛选状态</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-funnel"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{% if is_filtered %}已启用{% else %}全部{% endif %}</div>
+                <div class="team-page-kpi-meta">{% if filter_chips %}当前 {{ filter_chips|length }} 个条件{% else %}未限定范围{% endif %}</div>
+            </div>
+            <div class="team-page-kpi" data-state="{% if is_team_audit %}primary{% else %}safe{% endif %}">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">审计视角</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-diagram-3"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{% if is_team_audit %}团队{% else %}个人{% endif %}</div>
+                <div class="team-page-kpi-meta">{% if is_team_audit and team %}{{ team.name }}{% else %}我的创建记录{% endif %}</div>
+            </div>
         </div>
-    </div>
-    <div class="card-body border-bottom">
+    </section>
+
+    <section class="team-page-panel">
+        <div class="team-page-panel-head">
+            <div>
+                <div class="team-section-kicker">筛选</div>
+                <div class="team-page-panel-title">审计条件</div>
+            </div>
+            <div class="team-page-panel-note">支持按状态、创建人、空间和时间范围快速定位</div>
+        </div>
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
             <div class="text-muted small">快捷筛选</div>
             <div class="d-flex flex-wrap gap-2">
@@ -131,7 +171,37 @@
                 {% endif %}
             </div>
         </form>
-    </div>
+    </section>
+
+    <div class="card app-table-card">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <strong>访问链接清单</strong>
+                <div class="small text-muted mt-1">
+                    {% if is_team_audit and team %}
+                    团队：{{ team.name }}
+                    {% else %}
+                    共 {{ total_count }} 条，当前有效 {{ active_count }} 条
+                    {% endif %}
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <div class="d-md-none form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="selectAllLinksMobile" aria-label="全选">
+                    <label class="form-check-label small text-muted" for="selectAllLinksMobile">全选</label>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger" id="batchInvalidateBtn"
+                        data-url="{{ batch_invalidate_url }}" disabled>
+                    批量失效（已选 <span id="selectedCount">0</span>，可失效 <span id="selectedActiveCount">0</span>）
+                </button>
+                {% if is_team_audit and batch_remind_url %}
+                <button type="button" class="btn btn-sm btn-outline-primary" id="batchRemindBtn"
+                        data-url="{{ batch_remind_url }}" disabled>
+                    批量提醒失效
+                </button>
+                {% endif %}
+            </div>
+        </div>
     <div class="d-md-none">
         <div class="list-group list-group-flush">
             {% for item in records %}
@@ -378,6 +448,7 @@
     为安全起见，系统只保存链接的哈希值，不可恢复原始访问链接。如需重新分享，请重新生成新的访问链接。
     建议定期检查并失效不再使用的链接。
 </div>
+    </div>
 {% endblock %}
 
 {% block scripts %}

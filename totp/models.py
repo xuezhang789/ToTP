@@ -7,8 +7,6 @@ from django.db.models import Q
 from django.utils import timezone
 
 from project.utils import client_ip
-from .utils import decrypt_str, encrypt_str
-
 
 User = settings.AUTH_USER_MODEL
 
@@ -264,7 +262,10 @@ class ActiveTOTPEntryManager(models.Manager):
 
         return (
             self.get_queryset()
-            .filter(Q(user=user) | Q(team__memberships__user=user))
+            .filter(
+                Q(team__isnull=True, user=user)
+                | Q(team__isnull=False, team__memberships__user=user)
+            )
             .distinct()
         )
 
@@ -278,7 +279,10 @@ class AllTOTPEntryManager(models.Manager):
     def for_user(self, user):
         return (
             self.get_queryset()
-            .filter(Q(user=user) | Q(team__memberships__user=user))
+            .filter(
+                Q(team__isnull=True, user=user)
+                | Q(team__isnull=False, team__memberships__user=user)
+            )
             .distinct()
         )
 
@@ -355,20 +359,16 @@ class TOTPEntry(models.Model):
     def user_can_view(self, user) -> bool:
         if user is None or not getattr(user, "is_authenticated", False):
             return False
-        if self.user_id == user.id:
-            return True
         if self.team_id:
             return self.team.has_member(user)
-        return False
+        return self.user_id == user.id
 
     def user_can_manage(self, user) -> bool:
         if user is None or not getattr(user, "is_authenticated", False):
             return False
-        if self.user_id == user.id:
-            return True
         if self.team_id:
             return self.team.user_can_manage_entries(user)
-        return False
+        return self.user_id == user.id
 
     @classmethod
     def purge_expired_trash(cls, user=None):
@@ -381,10 +381,16 @@ class TOTPEntry(models.Model):
         cutoff = timezone.now() - timedelta(days=30)
         qs = cls.all_objects.filter(is_deleted=True, deleted_at__lt=cutoff)
         if user is not None:
-            team_ids = TeamMembership.objects.filter(user=user).values_list(
+            team_ids = TeamMembership.objects.filter(
+                user=user,
+                role__in=TeamMembership.Role.manager_roles(),
+            ).values_list(
                 "team_id", flat=True
             )
-            qs = qs.filter(Q(user=user) | Q(team_id__in=team_ids))
+            qs = qs.filter(
+                Q(user=user, team__isnull=True)
+                | Q(team_id__in=team_ids)
+            )
         qs.delete()
 
     @property
@@ -446,7 +452,6 @@ class TOTPEntryAudit(models.Model):
 def log_entry_audit(entry: TOTPEntry, actor, action: str, *, old_value="", new_value="", metadata=None):
     """创建一条审计记录。"""
 
-    from django.contrib.auth import get_user_model  # 避免循环导入
 
     metadata = metadata or {}
     actor_obj = None

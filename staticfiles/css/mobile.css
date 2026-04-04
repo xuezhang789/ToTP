@@ -50,4 +50,368 @@
     .navbar .navbar-collapse .navbar-actions {
         margin-top: 0.5rem;
     }
+    .table-responsive {
+        -webkit-overflow-scrolling: touch;
+    }
+    .page-link {
+        min-height: 44px;
+        min-width: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.8rem;
+    }
+    .nav-tabs .nav-link {
+        min-height: 44px;
+        border-radius: 0.8rem 0.8rem 0 0;
+    }
+    .team-home-hero {
+        padding: 1.05rem;
+    }
+    .team-home-hero-grid {
+        grid-template-columns: 1fr;
+    }
+    .team-home-hero-grid-compact {
+        grid-template-columns: 1fr;
+    }
+    .team-home-title-row {
+        align-items: flex-start;
+    }
+    .team-home-hero-side {
+        gap: 0.7rem;
+    }
+    .team-health-card {
+        padding: 0.95rem;
+    }
+    .team-health-head {
+        flex-direction: column;
+    }
+    .team-health-badge {
+        align-self: flex-start;
+    }
+    .team-health-stats {
+        grid-template-columns: 1fr 1fr;
+    }
+    .team-home-action-cluster {
+        grid-template-columns: 1fr;
+    }
+    .team-home-action-cluster .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .team-home-action-cluster .btn-primary,
+    .team-action-wide {
+        grid-column: auto;
+    }
+    .team-home-action-cluster-header {
+        min-width: 0;
+        width: 100%;
+    }
+    .team-home-header {
+        padding: 1rem;
+    }
+    .team-home-header-actions {
+        grid-template-columns: 1fr;
+        min-width: 0;
+    }
+    .team-home-header-actions .btn:first-child,
+    .team-home-header-actions .team-action-wide {
+        grid-column: auto;
+    }
+    .team-page-header {
+        padding: 1rem;
+    }
+    .team-page-header-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .team-page-header-actions .btn,
+    .team-page-header-actions form,
+    .team-page-header-actions form .btn {
+        width: 100%;
+    }
+    .auth-shell,
+    .profile-grid,
+    .workspace-hero-grid {
+        grid-template-columns: 1fr;
+    }
+    .auth-panel,
+    .auth-side-panel,
+    .workspace-hero-side,
+    .workspace-hero-body {
+        padding: 1rem;
+    }
+    .team-page-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .team-page-panel,
+    .team-page-section,
+    .team-page-empty {
+        padding: 0.95rem;
+    }
+    .team-page-toolbar-meta,
+    .team-page-chip-row {
+        width: 100%;
+    }
+    .team-page-chip {
+        justify-content: center;
+    }
+    .team-collection-grid,
+    .team-asset-card-grid,
+    .team-detail-meta-grid,
+    .team-form-split,
+    .team-audit-filter-grid,
+    .team-audit-item-values {
+        grid-template-columns: 1fr;
+    }
+    .team-entity-stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .team-entity-card-actions,
+    .team-form-actions,
+    .team-table-toolbar,
+    .team-invite-actions {
+        width: 100%;
+    }
+    .team-entity-card-actions .btn,
+    .team-entity-card-actions form,
+    .team-entity-card-actions form .btn,
+    .team-form-actions .btn,
+    .team-table-toolbar .btn,
+    .team-invite-actions .btn {
+        width: 100%;
+    }
+    .profile-summary-grid,
+    .team-page .app-table-card .card-header {
+        grid-template-columns: 1fr;
+    }
+    .team-audit-item-head .badge {
+        align-self: flex-start;
+    }
+    .team-home-pill-row {
+        gap: 0.45rem;
+    }
+    .team-home-pill {
+        width: 100%;
+        justify-content: center;
+    }
+    .team-home-nav-shell,
+    .team-home-rail {
+        position: static;
+    }
+    .team-home-tabs-vertical {
+        flex-direction: row;
+        overflow-x: auto;
+        padding-bottom: 0.15rem;
+    }
+    .team-home-tabs-vertical .nav-link {
+        min-width: max-content;
+    }
+    .team-home-frame {
+        grid-template-columns: 1fr;
+    }
+    .team-home-nav-body,
+    .team-home-main-body,
+    .team-sidebar-body {
+        padding: 0.9rem;
+    }
+    .team-home-nav-list {
+        grid-template-columns: 1fr;
+    }
+    .team-home-nav-list .nav-link {
+        min-width: 0;
+    }
+    .team-overview-focus {
+        flex-direction: column;
+    }
+    .team-overview-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .team-dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+    .team-governance-priority-head {
+        flex-direction: column;
+    }
+    .team-governance-priority-state {
+        align-self: flex-start;
+    }
+    .team-governance-priority-actions {
+        flex-direction: column;
+    }
+    .team-governance-priority-actions .btn {
+        width: 100%;
+    }
+    .team-home-rail-header {
+        flex-direction: column;
+    }
+    .team-governance-summary-grid {
+        grid-template-columns: 1fr;
+    }
+    .team-governance-section-head {
+        flex-direction: column;
+    }
+    .team-governance-inline-note {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .team-governance-highlight {
+        min-height: auto;
+    }
+    .team-home-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 0.1rem;
+    }
+    .team-home-tabs .nav-link {
+        white-space: nowrap;
+        border-radius: 999px;
+    }
+    .team-tab-content {
+        padding: 0.7rem 0.35rem 0.1rem;
+    }
+    .team-inline-metric,
+    .team-nav-card,
+    .team-tab-placeholder {
+        padding: 0.95rem;
+    }
+    .team-workspace-head {
+        flex-direction: column;
+        margin-bottom: 0.85rem;
+    }
+    .team-home-main-head {
+        flex-direction: column;
+    }
+    .team-workspace-toolbar {
+        flex-direction: column;
+        padding: 0.9rem;
+    }
+    .team-workspace-toolbar-copy {
+        max-width: none;
+    }
+    .team-workspace-toolbar-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .team-workspace-toolbar-actions .btn {
+        width: 100%;
+    }
+    .team-workspace-signal {
+        width: 100%;
+        min-width: 0;
+    }
+    .team-quick-actions-grid {
+        grid-template-columns: 1fr;
+    }
+    .team-home-asset-links {
+        grid-template-columns: 1fr;
+    }
+    .team-overview-row {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.2rem;
+    }
+    .team-governance-banner {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .table-cardify-wrapper {
+        overflow-x: visible;
+    }
+    table.table-cardify thead {
+        display: none;
+    }
+    table.table-cardify tbody,
+    table.table-cardify tr,
+    table.table-cardify td {
+        display: block;
+        width: 100%;
+    }
+    table.table-cardify tr {
+        background: #ffffff;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 1rem;
+        padding: 0.75rem 0.85rem;
+        margin: 0.75rem 0.75rem;
+    }
+    table.table-cardify tr.no-data {
+        background: transparent;
+        border: 0;
+        padding: 0;
+        margin: 0;
+    }
+    table.table-cardify tr.no-data td {
+        padding: 1.5rem 0.75rem;
+    }
+    table.table-cardify td {
+        padding: 0.35rem 0;
+        border-top: 0;
+    }
+    table.table-cardify td.entry-cell-name {
+        padding-top: 0;
+    }
+    table.table-cardify td.entry-cell-actions {
+        padding-bottom: 0;
+    }
+    table.table-cardify td.entry-cell-group::before {
+        content: "分组";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.entry-cell-code::before {
+        content: "验证码";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.entry-cell-actions::before {
+        content: "操作";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.entry-cell-actions .btn,
+    table.table-cardify td.entry-cell-actions .btn-sm {
+        flex: 1 1 auto;
+    }
+    table.table-cardify td.trash-cell-group::before {
+        content: "分组";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.trash-cell-deleted::before {
+        content: "删除时间";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.trash-cell-remaining::before {
+        content: "剩余天数";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.trash-cell-actions::before {
+        content: "操作";
+        display: block;
+        font-size: 0.8rem;
+        color: rgba(100, 116, 139, 1);
+        margin-bottom: 0.35rem;
+    }
+    table.table-cardify td.trash-cell-select {
+        padding-top: 0;
+        padding-bottom: 0.25rem;
+    }
+    table.table-cardify td.trash-cell-actions .btn,
+    table.table-cardify td.trash-cell-actions .btn-sm {
+        flex: 1 1 auto;
+    }
 }

@@ -8,42 +8,74 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 {% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-md-6 col-lg-5">
-        <div class="card shadow-sm border-0 rounded-4">
-            <div class="card-body p-4">
-                <div class="text-center mb-3">
-                    <i class="bi bi-shield-check text-primary fs-1"></i>
+<div class="team-page">
+    <section class="team-page-header">
+        <div class="team-page-header-bar">
+            <div class="team-page-header-main">
+                <div class="team-page-breadcrumb">
+                    <span class="fw-semibold">账号中心</span>
+                    <span>/</span>
+                    <span class="fw-semibold">二次确认</span>
                 </div>
-                <h1 class="h4 mb-3 text-center">确认密码</h1>
-                {% if has_password %}
-                    <form method="post" action="{% url 'accounts:reauth' %}">
-                        {% csrf_token %}
-                        <input type="hidden" name="next" value="{{ next }}">
-                        <div class="mb-3">
-                            <label class="form-label">当前密码</label>
-                            <input type="password" class="form-control" name="password" autocomplete="current-password" required>
-                        </div>
-                        <button class="btn btn-primary w-100" type="submit">继续</button>
-                    </form>
-                {% else %}
-                    <p class="text-muted small mb-3">该账号未设置本地密码，请使用 Google 再次确认后继续。</p>
-                    <div id="g_id_onload"
-                         data-client_id="{{ GOOGLE_CLIENT_ID }}"
-                         data-context="signin"
-                         data-ux_mode="popup"
-                         data-callback="handleReauthCredential"
-                         data-auto_prompt="true">
-                    </div>
-                    <div class="g_id_signin" data-type="standard" data-shape="rect" data-theme="outline"
-                         data-text="continue_with" data-size="large" data-logo_alignment="left"></div>
-                    <input type="hidden" id="reauth-next" value="{{ next }}">
-                {% endif %}
-                <div class="text-center mt-3 small">
-                    <a class="text-decoration-none" href="{% url 'accounts:profile' %}">返回个人资料</a>
+                <div class="team-page-title-row">
+                    <h1 class="app-section-title mb-0">确认密码</h1>
                 </div>
+                <p class="team-page-summary mb-0">继续执行导出、分享或删除等敏感操作前，请先完成一次身份确认。</p>
             </div>
         </div>
+    </section>
+
+    <div class="auth-shell">
+        <section class="auth-panel">
+            <div class="auth-icon"><i class="bi bi-shield-check"></i></div>
+            <div class="auth-eyebrow">敏感操作保护</div>
+            <h2 class="auth-title">继续前请完成确认</h2>
+            <p class="auth-copy">这样可以防止在已登录状态下被误触发高风险操作。</p>
+
+            {% if has_password %}
+                <form method="post" action="{% url 'accounts:reauth' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ next }}">
+                    <div class="mb-3">
+                        <label class="form-label" for="reauthPassword">当前密码</label>
+                        <input type="password" class="form-control" id="reauthPassword" name="password" autocomplete="current-password" required>
+                    </div>
+                    <button class="btn btn-primary w-100" type="submit">继续</button>
+                </form>
+            {% else %}
+                <p class="text-muted small mb-3">该账号未设置本地密码，请使用 Google 再次确认后继续。</p>
+                <div id="g_id_onload"
+                     data-client_id="{{ GOOGLE_CLIENT_ID }}"
+                     data-context="signin"
+                     data-ux_mode="popup"
+                     data-callback="handleReauthCredential"
+                     data-auto_prompt="true">
+                </div>
+                <div class="g_id_signin" data-type="standard" data-shape="rect" data-theme="outline"
+                     data-text="continue_with" data-size="large" data-logo_alignment="left"></div>
+                <input type="hidden" id="reauth-next" value="{{ next }}">
+            {% endif %}
+
+            <div class="text-center mt-3 small">
+                <a class="text-decoration-none" href="{% url 'accounts:profile' %}">返回个人资料</a>
+            </div>
+        </section>
+
+        <aside class="auth-side-panel">
+            <div class="team-section-kicker">为什么需要确认</div>
+            <h3 class="team-page-panel-title mt-2">保护高风险操作</h3>
+            <p class="auth-side-copy mb-0">导出、分享、永久删除等动作会影响密钥安全边界，所以需要再次确认身份。</p>
+            <div class="auth-side-list">
+                <div class="auth-side-item">
+                    <strong>导出与备份</strong>
+                    防止在已登录设备上被误导出密钥数据。
+                </div>
+                <div class="auth-side-item">
+                    <strong>分享与失效</strong>
+                    确保分享链接和团队治理操作由本人执行。
+                </div>
+            </div>
+        </aside>
     </div>
 </div>
 {% endblock %}

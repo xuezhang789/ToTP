@@ -34,3 +34,35 @@ class GoogleOneTapTests(TestCase):
         self.assertEqual(res2.status_code, 200)
         self.assertContains(res2, "该账号未设置本地密码")
 
+    @patch("accounts.views._username_from_email")
+    @patch("accounts.views.id_token.verify_oauth2_token")
+    def test_google_onetap_retries_when_generated_username_is_taken(self, verify_mock, username_mock):
+        User = get_user_model()
+        existing = User.objects.create_user(
+            username="newuser",
+            password="StrongPassword123!",
+            email="old@example.com",
+        )
+        username_mock.side_effect = ["newuser", "newuser1"]
+        verify_mock.return_value = {
+            "email": "newuser@example.com",
+            "email_verified": True,
+            "name": "Collision User",
+            "sub": "sub-456",
+        }
+
+        res = self.client.post(
+            reverse("accounts:google_onetap"),
+            data=json.dumps({"credential": "fake"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 200)
+        payload = res.json()
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["created"])
+
+        created = User.objects.get(email="newuser@example.com")
+        self.assertNotEqual(created.pk, existing.pk)
+        self.assertEqual(created.username, "newuser1")
+        self.assertEqual(self.client.session.get("_auth_user_id"), str(created.pk))

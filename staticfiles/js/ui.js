@@ -8,6 +8,145 @@
     el.textContent = value == null ? '' : String(value);
   }
 
+  function appAnnounce(message) {
+    const region = document.getElementById('appLiveRegion');
+    if (!region) {
+      return;
+    }
+    const text = message == null ? '' : String(message);
+    region.textContent = '';
+    window.setTimeout(() => {
+      region.textContent = text;
+    }, 10);
+  }
+
+  function appSetButtonLoading(button, loading, { label = '', showSpinner = true } = {}) {
+    if (!button) {
+      return;
+    }
+    if (loading) {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      if (!button.dataset.appOriginalHtml) {
+        button.dataset.appOriginalHtml = button.innerHTML;
+      }
+      const base = label || button.dataset.appOriginalHtml || '';
+      if (showSpinner) {
+        button.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>${base}`;
+      } else {
+        button.innerHTML = base;
+      }
+      return;
+    }
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    if (button.dataset.appOriginalHtml != null) {
+      button.innerHTML = button.dataset.appOriginalHtml;
+    }
+  }
+
+  function appCopyWithFeedback(
+    button,
+    text,
+    {
+      successHtml = '已复制',
+      failureHtml = '复制失败',
+      restoreMs = 1200,
+      successAnnounce = '已复制',
+      failureAnnounce = '复制失败',
+      successClass = 'btn-success',
+      failureClass = 'btn-danger',
+      clearClasses = [],
+      toastFailure = '',
+    } = {}
+  ) {
+    if (!button) {
+      return Promise.reject(new Error('missing_button'));
+    }
+    if (button.dataset.appOriginalHtml == null) {
+      button.dataset.appOriginalHtml = button.innerHTML;
+    }
+    if (button.dataset.appOriginalClass == null) {
+      button.dataset.appOriginalClass = button.className || '';
+    }
+    const value = text == null ? '' : String(text);
+    return appCopyToClipboard(value)
+      .then(() => {
+        clearClasses.forEach((cls) => button.classList.remove(cls));
+        button.classList.remove(failureClass);
+        button.classList.add(successClass);
+        button.innerHTML = successHtml;
+        if (window.appAnnounce) {
+          window.appAnnounce(successAnnounce);
+        }
+        window.setTimeout(() => {
+          button.className = button.dataset.appOriginalClass || button.className;
+          button.innerHTML = button.dataset.appOriginalHtml || button.innerHTML;
+        }, restoreMs);
+        return true;
+      })
+      .catch((err) => {
+        clearClasses.forEach((cls) => button.classList.remove(cls));
+        button.classList.remove(successClass);
+        button.classList.add(failureClass);
+        button.innerHTML = failureHtml;
+        if (toastFailure && window.appToast) {
+          window.appToast('danger', toastFailure);
+        }
+        if (window.appAnnounce) {
+          window.appAnnounce(failureAnnounce);
+        }
+        window.setTimeout(() => {
+          button.className = button.dataset.appOriginalClass || button.className;
+          button.innerHTML = button.dataset.appOriginalHtml || button.innerHTML;
+        }, Math.max(restoreMs, 1400));
+        throw err;
+      });
+  }
+
+  function appFocusFirstInvalid(form, { toastMessage = '' } = {}) {
+    if (!form) {
+      return null;
+    }
+    const invalid = form.querySelector(':invalid');
+    if (invalid && invalid.focus) {
+      invalid.focus({ preventScroll: true });
+    }
+    if (toastMessage && window.appToast) {
+      window.appToast('warning', toastMessage);
+    }
+    return invalid || null;
+  }
+
+  function appInitModalAutoFocus() {
+    document.addEventListener('shown.bs.modal', (event) => {
+      const modal = event && event.target instanceof HTMLElement ? event.target : null;
+      if (!modal) {
+        return;
+      }
+      const target = modal.querySelector('[data-autofocus]') || modal.querySelector('input, textarea, select, button');
+      if (target && target.focus) {
+        target.focus({ preventScroll: true });
+        if (target.select && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+          try {
+            target.select();
+          } catch (e) {}
+        }
+      }
+    });
+  }
+
+  function appAnnounceFirstMessage() {
+    const alert = document.querySelector('main.app-main .alert[role="alert"]');
+    if (!alert) {
+      return;
+    }
+    const text = (alert.textContent || '').trim();
+    if (text) {
+      appAnnounce(text);
+    }
+  }
+
   function appToast(type, message, { delay = 2500 } = {}) {
     const bootstrap = ensureBootstrap();
     const container = document.getElementById('appToastContainer');
@@ -20,7 +159,7 @@
     const toastEl = document.createElement('div');
     toastEl.className = `toast align-items-center text-bg-${variant} border-0`;
     toastEl.setAttribute('role', 'alert');
-    toastEl.setAttribute('aria-live', 'assertive');
+    toastEl.setAttribute('aria-live', variant === 'danger' ? 'assertive' : 'polite');
     toastEl.setAttribute('aria-atomic', 'true');
     toastEl.innerHTML = `
       <div class="d-flex">
@@ -103,6 +242,7 @@
     confirmText = '确认',
     confirmVariant = 'danger',
     hint = '',
+    triggerEl = null,
   } = {}) {
     const bootstrap = ensureBootstrap();
     const { modalEl, titleEl, messageEl, hintEl, okBtn, cancelBtn } = getConfirmElements();
@@ -132,10 +272,23 @@
         cancelBtn.removeEventListener('click', onCancel);
         modalEl.removeEventListener('hidden.bs.modal', onHidden);
       }
+      function restoreFocus() {
+        if (!triggerEl || !(triggerEl instanceof HTMLElement) || !triggerEl.isConnected) {
+          return;
+        }
+        try {
+          triggerEl.focus({ preventScroll: true });
+        } catch (e) {
+          triggerEl.focus();
+        }
+      }
       function settle(value) {
         if (settled) return;
         settled = true;
         cleanup();
+        if (!value) {
+          restoreFocus();
+        }
         resolve(value);
       }
       function onOk() {
@@ -211,7 +364,7 @@
     }
 
     event.preventDefault();
-    const ok = await appConfirm(getConfirmPayload(el));
+    const ok = await appConfirm({ ...getConfirmPayload(el), triggerEl: el });
     if (!ok) {
       return;
     }
@@ -225,7 +378,14 @@
   window.appToast = appToast;
   window.appInlineAlert = appInlineAlert;
   window.appNotify = appNotify;
+  window.appAnnounce = appAnnounce;
+  window.appSetButtonLoading = appSetButtonLoading;
+  window.appCopyWithFeedback = appCopyWithFeedback;
+  window.appFocusFirstInvalid = appFocusFirstInvalid;
   window.appGetCsrfToken = appGetCsrfToken;
   window.appCopyToClipboard = appCopyToClipboard;
   window.appConfirm = appConfirm;
+
+  appInitModalAutoFocus();
+  appAnnounceFirstMessage();
 })();

@@ -63,6 +63,24 @@ class TeamAssetTests(TestCase):
         self.entry.refresh_from_db()
         self.assertEqual(self.entry.asset_id, asset.id)
 
+    def test_admin_cannot_create_duplicate_asset_name(self):
+        TeamAsset.objects.create(team=self.team, name="PagerDuty", description="")
+        self.client.force_login(self.admin)
+        create_url = reverse("totp:team_asset_create", args=[self.team.id])
+        res = self.client.post(
+            create_url,
+            {
+                "name": "PagerDuty",
+                "description": "duplicate",
+            },
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertContains(res, "已存在同名资产", status_code=400)
+        self.assertEqual(
+            TeamAsset.objects.filter(team=self.team, name="PagerDuty").count(),
+            1,
+        )
+
     def test_team_list_can_filter_by_asset(self):
         asset = TeamAsset.objects.create(team=self.team, name="AWS", description="")
         self.entry.asset = asset
@@ -105,3 +123,18 @@ class TeamAssetTests(TestCase):
         self.assertEqual(res.status_code, 302)
         entry = TOTPEntry.objects.get(team=self.team, name="GitLab")
         self.assertEqual(entry.asset_id, asset.id)
+
+    def test_removing_member_cleans_asset_roles(self):
+        asset = TeamAsset.objects.create(team=self.team, name="PagerDuty", description="")
+        asset.owners.add(self.member)
+        asset.watchers.add(self.member)
+        member_membership = TeamMembership.objects.get(team=self.team, user=self.member)
+
+        self.client.force_login(self.owner)
+        url = reverse("totp:team_remove_member", args=[self.team.id, member_membership.id])
+        res = self.client.post(url)
+
+        self.assertEqual(res.status_code, 302)
+        asset.refresh_from_db()
+        self.assertFalse(asset.owners.filter(id=self.member.id).exists())
+        self.assertFalse(asset.watchers.filter(id=self.member.id).exists())

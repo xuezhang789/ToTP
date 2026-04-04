@@ -1,115 +1,211 @@
-<div class="d-flex flex-column gap-3">
-    <div class="card border-0 bg-light">
+<div class="team-governance-stack">
+    <div class="card border-0 bg-light team-governance-section team-governance-section-primary">
         <div class="card-body p-3">
-            <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
-                <div class="fw-semibold">最近活动</div>
-                <a class="small text-decoration-none" href="{% url 'totp:team_audit' team.id %}">查看全部</a>
-            </div>
-            {% if recent_high_risk %}
-            <div class="d-flex align-items-center gap-2 mb-2">
-                <span class="badge rounded-pill bg-danger-subtle text-danger fw-semibold">高风险</span>
-                <span class="text-muted small">优先关注以下变更</span>
-            </div>
-            <div class="d-flex flex-column gap-2 mb-3">
-                {% for audit in recent_high_risk %}
-                <div class="small">
-                    <span class="text-muted">{{ audit.created_at|date:"m-d H:i" }}</span>
-                    <span class="badge rounded-pill bg-{{ audit.ui_meta.variant }}-subtle text-{{ audit.ui_meta.variant }} fw-semibold ms-1">{{ audit.ui_meta.group }}</span>
-                    <i class="bi {{ audit.ui_meta.icon }} ms-1"></i>
-                    <span class="ms-1">{{ audit.get_action_display }}</span>
-                    {% if audit.actor %}
-                    <span class="text-muted ms-1">· {{ audit.actor.username }}</span>
-                    {% endif %}
-                    {% if audit.target_user %}
-                    <span class="text-muted ms-1">→ {{ audit.target_user.username }}</span>
-                    {% endif %}
+            <div class="team-governance-section-head">
+                <div>
+                    <div class="team-section-kicker">治理面板</div>
+                    <div class="team-governance-section-title">风险与下一步</div>
                 </div>
-                {% endfor %}
+                <a class="team-governance-section-link" href="{% url 'totp:team_audit' team.id %}">审计记录</a>
             </div>
-            <div class="d-flex flex-wrap gap-2 mb-3">
+
+            <div class="team-governance-summary-grid">
+                <div class="team-governance-stat" data-state="{% if can_manage and active_share_links|default:0|add:0 > 0 %}danger{% else %}safe{% endif %}">
+                    <div class="team-governance-stat-head">
+                        <span class="team-governance-stat-icon"><i class="bi bi-link-45deg"></i></span>
+                        <span class="team-governance-stat-label">分享链接</span>
+                    </div>
+                    <strong class="team-governance-stat-value">{{ active_share_links|default:0 }}</strong>
+                    <span class="team-governance-stat-meta">
+                        {% if can_manage %}
+                            {% if active_share_links|default:0|add:0 > 0 %}
+                            需要处理
+                            {% else %}
+                            当前稳定
+                            {% endif %}
+                        {% else %}
+                        无管理权限
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="team-governance-stat" data-state="{% if can_manage and pending_invites_count|default:0|add:0 > 0 %}warning{% else %}safe{% endif %}">
+                    <div class="team-governance-stat-head">
+                        <span class="team-governance-stat-icon"><i class="bi bi-people"></i></span>
+                        <span class="team-governance-stat-label">邀请</span>
+                    </div>
+                    <strong class="team-governance-stat-value">{{ pending_invites_count|default:0 }}</strong>
+                    <span class="team-governance-stat-meta">
+                        {% if can_manage %}
+                            {% if pending_invites_count|default:0|add:0 > 0 %}
+                            待确认
+                            {% else %}
+                            已清空
+                            {% endif %}
+                        {% else %}
+                        仅管理员可处理
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="team-governance-stat" data-state="{% if unassigned_entries_count|default:0|add:0 > 0 %}warning{% else %}safe{% endif %}">
+                    <div class="team-governance-stat-head">
+                        <span class="team-governance-stat-icon"><i class="bi bi-diagram-3"></i></span>
+                        <span class="team-governance-stat-label">资产</span>
+                    </div>
+                    <strong class="team-governance-stat-value">{{ unassigned_entries_count|default:0 }}</strong>
+                    <span class="team-governance-stat-meta">
+                        {% if unassigned_entries_count|default:0|add:0 > 0 %}
+                        未归属密钥
+                        {% else %}
+                        已完成归档
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <div class="team-governance-inline-note">
+                <span class="team-governance-inline-note-label">当前优先</span>
+                <span class="team-governance-inline-note-value">
+                    {% if can_manage and active_share_links|default:0|add:0 > 0 %}
+                    处理有效分享链接
+                    {% elif can_manage and pending_invites_count|default:0|add:0 > 0 %}
+                    确认邀请与成员状态
+                    {% elif unassigned_entries_count|default:0|add:0 > 0 %}
+                    完成未归属密钥归档
+                    {% else %}
+                    进入右侧工作区继续执行
+                    {% endif %}
+                </span>
+            </div>
+
+            {% if recent_high_risk %}
+            <div class="team-governance-banner team-governance-banner-danger">
+                <span class="badge rounded-pill bg-danger-subtle text-danger fw-semibold">高风险</span>
+                <span>近期存在需要优先处理的变更。</span>
+            </div>
+            {% endif %}
+
+            <div class="d-flex flex-wrap gap-2 mt-3">
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'totp:team_audit' team.id %}">
-                    <i class="bi bi-journal-text me-1"></i> 去审计
+                    <i class="bi bi-journal-text me-1"></i> 审计记录
                 </a>
                 {% if can_manage and active_share_links|default:0|add:0 > 0 %}
                 <button type="button" class="btn btn-sm btn-outline-danger" data-show-revoke-summary="1">
-                    <i class="bi bi-link-45deg me-1"></i> 去撤销
+                    <i class="bi bi-link-45deg me-1"></i> 处理链接
                 </button>
                 {% endif %}
                 {% if can_manage and pending_invites_count|default:0|add:0 > 0 %}
                 <button type="button" class="btn btn-sm btn-outline-secondary"
                         data-open-team-tab="members" data-team-id="{{ team.id }}">
-                    <i class="bi bi-people me-1"></i> 去处理成员
+                    <i class="bi bi-people me-1"></i> 打开成员
                 </button>
                 {% endif %}
                 {% if unassigned_entries_count|default:0|add:0 > 0 %}
                 <a class="btn btn-sm btn-outline-secondary" href="{% url 'totp:list' %}?space=team:{{ team.id }}&amp;asset=0">
-                    <i class="bi bi-diagram-3 me-1"></i> 去归档资产
+                    <i class="bi bi-diagram-3 me-1"></i> 处理资产
                 </a>
                 {% endif %}
             </div>
-            {% if can_manage and active_share_links|default:0|add:0 > 0 %}
-            <div class="card border-0 bg-white d-none" data-revoke-summary="1">
-                <div class="card-body p-3">
+        </div>
+    </div>
+
+    {% if can_manage and active_share_links|default:0|add:0 > 0 %}
+    <div class="card border-0 bg-white team-governance-revoke d-none" data-revoke-summary="1">
+        <div class="card-body p-3">
+            <div class="d-flex align-items-start justify-content-between gap-2">
+                <div>
+                    <div class="team-section-kicker">敏感操作</div>
                     <div class="fw-semibold mb-1">撤销确认摘要</div>
-                    <div class="text-muted small">当前有效分享链接：{{ active_share_links }} 条</div>
-                    {% if latest_link_created_at %}
-                    <div class="text-muted small mt-1">最近创建时间：{{ latest_link_created_at|date:"Y-m-d H:i" }}</div>
-                    {% endif %}
-                    <div class="text-muted small mt-1">
-                        最近访问时间：
-                        {% if has_link_views %}
-                            <span class="badge rounded-pill bg-success-subtle text-success fw-semibold me-1">已访问</span>
-                            {{ latest_link_viewed_at|date:"Y-m-d H:i" }}
-                        {% else %}
-                            <span class="badge rounded-pill bg-secondary-subtle text-secondary fw-semibold me-1">未访问</span>
-                            暂无
-                        {% endif %}
-                    </div>
-                    {% if link_creators %}
-                    <div class="text-muted small mt-1">
-                        最近创建者：
-                        {% for row in link_creators %}
-                            {{ row.created_by__username }}（{{ row.cnt }}）{% if not forloop.last %}、{% endif %}
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                    <div class="d-flex flex-wrap gap-2 mt-3">
-                        <form method="post" action="{% url 'totp:team_revoke_all_share_links' team.id %}">
-                            {% csrf_token %}
-                            <button class="btn btn-sm btn-danger" type="submit"
-                                    data-confirm="确定撤销该团队下所有有效分享链接吗？"
-                                    data-confirm-title="撤销全部链接"
-                                    data-confirm-ok="撤销"
-                                    data-confirm-variant="danger"
-                                    data-confirm-hint="下一步会跳转到密码确认页，确认后返回团队页继续执行。">
-                                继续撤销
-                            </button>
-                        </form>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-hide-revoke-summary="1">取消</button>
-                    </div>
                 </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-hide-revoke-summary="1">取消</button>
+            </div>
+            <div class="team-governance-note">当前有效分享链接 {{ active_share_links }} 条。</div>
+            {% if latest_link_created_at %}
+            <div class="team-governance-note">最近创建：{{ latest_link_created_at|date:"Y-m-d H:i" }}</div>
+            {% endif %}
+            <div class="team-governance-note">
+                最近访问：
+                {% if has_link_views %}
+                    <span class="badge rounded-pill bg-success-subtle text-success fw-semibold me-1">已访问</span>
+                    {{ latest_link_viewed_at|date:"Y-m-d H:i" }}
+                {% else %}
+                    <span class="badge rounded-pill bg-secondary-subtle text-secondary fw-semibold me-1">未访问</span>
+                    暂无
+                {% endif %}
+            </div>
+            {% if link_creators %}
+            <div class="team-governance-note">
+                最近创建者：
+                {% for row in link_creators %}
+                    {{ row.created_by__username }}（{{ row.cnt }}）{% if not forloop.last %}、{% endif %}
+                {% endfor %}
             </div>
             {% endif %}
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                <form method="post" action="{% url 'totp:team_revoke_all_share_links' team.id %}">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-danger" type="submit"
+                            data-confirm="确定撤销该团队下所有有效分享链接吗？"
+                            data-confirm-title="撤销全部链接"
+                            data-confirm-ok="撤销"
+                            data-confirm-variant="danger"
+                            data-confirm-hint="下一步会跳转到密码确认页，确认后返回团队页继续执行。">
+                        继续撤销
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card border-0 bg-light team-governance-section team-governance-section-activity">
+        <div class="card-body p-3">
+            <div class="team-governance-section-head">
+                <div>
+                    <div class="team-section-kicker">动态</div>
+                    <div class="team-governance-section-title">近期活动</div>
+                </div>
+                {% if recent_high_risk %}
+                <span class="badge rounded-pill bg-danger-subtle text-danger fw-semibold">高风险</span>
+                {% else %}
+                <span class="badge rounded-pill bg-light text-muted fw-semibold">最近</span>
+                {% endif %}
+            </div>
+
+            {% if recent_high_risk %}
+            <div class="team-governance-timeline mb-3">
+                {% for audit in recent_high_risk %}
+                <div class="team-governance-timeline-item">
+                    <div class="team-governance-timeline-meta">
+                        <span>{{ audit.created_at|date:"m-d H:i" }}</span>
+                        <span class="badge rounded-pill bg-{{ audit.ui_meta.variant }}-subtle text-{{ audit.ui_meta.variant }} fw-semibold">{{ audit.ui_meta.group }}</span>
+                    </div>
+                    <div class="team-governance-timeline-title">
+                        <i class="bi {{ audit.ui_meta.icon }} me-1"></i>{{ audit.get_action_display }}
+                    </div>
+                    <div class="team-governance-timeline-note">
+                        {% if audit.actor %}{{ audit.actor.username }}{% endif %}
+                        {% if audit.target_user %} → {{ audit.target_user.username }}{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
             {% endif %}
 
             {% if recent_audits %}
-            <div class="d-flex align-items-center gap-2 mb-2">
-                <span class="badge rounded-pill bg-light text-muted fw-semibold">最近</span>
-                <span class="text-muted small">最新动态</span>
-            </div>
-            <div class="d-flex flex-column gap-2">
+            <div class="team-governance-timeline">
                 {% for audit in recent_audits %}
-                <div class="small">
-                    <span class="text-muted">{{ audit.created_at|date:"m-d H:i" }}</span>
-                    <span class="badge rounded-pill bg-{{ audit.ui_meta.variant }}-subtle text-{{ audit.ui_meta.variant }} fw-semibold ms-1">{{ audit.ui_meta.group }}</span>
-                    <i class="bi {{ audit.ui_meta.icon }} ms-1"></i>
-                    <span class="ms-1">{{ audit.get_action_display }}</span>
-                    {% if audit.actor %}
-                    <span class="text-muted ms-1">· {{ audit.actor.username }}</span>
-                    {% endif %}
-                    {% if audit.target_user %}
-                    <span class="text-muted ms-1">→ {{ audit.target_user.username }}</span>
-                    {% endif %}
+                <div class="team-governance-timeline-item">
+                    <div class="team-governance-timeline-meta">
+                        <span>{{ audit.created_at|date:"m-d H:i" }}</span>
+                        <span class="badge rounded-pill bg-{{ audit.ui_meta.variant }}-subtle text-{{ audit.ui_meta.variant }} fw-semibold">{{ audit.ui_meta.group }}</span>
+                    </div>
+                    <div class="team-governance-timeline-title">
+                        <i class="bi {{ audit.ui_meta.icon }} me-1"></i>{{ audit.get_action_display }}
+                    </div>
+                    <div class="team-governance-timeline-note">
+                        {% if audit.actor %}{{ audit.actor.username }}{% endif %}
+                        {% if audit.target_user %} → {{ audit.target_user.username }}{% endif %}
+                    </div>
                 </div>
                 {% endfor %}
             </div>
@@ -119,119 +215,116 @@
         </div>
     </div>
 
-    <div class="card border-0 bg-light">
-        <div class="card-body p-3">
-            <div class="fw-semibold mb-2">风险提示</div>
-            <div class="d-flex flex-column gap-2">
-                {% if can_manage and active_share_links|default:0|add:0 > 0 %}
-                <div class="small">
-                    <span class="badge rounded-pill bg-warning-subtle text-warning fw-semibold me-1">分享链接</span>
-                    当前存在 {{ active_share_links }} 条有效分享链接，建议定期审计并及时撤销。
+    <div class="team-governance-grid">
+        <div class="card border-0 bg-light team-governance-section">
+            <div class="card-body p-3">
+                <div class="team-section-kicker">快捷入口</div>
+                <div class="team-governance-section-title mb-3">常用入口</div>
+                <div class="d-grid gap-2">
+                    <a class="btn btn-outline-primary" href="{% url 'totp:list' %}?space=team:{{ team.id }}">
+                        <i class="bi bi-box-arrow-up-right me-1"></i> 打开团队空间
+                    </a>
+                    <a class="btn btn-outline-secondary" href="{% url 'totp:team_assets' team.id %}">
+                        <i class="bi bi-diagram-3 me-1"></i> 资产目录
+                    </a>
+                    <a class="btn btn-outline-secondary" href="{% url 'totp:team_audit' team.id %}">
+                        <i class="bi bi-journal-text me-1"></i> 审计记录
+                    </a>
                 </div>
-                {% endif %}
-                {% if can_manage and pending_invites_count|default:0|add:0 > 0 %}
-                <div class="small">
-                    <span class="badge rounded-pill bg-info-subtle text-info fw-semibold me-1">邀请</span>
-                    有 {{ pending_invites_count }} 条待确认邀请，建议核对是否仍需要。
-                </div>
-                {% endif %}
-                {% if unassigned_entries_count|default:0|add:0 > 0 %}
-                <div class="small">
-                    <span class="badge rounded-pill bg-secondary-subtle text-secondary fw-semibold me-1">资产</span>
-                    有 {{ unassigned_entries_count }} 个密钥未归属资产，建议归档以明确责任人。
-                </div>
-                {% endif %}
-                {% if risk_empty %}
-                <div class="text-muted small">暂无明显风险项</div>
-                {% endif %}
             </div>
         </div>
-    </div>
 
-    <div>
-        <div class="text-muted small mb-1">快捷入口</div>
-        <div class="d-grid gap-2">
-            <a class="btn btn-outline-primary" href="{% url 'totp:list' %}?space=team:{{ team.id }}">
-                <i class="bi bi-box-arrow-up-right me-1"></i> 打开团队空间
-            </a>
-            <a class="btn btn-outline-secondary" href="{% url 'totp:team_assets' team.id %}">
-                <i class="bi bi-diagram-3 me-1"></i> 资产目录
-            </a>
-            <a class="btn btn-outline-secondary" href="{% url 'totp:team_audit' team.id %}">
-                <i class="bi bi-journal-text me-1"></i> 审计记录
-            </a>
+        <div class="card border-0 bg-light team-governance-section">
+            <div class="card-body p-3">
+                <div class="team-section-kicker">页面内操作</div>
+                <div class="team-governance-section-title mb-3">快速切换</div>
+                <div class="d-grid gap-2">
+                    {% if panel_context == 'home' %}
+                    <button type="button" class="btn btn-outline-secondary"
+                            data-open-team-tab="members" data-team-id="{{ team.id }}">
+                        <i class="bi bi-people me-1"></i> 打开成员
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary"
+                            data-open-team-tab="security" data-team-id="{{ team.id }}">
+                        <i class="bi bi-shield-lock me-1"></i> 打开安全操作
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary"
+                            data-open-team-tab="audit" data-team-id="{{ team.id }}">
+                        <i class="bi bi-clipboard-check me-1"></i> 打开审计
+                    </button>
+                    {% else %}
+                    <a class="btn btn-outline-secondary" href="{% url 'totp:team_home' team.id %}?tab=members">
+                        <i class="bi bi-people me-1"></i> 打开成员
+                    </a>
+                    <a class="btn btn-outline-secondary" href="{% url 'totp:team_home' team.id %}?tab=security">
+                        <i class="bi bi-shield-lock me-1"></i> 打开安全操作
+                    </a>
+                    <a class="btn btn-outline-secondary" href="{% url 'totp:team_home' team.id %}?tab=audit">
+                        <i class="bi bi-clipboard-check me-1"></i> 打开审计
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
         </div>
-    </div>
 
-    <div>
-        <div class="text-muted small mb-1">页面内操作</div>
-        <div class="d-grid gap-2">
-            {% if panel_context == 'home' %}
-            <button type="button" class="btn btn-outline-secondary"
-                    data-open-team-tab="members" data-team-id="{{ team.id }}">
-                <i class="bi bi-people me-1"></i> 打开成员
-            </button>
-            <button type="button" class="btn btn-outline-secondary"
-                    data-open-team-tab="security" data-team-id="{{ team.id }}">
-                <i class="bi bi-shield-lock me-1"></i> 打开安全操作
-            </button>
-            <button type="button" class="btn btn-outline-secondary"
-                    data-open-team-tab="audit" data-team-id="{{ team.id }}">
-                <i class="bi bi-clipboard-check me-1"></i> 打开审计
-            </button>
-            {% else %}
-            <a class="btn btn-outline-secondary" href="{% url 'totp:team_home' team.id %}?tab=members">
-                <i class="bi bi-people me-1"></i> 打开成员
-            </a>
-            <a class="btn btn-outline-secondary" href="{% url 'totp:team_home' team.id %}?tab=security">
-                <i class="bi bi-shield-lock me-1"></i> 打开安全操作
-            </a>
-            <a class="btn btn-outline-secondary" href="{% url 'totp:team_home' team.id %}?tab=audit">
-                <i class="bi bi-clipboard-check me-1"></i> 打开审计
-            </a>
-            {% endif %}
+        {% if can_manage %}
+        <div class="card border-0 bg-light team-governance-section">
+            <div class="card-body p-3">
+                <div class="team-section-kicker">管理</div>
+                <div class="team-governance-section-title mb-3">团队设置</div>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-secondary" type="button"
+                            data-team-rename-trigger="1"
+                            data-team-id="{{ team.id }}"
+                            data-team-name="{{ team.name }}"
+                            data-team-rename-url="{% url 'totp:team_rename' team.id %}">
+                        <i class="bi bi-pencil-square me-1"></i> 修改团队名称
+                    </button>
+                    <form method="post" action="{% url 'totp:team_revoke_all_share_links' team.id %}">
+                        {% csrf_token %}
+                        <button class="btn btn-outline-danger w-100" type="submit"
+                                data-confirm="确定撤销该团队下所有有效分享链接吗？"
+                                data-confirm-title="撤销全部链接"
+                                data-confirm-ok="撤销"
+                                data-confirm-variant="danger"
+                                data-confirm-hint="下一步会跳转到密码确认页，确认后返回团队页继续执行。">
+                            <i class="bi bi-link-45deg me-1"></i> 撤销全部链接（{{ active_share_links|default:0 }}）
+                        </button>
+                    </form>
+                    {% if membership and membership.role != 'owner' %}
+                    <form method="post" action="{% url 'totp:team_remove_member' team.id membership.id %}">
+                        {% csrf_token %}
+                        <button class="btn btn-outline-danger w-100" type="submit"
+                                data-confirm="确定退出该团队吗？"
+                                data-confirm-title="退出团队"
+                                data-confirm-ok="退出"
+                                data-confirm-variant="danger">
+                            <i class="bi bi-box-arrow-right me-1"></i> 退出团队
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
         </div>
-    </div>
-
-    {% if can_manage %}
-    <div>
-        <div class="text-muted small mb-1">管理</div>
-        <div class="d-grid gap-2">
-            <button class="btn btn-outline-secondary" type="button"
-                    data-team-rename-trigger="1"
-                    data-team-id="{{ team.id }}"
-                    data-team-name="{{ team.name }}"
-                    data-team-rename-url="{% url 'totp:team_rename' team.id %}">
-                <i class="bi bi-pencil-square me-1"></i> 修改团队名称
-            </button>
-            <form method="post" action="{% url 'totp:team_revoke_all_share_links' team.id %}">
-                {% csrf_token %}
-                <button class="btn btn-outline-danger w-100" type="submit"
-                        data-confirm="确定撤销该团队下所有有效分享链接吗？"
-                        data-confirm-title="撤销全部链接"
-                        data-confirm-ok="撤销"
-                        data-confirm-variant="danger"
-                        data-confirm-hint="下一步会跳转到密码确认页，确认后返回团队页继续执行。">
-                    <i class="bi bi-link-45deg me-1"></i> 撤销全部链接（{{ active_share_links|default:0 }}）
-                </button>
-            </form>
+        {% elif membership and membership.role != 'owner' %}
+        <div class="card border-0 bg-light team-governance-section">
+            <div class="card-body p-3">
+                <div class="team-section-kicker">管理</div>
+                <div class="team-governance-section-title mb-3">团队设置</div>
+                <div class="d-grid gap-2">
+                    <form method="post" action="{% url 'totp:team_remove_member' team.id membership.id %}">
+                        {% csrf_token %}
+                        <button class="btn btn-outline-danger w-100" type="submit"
+                                data-confirm="确定退出该团队吗？"
+                                data-confirm-title="退出团队"
+                                data-confirm-ok="退出"
+                                data-confirm-variant="danger">
+                            <i class="bi bi-box-arrow-right me-1"></i> 退出团队
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
+        {% endif %}
     </div>
-    {% endif %}
-
-    {% if membership and membership.role != 'owner' %}
-    <div>
-        <div class="text-muted small mb-1">成员</div>
-        <form method="post" action="{% url 'totp:team_remove_member' team.id membership.id %}">
-            {% csrf_token %}
-            <button class="btn btn-outline-danger w-100" type="submit"
-                    data-confirm="确定退出该团队吗？"
-                    data-confirm-title="退出团队"
-                    data-confirm-ok="退出"
-                    data-confirm-variant="danger">
-                <i class="bi bi-box-arrow-right me-1"></i> 退出团队
-            </button>
-        </form>
-    </div>
-    {% endif %}
 </div>

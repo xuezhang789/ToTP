@@ -5,66 +5,100 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 {% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-md-6 col-lg-5">
-        <div class="card shadow-sm border-0 rounded-4">
-            <div class="card-body p-4">
-                <div class="text-center mb-3">
-                    <i class="bi bi-person-plus-fill text-primary fs-1"></i>
+<div class="team-page">
+    <section class="team-page-header">
+        <div class="team-page-header-bar">
+            <div class="team-page-header-main">
+                <div class="team-page-breadcrumb">
+                    <span class="fw-semibold">账号中心</span>
+                    <span>/</span>
+                    <span class="fw-semibold">注册</span>
                 </div>
-                <h1 class="h4 mb-2 text-center">创建你的账户</h1>
-                <p class="text-center text-muted small mb-4">欢迎加入 TOTP 管理平台，几步即可开启更安全的双重验证体验。</p>
-                <form method="post" action="{% url 'accounts:signup' %}">{% csrf_token %}
-                    <div class="mb-3">
-                        <label class="form-label" for="signup-username">用户名</label>
-                        <input id="signup-username" class="form-control" name="username" placeholder="例如：totp_fan"
-                               value="{{ username_value|default:'' }}" autocomplete="username" required>
-                        <div class="form-text">用于登录和展示给团队成员，可随时在个人设置中修改。</div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="signup-email">邮箱（可选）</label>
-                        <input id="signup-email" type="email" class="form-control" name="email" placeholder="便于找回账号的邮箱"
-                               value="{{ email_value|default:'' }}" autocomplete="email">
-                        <div class="form-text">推荐填写常用邮箱，忘记密码时可以快速找回。</div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="signup-password">密码</label>
-                        <div class="input-group">
-                            <input id="signup-password" type="password" class="form-control" name="password"
-                                   placeholder="密码" autocomplete="new-password" required>
-                            <button class="btn btn-outline-secondary" type="button" id="password-toggle" aria-label="显示密码" aria-pressed="false">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </div>
-                        <div class="password-assistant mt-2">
-                            <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
-                                <div class="form-text mb-0" id="passwordHint">为保障账户安全，请使用至少 8 个字符，并混合多种字符类型。</div>
-                                <button class="btn btn-sm btn-outline-primary" type="button" id="password-generate-btn">生成强密码</button>
-                            </div>
-                            <div class="progress password-strength-bar mt-2">
-                                <div class="progress-bar bg-secondary" id="password-strength-fill" style="width: 0%"></div>
-                            </div>
-                            <div class="form-text mt-2" id="password-strength-label">等待输入密码...</div>
-                            <ul class="password-tips list-unstyled small text-muted mt-2" id="password-suggestions"></ul>
-                        </div>
-                    </div>
-                    <button class="btn btn-primary w-100" type="submit">立即创建并登录</button>
-                </form>
-                <div class="text-center text-muted small my-3">或</div>
-
-                <!-- Google One Tap + Sign Up button -->
-                <div id="g_id_onload"
-                     data-client_id="{{ GOOGLE_CLIENT_ID }}"
-                     data-context="signup"
-                     data-ux_mode="popup"
-                     data-callback="handleCredentialResponse"
-                     data-auto_prompt="true">
+                <div class="team-page-title-row">
+                    <h1 class="app-section-title mb-0">创建账户</h1>
                 </div>
-                <div class="g_id_signin" data-type="standard" data-shape="rect" data-theme="outline"
-                     data-text="signup_with" data-size="large" data-logo_alignment="left"></div>
-                <div class="text-center mt-3 small">已有账号？<a href="{% url 'accounts:login' %}">去登录</a></div>
+                <p class="team-page-summary mb-0">注册后即可使用个人与团队工作台，统一管理验证码、分享链接和导出备份。</p>
             </div>
         </div>
+    </section>
+
+    <div class="auth-shell">
+        <section class="auth-panel">
+            <div class="auth-icon"><i class="bi bi-person-plus-fill"></i></div>
+            <div class="auth-eyebrow">快速开始</div>
+            <h2 class="auth-title">创建你的账户</h2>
+            <p class="auth-copy">欢迎加入 TOTP 管理平台，几步即可开启更安全的双重验证体验。</p>
+
+            <form method="post" action="{% url 'accounts:signup' %}">{% csrf_token %}
+                <div class="mb-3">
+                    <label class="form-label" for="signup-username">用户名</label>
+                    <input id="signup-username" class="form-control" name="username" placeholder="例如：totp_fan"
+                           value="{{ username_value|default:'' }}" autocomplete="username" required>
+                    <div class="form-text">用于登录和展示给团队成员，可随时在个人设置中修改。</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="signup-email">邮箱（可选）</label>
+                    <input id="signup-email" type="email" class="form-control" name="email" placeholder="便于找回账号的邮箱"
+                           value="{{ email_value|default:'' }}" autocomplete="email">
+                    <div class="form-text">推荐填写常用邮箱，忘记密码时可以快速找回。</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="signup-password">密码</label>
+                    <div class="input-group">
+                        <input id="signup-password" type="password" class="form-control" name="password"
+                               placeholder="密码" autocomplete="new-password" required>
+                        <button class="btn btn-outline-secondary" type="button" id="password-toggle" aria-label="显示密码" aria-pressed="false">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+                    <div class="password-assistant mt-2">
+                        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                            <div class="form-text mb-0" id="passwordHint">为保障账户安全，请使用至少 8 个字符，并混合多种字符类型。</div>
+                            <button class="btn btn-sm btn-outline-primary" type="button" id="password-generate-btn">生成强密码</button>
+                        </div>
+                        <div class="progress password-strength-bar mt-2">
+                            <div class="progress-bar bg-secondary" id="password-strength-fill" style="width: 0%"></div>
+                        </div>
+                        <div class="form-text mt-2" id="password-strength-label">等待输入密码...</div>
+                        <ul class="password-tips list-unstyled small text-muted mt-2" id="password-suggestions"></ul>
+                    </div>
+                </div>
+                <button class="btn btn-primary w-100" type="submit">立即创建并登录</button>
+            </form>
+
+            <div class="auth-divider">或</div>
+
+            <div id="g_id_onload"
+                 data-client_id="{{ GOOGLE_CLIENT_ID }}"
+                 data-context="signup"
+                 data-ux_mode="popup"
+                 data-callback="handleCredentialResponse"
+                 data-auto_prompt="true">
+            </div>
+            <div class="g_id_signin" data-type="standard" data-shape="rect" data-theme="outline"
+                 data-text="signup_with" data-size="large" data-logo_alignment="left"></div>
+            <div class="text-center mt-3 small">已有账号？<a href="{% url 'accounts:login' %}">去登录</a></div>
+        </section>
+
+        <aside class="auth-side-panel">
+            <div class="team-section-kicker">安全建议</div>
+            <h3 class="team-page-panel-title mt-2">注册时建议</h3>
+            <p class="auth-side-copy mb-0">一个好记但不常见的强密码，会让后续分享、导出和恢复操作更稳妥。</p>
+            <div class="auth-side-list">
+                <div class="auth-side-item">
+                    <strong>优先填写常用邮箱</strong>
+                    便于找回账号，也方便接收安全提醒。
+                </div>
+                <div class="auth-side-item">
+                    <strong>避免重复使用旧密码</strong>
+                    账号里会涉及密钥与备份，建议使用全新密码。
+                </div>
+                <div class="auth-side-item">
+                    <strong>注册后可继续完善资料</strong>
+                    包括显示姓名、本地密码和安全概览。
+                </div>
+            </div>
+        </aside>
     </div>
 </div>
 {% endblock %}

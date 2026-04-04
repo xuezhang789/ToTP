@@ -1,104 +1,67 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block title %}我的密钥-TOTP管理平台{% endblock %}
-{% block head %}
-{{ block.super }}
-{% if not has_password %}
-<meta name="google-signin-client_id" content="{{ GOOGLE_CLIENT_ID }}">
-<link rel="preconnect" href="https://accounts.google.com" crossorigin>
-<link rel="dns-prefetch" href="https://accounts.google.com">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
-{% endif %}
-{% endblock %}
 
 {% block content %}
-
-<div class="mb-3">
-    <div class="row g-2 align-items-center">
-        <div class="col-12 col-md-auto order-1">
-            <div class="d-flex flex-wrap gap-2 align-items-center">
-                <form id="spaceFilterForm" class="d-flex align-items-center gap-2" method="get"
-                      action="{% url 'totp:list' %}" aria-label="空间筛选">
-                    <input type="hidden" id="spaceFilterInput" name="space" value="{{ selected_space }}">
-                    {% with current_label=selected_team.name|default:'个人空间' %}
-                    <div class="dropdown space-switch">
-                        <button class="btn btn-sm dropdown-toggle space-switch-toggle" type="button"
-                                id="spaceSwitchToggle" data-bs-toggle="dropdown" data-bs-auto-close="true"
-                                aria-expanded="false">
-                            <span class="space-switch-indicator" aria-hidden="true"></span>
-                            <span class="space-switch-label">{{ current_label }}</span>
-                        </button>
-                        <ul class="dropdown-menu space-switch-menu shadow" aria-labelledby="spaceSwitchToggle">
-                            <li>
-                                <button type="button"
-                                        class="dropdown-item d-flex align-items-center justify-content-between space-option {% if selected_space == 'personal' %}active{% endif %}"
-                                        data-value="personal">
-                                    <span class="fw-semibold">个人空间</span>
-                                    {% if selected_space == 'personal' %}
-                                    <span class="text-primary fw-semibold" aria-hidden="true">✓</span>
-                                    {% endif %}
-                                </button>
-                            </li>
-                            {% for m in team_memberships %}
-                                {% with team_id_str=m.team_id|stringformat:'s' %}
-                                {% with space_value='team:'|add:team_id_str %}
-                                <li>
-                                    <button type="button"
-                                            class="dropdown-item d-flex align-items-center justify-content-between space-option {% if selected_space == space_value %}active{% endif %}"
-                                            data-value="{{ space_value }}">
-                                        <span class="fw-semibold">{{ m.team.name }}</span>
-                                        {% if selected_space == space_value %}
-                                        <span class="text-primary fw-semibold" aria-hidden="true">✓</span>
-                                        {% endif %}
-                                    </button>
-                                </li>
-                                {% endwith %}
-                                {% endwith %}
-                            {% endfor %}
-                        </ul>
-                    </div>
-                    {% endwith %}
-                    <noscript>
-                        <label class="form-label mb-0 small text-muted" for="spaceSelect">空间</label>
-                        <select id="spaceSelect" class="form-select form-select-sm w-auto" name="space">
-                            <option value="personal" {% if selected_space == 'personal' %}selected{% endif %}>个人空间</option>
-                            {% for m in team_memberships %}
-                                {% with team_id_str=m.team_id|stringformat:'s' %}
-                                {% with space_value='team:'|add:team_id_str %}
-                                <option value="{{ space_value }}" {% if selected_space == space_value %}selected{% endif %}>
-                                    {{ m.team.name }}
-                                </option>
-                                {% endwith %}
-                                {% endwith %}
-                            {% endfor %}
-                        </select>
-                        <button class="btn btn-primary btn-sm" type="submit">切换</button>
-                    </noscript>
-                </form>
+<div class="team-page">
+    <section class="team-page-header">
+        <div class="team-page-header-bar">
+            <div class="team-page-header-main">
+                <div class="team-page-breadcrumb">
+                    <span class="fw-semibold">{% if selected_team %}团队空间{% else %}个人空间{% endif %}</span>
+                    {% if selected_team %}
+                    <span>/</span>
+                    <a class="text-decoration-none" href="{% url 'totp:team_home' selected_team.id %}">{{ selected_team.name }}</a>
+                    {% endif %}
+                    <span>/</span>
+                    <span class="fw-semibold">密钥工作台</span>
+                </div>
+                <div class="team-page-title-row">
+                    <h1 class="app-section-title mb-0">
+                        {% if selected_team %}
+                        {{ selected_team.name }} 密钥
+                        {% else %}
+                        我的密钥
+                        {% endif %}
+                    </h1>
+                </div>
+                <p class="team-page-summary mb-0">
+                    {% if selected_team %}
+                    在同一页里查看团队密钥、当前权限和分享操作，保持资产归属、协作分享与审计入口一致。
+                    {% else %}
+                    用统一工作台管理个人密钥、分组、导入导出、分享链接和回收站。
+                    {% endif %}
+                </p>
+            </div>
+            <div class="team-page-header-actions">
                 {% if selected_space == 'personal' %}
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal" type="button">
-                    添加密钥
+                    <i class="bi bi-plus-lg me-1"></i> 添加密钥
                 </button>
                 {% elif selected_membership and selected_membership.can_manage_entries %}
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal" type="button">
-                    添加密钥
+                    <i class="bi bi-plus-lg me-1"></i> 添加密钥
                 </button>
                 {% else %}
                 <button class="btn btn-primary disabled" type="button" disabled title="仅团队管理员可添加">
-                    添加密钥
+                    <i class="bi bi-plus-lg me-1"></i> 添加密钥
                 </button>
                 {% endif %}
                 {% if selected_space == 'personal' %}
                 <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importModal"
-                        type="button">批量导入</button>
+                        type="button">
+                    <i class="bi bi-upload me-1"></i> 批量导入
+                </button>
                 {% elif selected_membership and selected_membership.can_manage_entries %}
                 <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importModal"
-                        type="button">批量导入</button>
+                        type="button">
+                    <i class="bi bi-upload me-1"></i> 批量导入
+                </button>
                 {% endif %}
 
                 <div class="dropdown">
                     <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        更多
+                        <i class="bi bi-three-dots me-1"></i> 更多
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end shadow">
                         {% if selected_space == 'personal' %}
@@ -139,145 +102,259 @@
                     </ul>
                 </div>
 
-                <a class="btn btn-outline-danger" href="{% url 'totp:trash' %}">回收站</a>
+                <a class="btn btn-outline-danger" href="{% url 'totp:trash' %}">
+                    <i class="bi bi-trash3 me-1"></i> 回收站
+                </a>
             </div>
         </div>
-        <div class="col-12 col-md order-2 order-md-2">
-            <form id="searchForm" class="d-flex flex-wrap justify-content-md-end gap-2 align-items-center" method="get" role="search"
-                  aria-label="按名称搜索">
-                <input type="hidden" name="space" value="{{ selected_space }}">
-                <div class="input-group flex-nowrap w-100 w-md-auto search-group ms-md-auto">
-                    <span class="input-group-text bg-transparent">
-                        <svg width="18" height="18" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" fill="none" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                    </span>
-                    <input id="q" name="q" value="{{ q|default_if_none:'' }}" class="form-control search-input"
-                           type="search" placeholder="仅按名称搜索" autocomplete="off" enterkeyhint="search"
-                           spellcheck="false" maxlength="64">
-                    <button class="btn btn-outline-secondary d-none" id="clearBtn" type="button" aria-label="清空搜索">
-                        清空
-                    </button>
-                    <button class="btn btn-primary" type="submit" id="searchBtn"><span
-                            class="spinner-border spinner-border-sm me-1 d-none" id="searchSpinner" role="status"
-                            aria-hidden="true"></span>搜索
-                    </button>
-                    {% if q %}
-                    <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}?space={{ selected_space|urlencode }}">重置</a>
-                    {% endif %}
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 
-<div class="card app-table-card">
-    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <strong class="text-uppercase small text-muted">
-                {% if selected_team %}
-                    {{ selected_team.name }} · 团队密钥
-                {% else %}
-                    我的密钥
-                {% endif %}
-            </strong>
-            {% if selected_team and selected_membership %}
-            <span class="badge rounded-pill bg-light text-muted fw-semibold">
-                {{ selected_membership.get_role_display }}
-            </span>
-            {% endif %}
+        <div class="team-page-kpi-grid">
+            <div class="team-page-kpi" data-state="{% if q %}primary{% else %}safe{% endif %}">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">当前条目</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-key"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{{ page_obj.paginator.count }}</div>
+                <div class="team-page-kpi-meta">{% if q %}已按名称筛选{% else %}当前空间可见的全部密钥{% endif %}</div>
+            </div>
+            <div class="team-page-kpi" data-state="{% if selected_team %}primary{% else %}safe{% endif %}">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">当前空间</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-grid"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{% if selected_team %}团队{% else %}个人{% endif %}</div>
+                <div class="team-page-kpi-meta">{% if selected_team %}{{ selected_team.name }}{% else %}仅自己可见{% endif %}</div>
+            </div>
+            <div class="team-page-kpi">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">{% if selected_team %}资产目录{% else %}分组数量{% endif %}</span>
+                    <span class="team-page-kpi-icon"><i class="bi {% if selected_team %}bi-diagram-3{% else %}bi-collection{% endif %}"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{% if selected_team %}{{ team_assets|length }}{% else %}{{ groups|length }}{% endif %}</div>
+                <div class="team-page-kpi-meta">{% if selected_team %}可用于归属团队密钥{% else %}帮助整理个人密钥{% endif %}</div>
+            </div>
+            <div class="team-page-kpi" data-state="{% if selected_membership and not selected_membership.can_manage_entries %}warning{% else %}safe{% endif %}">
+                <div class="team-page-kpi-head">
+                    <span class="team-page-kpi-label">当前权限</span>
+                    <span class="team-page-kpi-icon"><i class="bi bi-shield-lock"></i></span>
+                </div>
+                <div class="team-page-kpi-value">{% if selected_membership %}{{ selected_membership.get_role_display }}{% else %}完全管理{% endif %}</div>
+                <div class="team-page-kpi-meta">{% if selected_membership and not selected_membership.can_manage_entries %}当前仅可查看与复制{% else %}可管理导入、导出和条目调整{% endif %}</div>
+            </div>
         </div>
-        <div class="d-flex align-items-center gap-2 text-muted small">
-            <span>
-                下次刷新倒计时：<span class="fw-semibold text-dark" id="countdown">--</span>s
-            </span>
-            <span class="badge rounded-pill bg-light text-muted" id="refreshStatus" role="button" tabindex="0">自动刷新中</span>
-            <button type="button" class="btn btn-outline-secondary btn-sm" id="manualRefreshBtn">
-                手动刷新
-            </button>
+    </section>
+
+    <section class="team-page-panel">
+        <div class="team-page-panel-head">
+            <div>
+                <div class="team-section-kicker">筛选与切换</div>
+                <div class="team-page-panel-title">空间与搜索</div>
+            </div>
+            <div class="team-page-panel-note">支持在个人空间与团队空间之间切换，并按名称快速定位密钥</div>
         </div>
-    </div>
-    <div class="table-responsive table-cardify-wrapper">
-        <table class="table table-hover table-striped mb-0 align-middle table-cardify" id="totpTable">
-            <thead>
-            <tr>
-                <th>名称</th>
-                <th>{% if selected_team %}资产{% else %}分组{% endif %}</th>
-                <th class="text-nowrap">验证码</th>
-                <th class="text-nowrap d-none d-md-table-cell">有效期</th>
-                <th class="text-nowrap">操作</th>
-            </tr>
-            </thead>
-            <tbody id="tbody">
-            {% for e in entries %}
-            {% include 'totp/_entry_row.html' with e=e groups=groups assets=team_assets %}
-            {% empty %}
-            <tr class="no-data">
-                <td colspan="5" class="text-center text-muted py-5">
-                    <div class="d-flex flex-column align-items-center gap-3">
-                        <div class="fw-semibold">暂无数据</div>
-                        {% if selected_team %}
-                            <div class="small text-muted">该团队空间暂无可查看的密钥。</div>
-                            <div class="d-flex flex-wrap gap-2 justify-content-center">
-                                {% if selected_membership and selected_membership.can_manage_entries %}
-                                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">添加密钥</button>
-                                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importModal">批量导入</button>
-                                {% endif %}
-                                <a class="btn btn-outline-primary" href="{% url 'totp:list' %}">返回个人空间</a>
-                            </div>
-                        {% else %}
-                            <div class="small text-muted">先添加一个密钥，或批量导入已有数据。</div>
-                            <div class="d-flex flex-wrap gap-2 justify-content-center">
-                                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">添加密钥</button>
-                                <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importModal">批量导入</button>
-                            </div>
+        <div class="row g-3 align-items-center">
+            <div class="col-12 col-lg-6">
+                <form id="spaceFilterForm" class="d-flex flex-wrap align-items-center gap-2" method="get"
+                      action="{% url 'totp:list' %}" aria-label="空间筛选">
+                    <input type="hidden" id="spaceFilterInput" name="space" value="{{ selected_space }}">
+                    {% with current_label=selected_team.name|default:'个人空间' %}
+                    <div class="dropdown space-switch">
+                        <button class="btn btn-sm dropdown-toggle space-switch-toggle" type="button"
+                                id="spaceSwitchToggle" data-bs-toggle="dropdown" data-bs-auto-close="true"
+                                aria-expanded="false">
+                            <span class="space-switch-indicator" aria-hidden="true"></span>
+                            <span class="space-switch-label">{{ current_label }}</span>
+                        </button>
+                        <ul class="dropdown-menu space-switch-menu shadow" aria-labelledby="spaceSwitchToggle">
+                            <li>
+                                <button type="button"
+                                        class="dropdown-item d-flex align-items-center justify-content-between space-option {% if selected_space == 'personal' %}active{% endif %}"
+                                        data-value="personal">
+                                    <span class="fw-semibold">个人空间</span>
+                                    {% if selected_space == 'personal' %}
+                                    <span class="text-primary fw-semibold" aria-hidden="true">✓</span>
+                                    {% endif %}
+                                </button>
+                            </li>
+                            {% for m in team_memberships %}
+                                {% with team_id_str=m.team_id|stringformat:'s' %}
+                                {% with space_value='team:'|add:team_id_str %}
+                                <li>
+                                    <button type="button"
+                                            class="dropdown-item d-flex align-items-center justify-content-between space-option {% if selected_space == space_value %}active{% endif %}"
+                                            data-value="{{ space_value }}">
+                                        <span class="fw-semibold">{{ m.team.name }}</span>
+                                        {% if selected_space == space_value %}
+                                        <span class="text-primary fw-semibold" aria-hidden="true">✓</span>
+                                        {% endif %}
+                                    </button>
+                                </li>
+                                {% endwith %}
+                                {% endwith %}
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endwith %}
+                    <div class="team-page-chip-row">
+                        <span class="team-page-chip">{% if selected_team %}{{ selected_team.name }}{% else %}个人空间{% endif %}</span>
+                        {% if selected_membership %}
+                        <span class="team-page-chip team-page-chip-primary">{{ selected_membership.get_role_display }}</span>
                         {% endif %}
                     </div>
-                </td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% if page_obj.has_other_pages %}
-    <div class="card-footer" id="entryListPagination">
-        <nav aria-label="Page navigation">
-            <ul class="pagination justify-content-center mb-0">
-                {% if page_obj.has_previous %}
-                <li class="page-item">
-                    <a class="page-link"
-                       href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}{% if asset_id %}asset={{ asset_id }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
-                       aria-label="Previous">
-                        <span aria-hidden="true">&laquo;</span>
-                    </a>
-                </li>
-                {% else %}
-                <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
-                {% endif %}
+                    <noscript>
+                        <label class="form-label mb-0 small text-muted" for="spaceSelect">空间</label>
+                        <select id="spaceSelect" class="form-select form-select-sm w-auto" name="space">
+                            <option value="personal" {% if selected_space == 'personal' %}selected{% endif %}>个人空间</option>
+                            {% for m in team_memberships %}
+                                {% with team_id_str=m.team_id|stringformat:'s' %}
+                                {% with space_value='team:'|add:team_id_str %}
+                                <option value="{{ space_value }}" {% if selected_space == space_value %}selected{% endif %}>
+                                    {{ m.team.name }}
+                                </option>
+                                {% endwith %}
+                                {% endwith %}
+                            {% endfor %}
+                        </select>
+                        <button class="btn btn-primary btn-sm" type="submit">切换</button>
+                    </noscript>
+                </form>
+            </div>
+            <div class="col-12 col-lg-6">
+                <form id="searchForm" class="d-flex flex-wrap justify-content-lg-end gap-2 align-items-center" method="get" role="search"
+                      aria-label="按名称搜索">
+                    <input type="hidden" name="space" value="{{ selected_space }}">
+                    <div class="input-group flex-nowrap w-100 search-group ms-lg-auto">
+                        <span class="input-group-text bg-transparent">
+                            <svg width="18" height="18" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="currentColor" fill="none" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        </span>
+                        <input id="q" name="q" value="{{ q|default_if_none:'' }}" class="form-control search-input"
+                               type="search" placeholder="仅按名称搜索" autocomplete="off" enterkeyhint="search"
+                               spellcheck="false" maxlength="64">
+                        <button class="btn btn-outline-secondary d-none" id="clearBtn" type="button" aria-label="清空搜索">
+                            清空
+                        </button>
+                        <button class="btn btn-primary" type="submit" id="searchBtn"><span
+                                class="spinner-border spinner-border-sm me-1 d-none" id="searchSpinner" role="status"
+                                aria-hidden="true"></span>搜索
+                        </button>
+                        {% if q %}
+                        <a class="btn btn-outline-secondary" href="{% url 'totp:list' %}?space={{ selected_space|urlencode }}">重置</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
 
-                {% for num in page_obj.paginator.page_range %}
-                {% if num == page_obj.number %}
-                <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
-                {% else %}
-                <li class="page-item"><a class="page-link"
-                                         href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}{% if asset_id %}asset={{ asset_id }}&amp;{% endif %}page={{ num }}">{{ num }}</a></li>
+    <div class="card app-table-card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <strong class="text-uppercase small text-muted">
+                    {% if selected_team %}
+                        {{ selected_team.name }} · 团队密钥
+                    {% else %}
+                        我的密钥
+                    {% endif %}
+                </strong>
+                {% if selected_team and selected_membership %}
+                <span class="badge rounded-pill bg-light text-muted fw-semibold">
+                    {{ selected_membership.get_role_display }}
+                </span>
                 {% endif %}
+            </div>
+            <div class="d-flex align-items-center gap-2 text-muted small">
+                <span>
+                    下次刷新倒计时：<span class="fw-semibold text-dark" id="countdown">--</span>s
+                </span>
+                <span class="badge rounded-pill bg-light text-muted" id="refreshStatus" role="button" tabindex="0">自动刷新中</span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="manualRefreshBtn">
+                    手动刷新
+                </button>
+            </div>
+        </div>
+        <div class="table-responsive table-cardify-wrapper">
+            <table class="table table-hover table-striped mb-0 align-middle table-cardify" id="totpTable">
+                <thead>
+                <tr>
+                    <th>名称</th>
+                    <th>{% if selected_team %}资产{% else %}分组{% endif %}</th>
+                    <th class="text-nowrap">验证码</th>
+                    <th class="text-nowrap d-none d-md-table-cell">有效期</th>
+                    <th class="text-nowrap">操作</th>
+                </tr>
+                </thead>
+                <tbody id="tbody">
+                {% for e in entries %}
+                {% include 'totp/_entry_row.html' with e=e groups=groups assets=team_assets %}
+                {% empty %}
+                <tr class="no-data">
+                    <td colspan="5" class="text-center text-muted py-5">
+                        <div class="d-flex flex-column align-items-center gap-3">
+                            <div class="fw-semibold">暂无数据</div>
+                            {% if selected_team %}
+                                <div class="small text-muted">该团队空间暂无可查看的密钥。</div>
+                                <div class="d-flex flex-wrap gap-2 justify-content-center">
+                                    {% if selected_membership and selected_membership.can_manage_entries %}
+                                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">添加密钥</button>
+                                        <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importModal">批量导入</button>
+                                    {% endif %}
+                                    <a class="btn btn-outline-primary" href="{% url 'totp:list' %}">返回个人空间</a>
+                                </div>
+                            {% else %}
+                                <div class="small text-muted">先添加一个密钥，或批量导入已有数据。</div>
+                                <div class="d-flex flex-wrap gap-2 justify-content-center">
+                                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">添加密钥</button>
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importModal">批量导入</button>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
                 {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if page_obj.has_other_pages %}
+        <div class="card-footer" id="entryListPagination">
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link"
+                           href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}{% if asset_id %}asset={{ asset_id }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
+                           aria-label="Previous">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                    {% endif %}
 
-                {% if page_obj.has_next %}
-                <li class="page-item">
-                    <a class="page-link"
-                       href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}{% if asset_id %}asset={{ asset_id }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
-                       aria-label="Next">
-                        <span aria-hidden="true">&raquo;</span>
-                    </a>
-                </li>
-                {% else %}
-                <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
-                {% endif %}
-            </ul>
-        </nav>
+                    {% for num in page_obj.paginator.page_range %}
+                    {% if num == page_obj.number %}
+                    <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
+                    {% else %}
+                    <li class="page-item"><a class="page-link"
+                                             href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}{% if asset_id %}asset={{ asset_id }}&amp;{% endif %}page={{ num }}">{{ num }}</a></li>
+                    {% endif %}
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link"
+                           href="?space={{ selected_space|urlencode }}&amp;{% if q %}q={{ q|urlencode }}&amp;{% endif %}{% if group_id %}group={{ group_id }}&amp;{% endif %}{% if asset_id %}asset={{ asset_id }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
+                           aria-label="Next">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
-
 </div>
 
 <div class="modal fade" id="shareLinkModal" tabindex="-1" aria-labelledby="shareLinkModalLabel" aria-hidden="true">
@@ -324,39 +401,27 @@
                                placeholder="例如：发给值班同事，仅用于本次变更">
                         <div class="form-text">备注会记录在审计中，建议不要填写敏感信息。</div>
                     </div>
-                    <div class="mt-3">
-                        <label class="form-label" for="shareLinkPassword">确认密码</label>
-                        <div class="input-group">
-                            <input class="form-control" id="shareLinkPassword" name="password" type="password"
-                                   autocomplete="current-password"
-                                   {% if has_password %}required{% else %}disabled{% endif %}
-                                   placeholder="请输入账号密码">
-                            <button class="btn btn-outline-secondary" type="button" id="shareLinkPasswordToggleBtn"
-                                    {% if not has_password %}disabled{% endif %}
-                                    aria-label="显示或隐藏密码">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                            <div class="invalid-feedback">请输入密码。</div>
-                        </div>
-                        {% if has_password %}
-                        <div class="form-text">用于二次确认，不会保存密码。</div>
-                        {% else %}
-                        <div class="form-text">该账号未设置本地密码，请使用 Google 再次确认。</div>
-                        <div class="mt-2" id="shareLinkGoogleBox">
-                            <div id="g_id_onload"
-                                 data-client_id="{{ GOOGLE_CLIENT_ID }}"
-                                 data-context="signin"
-                                 data-ux_mode="popup"
-                                 data-callback="handleShareLinkReauthCredential"
-                                 data-auto_prompt="false">
-                            </div>
-                            <div class="g_id_signin" data-type="standard" data-shape="rect" data-theme="outline"
-                                 data-text="continue_with" data-size="large" data-logo_alignment="left"></div>
-                        </div>
-                        {% endif %}
-                    </div>
                     <div class="alert alert-info mt-3 mb-0">
-                        <div class="small">链接为只读访问，查看后立刻计数并可随时失效。请仅共享给可信任的对象。</div>
+                        <div class="small">点击“生成链接”后会立即创建只读分享链接，并直接显示在下方。请仅共享给可信任的对象。</div>
+                    </div>
+                    <div class="border rounded-3 bg-light-subtle p-3 mt-3 d-none" id="shareLinkResult">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                            <div class="fw-semibold">分享链接已生成</div>
+                            <button type="button" class="btn btn-sm btn-outline-danger d-none" id="shareLinkInvalidateBtn">
+                                立即失效
+                            </button>
+                        </div>
+                        <label class="form-label small text-muted" for="shareLinkUrl">可直接复制发送</label>
+                        <div class="input-group">
+                            <input class="form-control" id="shareLinkUrl" type="text" readonly
+                                   placeholder="生成后会显示在这里">
+                            <button class="btn btn-outline-success" type="button" id="shareLinkCopyBtn"
+                                    aria-label="复制分享链接">
+                                复制
+                            </button>
+                        </div>
+                        <div class="form-text">链接为只读访问，打开即开始计数，可随时失效。</div>
+                        <ul class="small text-muted mb-0 mt-3 ps-3" id="shareLinkSummary"></ul>
                     </div>
                 </form>
             </div>
@@ -364,7 +429,7 @@
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="button" class="btn btn-primary" id="shareLinkSubmitBtn">
                     <span class="spinner-border spinner-border-sm me-2 d-none" id="shareLinkSpinner" role="status" aria-hidden="true"></span>
-                    确认生成
+                    生成链接
                 </button>
             </div>
         </div>
@@ -446,12 +511,8 @@ window.TotpListConfig = {
   tokensUrl: "{% url 'totp:api_tokens' %}",
   defaultSpace: "{{ selected_space|default:'personal'|escapejs }}",
   oneTimeCreateUrlTemplate: "{% url 'totp:one_time_create' 0 %}",
-  oneTimeInvalidateUrlTemplate: "{% url 'totp:one_time_invalidate' 0 %}",
-  reauthApiUrl: "{% url 'accounts:reauth_api' %}",
-  reauthGoogleUrl: "{% url 'accounts:reauth_google' %}",
-  googleClientId: "{{ GOOGLE_CLIENT_ID|escapejs }}",
-  hasPassword: {% if has_password %}true{% else %}false{% endif %}
+  oneTimeInvalidateUrlTemplate: "{% url 'totp:one_time_invalidate' 0 %}"
 };
 </script>
-<script src="{% static 'js/totp_list.js' %}"></script>
+<script src="{% static 'js/totp_list.js' %}?v=20260404-share-link-current-domain"></script>
 {% endblock %}

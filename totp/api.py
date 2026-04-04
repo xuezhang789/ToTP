@@ -7,6 +7,7 @@ from django.views.decorators.cache import never_cache
 from .models import TOTPEntry
 from .utils import decrypt_str, totp_code_base32
 
+
 @login_required
 @never_cache
 def api_tokens(request):
