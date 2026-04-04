@@ -2,6 +2,7 @@ import json
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db import OperationalError
 from django.test import TestCase
 from django.urls import reverse
 
@@ -80,3 +81,20 @@ class AuthAuditTests(TestCase):
         self.assertEqual(audit.method, AuthAudit.Method.PASSWORD)
         self.assertEqual(audit.status, AuthAudit.Status.SUCCESS)
         self.assertEqual(audit.user_id, self.user.id)
+
+    @patch(
+        "accounts.auth_service.AuthAudit.objects.create",
+        side_effect=OperationalError("no such table: accounts_authaudit"),
+    )
+    def test_reauth_api_still_succeeds_when_auth_audit_table_is_missing(self, _create_mock):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("accounts:reauth_api"),
+            data=json.dumps({"password": "StrongPassword123!"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True})
+        self.assertTrue(self.client.session.get("reauth_at"))

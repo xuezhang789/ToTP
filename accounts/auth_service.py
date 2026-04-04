@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+import logging
 import secrets
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login
 from django.core.cache import cache
+from django.db import DatabaseError
 from django.utils import timezone
 
 from project.utils import client_ip
 
 from .models import AuthAudit
+
+logger = logging.getLogger(__name__)
+_auth_audit_missing_table_warned = False
 
 LOGIN_RATE_LIMIT = 10
 LOGIN_RATE_WINDOW_SECONDS = 300
@@ -137,22 +142,45 @@ def audit_auth_event(
     identifier: str = "",
     metadata: dict | None = None,
 ):
+    global _auth_audit_missing_table_warned
     user_obj = None
     if user is not None and (
         getattr(user, "is_authenticated", False) or getattr(user, "pk", None)
     ):
         user_obj = user
     ip = client_ip(request) if request is not None else "unknown"
-    AuthAudit.objects.create(
-        user=user_obj,
-        action=action,
-        method=method,
-        status=status,
-        identifier=(identifier or "")[:255],
-        ip_address=None if ip == "unknown" else ip,
-        user_agent=((request.META.get("HTTP_USER_AGENT", "") if request is not None else "")[:255]),
-        metadata=metadata or {},
-    )
+    try:
+        AuthAudit.objects.create(
+            user=user_obj,
+            action=action,
+            method=method,
+            status=status,
+            identifier=(identifier or "")[:255],
+            ip_address=None if ip == "unknown" else ip,
+            user_agent=((request.META.get("HTTP_USER_AGENT", "") if request is not None else "")[:255]),
+            metadata=metadata or {},
+        )
+    except DatabaseError as exc:
+        # 审计是增强能力，不应反向阻塞登录、二次验证或退出流程。
+        message = str(exc).lower()
+        missing_table_markers = ("no such table", "does not exist", "undefined table")
+        if AuthAudit._meta.db_table.lower() in message and any(
+            marker in message for marker in missing_table_markers
+        ):
+            if not _auth_audit_missing_table_warned:
+                logger.warning(
+                    "Skipping auth audit writes because table %s is unavailable. Run migrations to re-enable auth audit logging.",
+                    AuthAudit._meta.db_table,
+                )
+                _auth_audit_missing_table_warned = True
+            return
+        logger.warning(
+            "Skipping auth audit write for action=%s method=%s status=%s because the database write failed.",
+            action,
+            method,
+            status,
+            exc_info=True,
+        )
 
 
 def user_can_authenticate(user) -> bool:
