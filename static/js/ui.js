@@ -417,11 +417,7 @@
     if (!/^https?:$/.test(url.protocol) || url.origin !== window.location.origin) {
       return false;
     }
-    if (
-      url.pathname === window.location.pathname
-      && url.search === window.location.search
-      && url.hash
-    ) {
+    if (url.pathname === window.location.pathname && url.search === window.location.search) {
       return false;
     }
     return true;

@@ -477,6 +477,25 @@ class BrowserRegressionTests(BrowserLiveServerTestCase):
         self.page.wait_for_timeout(50)
         self.assertFalse(self.page.evaluate("() => document.body.classList.contains('app-nav-busy')"))
 
+    def test_same_page_dashboard_brand_link_does_not_trigger_nav_busy_feedback(self):
+        self.user_model.objects.create_user(
+            username="browser_same_page_user",
+            password="StrongPass123!",
+            email="browser-same-page@example.com",
+        )
+
+        self._login_via_form(self.page, "browser_same_page_user", "StrongPass123!")
+        self.page.goto(self._absolute_url(reverse("dashboard")), wait_until="domcontentloaded")
+
+        self.page.locator(".app-navbar-brand").click()
+        self.page.wait_for_timeout(80)
+
+        self.assertFalse(self.page.evaluate("() => document.body.classList.contains('app-nav-busy')"))
+        self.assertEqual(
+            self.page.evaluate("() => window.location.pathname + window.location.search"),
+            reverse("dashboard"),
+        )
+
     def test_member_removal_browser_flow_revokes_member_access(self):
         owner = self.user_model.objects.create_user(
             username="browser_owner",
