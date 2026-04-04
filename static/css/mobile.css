@@ -115,6 +115,35 @@
     .modal-content {
         border-radius: 1.1rem;
     }
+    .app-modal-header,
+    .app-modal-body,
+    .app-modal-footer {
+        padding-left: 0.95rem;
+        padding-right: 0.95rem;
+    }
+    .app-modal-header {
+        padding-top: 1rem;
+        padding-bottom: 0.85rem;
+    }
+    .app-modal-body {
+        gap: 0.9rem;
+        padding-top: 0.95rem;
+        padding-bottom: 0.95rem;
+    }
+    .app-modal-footer {
+        padding-top: 0.85rem;
+        padding-bottom: max(0.95rem, env(safe-area-inset-bottom));
+    }
+    .app-modal-footer .btn {
+        width: 100%;
+    }
+    .app-modal-copy {
+        font-size: 0.82rem;
+    }
+    .app-modal-panel,
+    .app-modal-result {
+        padding: 0.82rem 0.85rem;
+    }
     .offcanvas-header,
     .offcanvas-body {
         padding: 0.95rem;
@@ -435,6 +464,41 @@
     .trash-list-tools {
         min-width: 0;
         justify-items: start;
+    }
+    .share-audit-list-head {
+        grid-template-columns: 1fr;
+    }
+    .share-audit-list-tools {
+        min-width: 0;
+        justify-items: start;
+    }
+    .share-audit-toolbar {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .share-audit-toolbar .btn {
+        width: 100%;
+    }
+    .share-audit-mobile-wrap {
+        padding-left: 0.8rem;
+        padding-right: 0.8rem;
+    }
+    .share-audit-mobile-item {
+        padding: 0.82rem 0.85rem;
+    }
+    .share-audit-mobile-head {
+        flex-direction: column;
+    }
+    .share-audit-mobile-state {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .share-audit-mobile-metrics {
+        grid-template-columns: 1fr;
+    }
+    .share-audit-mobile-actions .btn {
+        width: 100%;
+        flex-basis: auto;
     }
     .trash-list-action-row {
         width: 100%;

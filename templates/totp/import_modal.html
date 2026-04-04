@@ -1,11 +1,15 @@
 <div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-fullscreen-sm-down">
-        <div class="modal-content border-0 rounded-3 shadow">
-            <div class="modal-header">
-                <h5 class="modal-title">批量导入</h5>
+        <div class="modal-content app-modal-shell border-0 shadow">
+            <div class="modal-header app-modal-header">
+                <div class="app-modal-title-wrap">
+                    <div class="app-modal-kicker">批量导入</div>
+                    <h5 class="modal-title app-modal-title">批量导入</h5>
+                    <div class="app-modal-copy">支持粘贴文本或上传常见导出文件。先预览，再确认导入，更适合一次迁入多条密钥。</div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body app-modal-body">
                 <div class="mb-3">
                     <label class="form-label" for="importSpaceSelect">导入到</label>
                     <select class="form-select" id="importSpaceSelect">
@@ -60,8 +64,13 @@
                 </div>
 
                 <div id="importPreviewWrapper" class="d-none">
-                    <p class="small text-muted mb-2" id="importPreviewSummary">预览结果如下，请确认后导入：</p>
-                    <div class="table-responsive border rounded">
+                    <div class="app-modal-section-head">
+                        <div>
+                            <div class="app-modal-section-title">导入预览</div>
+                            <div class="app-modal-section-note" id="importPreviewSummary">预览结果如下，请确认后导入：</div>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
                         <table class="table table-sm align-middle mb-0" id="importPreviewTable">
                             <thead class="table-light">
                             <tr>
@@ -77,7 +86,7 @@
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer app-modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">关闭</button>
                 <button type="button" class="btn btn-outline-primary" id="importPreviewBtn">预览</button>
                 <button type="button" class="btn btn-primary d-none" id="importApplyBtn">确认导入</button>

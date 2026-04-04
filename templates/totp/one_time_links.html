@@ -174,44 +174,58 @@
         </form>
     </section>
 
-    <div class="card app-table-card">
-        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <div>
-                <strong>访问链接清单</strong>
-                <div class="small text-muted mt-1">
+    <div class="card app-table-card share-audit-list-card">
+        <div class="card-header share-audit-list-head">
+            <div class="share-audit-list-head-main">
+                <div class="share-audit-list-title-row">
+                    <div>
+                        <div class="entry-list-kicker">访问链接清单</div>
+                        <div class="entry-list-title">最近创建与待处理的访问链接</div>
+                    </div>
+                    <div class="entry-list-chip-row">
+                        <span class="team-page-chip">{{ total_count }} 条</span>
+                        <span class="team-page-chip {% if active_count %}team-page-chip-primary{% endif %}">当前有效 {{ active_count }} 条</span>
+                        {% if is_team_audit and team %}
+                        <span class="team-page-chip">{{ team.name }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="share-audit-list-summary">
                     {% if is_team_audit and team %}
-                    团队：{{ team.name }}
+                    审计 {{ team.name }} 团队内的一次性访问链接，优先处理仍可用、未访问和应尽快失效的链接。
                     {% else %}
-                    共 {{ total_count }} 条，当前有效 {{ active_count }} 条
+                    集中查看个人与团队空间里由你创建的访问链接，快速识别仍可用、已访问和需要回收的分享项。
                     {% endif %}
                 </div>
             </div>
-            <div class="d-flex flex-wrap gap-2 align-items-center">
-                <div class="d-md-none form-check mb-0">
+            <div class="share-audit-list-tools">
+                <div class="d-md-none form-check mb-0 share-audit-mobile-toggle">
                     <input class="form-check-input" type="checkbox" id="selectAllLinksMobile" aria-label="全选">
-                    <label class="form-check-label small text-muted" for="selectAllLinksMobile">全选</label>
+                    <label class="form-check-label small text-muted" for="selectAllLinksMobile">全选当前页</label>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-danger" id="batchInvalidateBtn"
-                        data-url="{{ batch_invalidate_url }}" disabled>
-                    批量失效（已选 <span id="selectedCount">0</span>，可失效 <span id="selectedActiveCount">0</span>）
-                </button>
-                {% if is_team_audit and batch_remind_url %}
-                <button type="button" class="btn btn-sm btn-outline-primary" id="batchRemindBtn"
-                        data-url="{{ batch_remind_url }}" disabled>
-                    批量提醒失效
-                </button>
-                {% endif %}
+                <div class="share-audit-toolbar">
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="batchInvalidateBtn"
+                            data-url="{{ batch_invalidate_url }}" disabled>
+                        批量失效（已选 <span id="selectedCount">0</span>，可失效 <span id="selectedActiveCount">0</span>）
+                    </button>
+                    {% if is_team_audit and batch_remind_url %}
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="batchRemindBtn"
+                            data-url="{{ batch_remind_url }}" disabled>
+                        批量提醒失效
+                    </button>
+                    {% endif %}
+                </div>
             </div>
         </div>
-    <div class="d-md-none">
-        <div class="list-group list-group-flush">
+    <div class="d-md-none share-audit-mobile-wrap">
+        <div class="share-audit-mobile-list">
             {% for item in records %}
                 {% with link=item.link %}
-                <div class="list-group-item">
-                    <div class="d-flex justify-content-between align-items-start gap-2">
-                        <div>
-                            <div class="fw-semibold">{{ link.entry.name }}</div>
-                            <div class="text-muted small">
+                <article class="share-audit-mobile-item">
+                    <div class="share-audit-mobile-head">
+                        <div class="share-audit-mobile-title-wrap">
+                            <div class="share-audit-mobile-title">{{ link.entry.name }}</div>
+                            <div class="share-audit-mobile-meta">
                                 {% if link.entry.group %}
                                     分组：{{ link.entry.group.name }}
                                 {% else %}
@@ -222,19 +236,53 @@
                                 {% endif %}
                             </div>
                             {% if is_team_audit %}
-                                <div class="text-muted small">创建人：{{ link.created_by.username }}</div>
+                                <div class="share-audit-mobile-meta">创建人：{{ link.created_by.username }}</div>
                             {% endif %}
                             {% if link.note %}
-                                <div class="text-muted small">备注：{{ link.note }}</div>
+                                <div class="share-audit-mobile-meta">备注：{{ link.note }}</div>
                             {% endif %}
-                            <div class="text-muted small">ID：{{ link.id }}</div>
+                            <div class="share-audit-mobile-meta">ID：{{ link.id }}</div>
                         </div>
-                        <div class="d-flex align-items-start gap-2">
+                        <div class="share-audit-mobile-state">
                             <input class="form-check-input mt-1" type="checkbox" value="{{ link.id }}" data-link-select data-status-key="{{ item.status_key }}" aria-label="选择链接">
-                            <span class="badge text-bg-{{ item.badge_class }}">{{ item.status_label }}</span>
+                            <span class="badge rounded-pill text-bg-{{ item.badge_class }}">{{ item.status_label }}</span>
                         </div>
                     </div>
-                    <div class="d-flex flex-wrap gap-2 mt-2">
+                    <div class="share-audit-mobile-metrics">
+                        <div class="share-audit-mobile-metric">
+                            <span class="share-audit-mobile-metric-label">查看次数</span>
+                            <span class="share-audit-mobile-metric-value">{{ link.view_count }} / {{ link.max_views }}</span>
+                        </div>
+                        <div class="share-audit-mobile-metric">
+                            <span class="share-audit-mobile-metric-label">剩余次数</span>
+                            <span class="share-audit-mobile-metric-value">{{ item.remaining_views }} 次</span>
+                        </div>
+                    </div>
+                    <div class="share-audit-mobile-meta-block">
+                        <div><span class="text-muted">创建：</span>{{ link.created_at|date:"Y-m-d H:i" }}</div>
+                        <div><span class="text-muted">过期：</span>{{ link.expires_at|date:"Y-m-d H:i" }}</div>
+                    </div>
+                    <div class="share-audit-mobile-meta-block">
+                        {% if link.first_viewed_at %}
+                            <div><span class="text-muted">首次：</span>{{ link.first_viewed_at|date:"Y-m-d H:i" }}</div>
+                        {% else %}
+                            <div class="text-muted">尚未访问</div>
+                        {% endif %}
+                        {% if link.last_viewed_at %}
+                            <div><span class="text-muted">最近：</span>{{ link.last_viewed_at|date:"Y-m-d H:i" }}</div>
+                        {% endif %}
+                    </div>
+                    {% if link.last_view_ip or link.last_view_user_agent %}
+                    <div class="share-audit-mobile-meta-block">
+                        {% if link.last_view_ip %}
+                            <div><span class="text-muted">IP：</span>{{ link.last_view_ip }}</div>
+                        {% endif %}
+                        {% if link.last_view_user_agent %}
+                            <div class="text-muted text-break"><span class="text-muted">UA：</span>{{ link.last_view_user_agent }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    <div class="share-audit-mobile-actions">
                         <button type="button" class="btn btn-sm btn-outline-secondary copy-link-id-btn"
                                 data-copy-text="{{ link.id }}" aria-label="复制链接 ID">
                             <i class="bi bi-clipboard me-1"></i>复制 ID
@@ -245,37 +293,10 @@
                             <i class="bi bi-slash-circle me-1"></i>失效
                         </button>
                     </div>
-                    <div class="small mt-2">
-                        <span class="text-muted">查看：</span>{{ link.view_count }} / {{ link.max_views }}，
-                        <span class="text-muted">剩余：</span>{{ item.remaining_views }} 次
-                    </div>
-                    <div class="small mt-2 text-muted">
-                        创建：{{ link.created_at|date:"Y-m-d H:i" }} · 过期：{{ link.expires_at|date:"Y-m-d H:i" }}
-                    </div>
-                    <div class="small mt-2">
-                        {% if link.first_viewed_at %}
-                            <div>首次：{{ link.first_viewed_at|date:"Y-m-d H:i" }}</div>
-                        {% else %}
-                            <div class="text-muted">尚未访问</div>
-                        {% endif %}
-                        {% if link.last_viewed_at %}
-                            <div class="text-muted">最近：{{ link.last_viewed_at|date:"Y-m-d H:i" }}</div>
-                        {% endif %}
-                    </div>
-                    {% if link.last_view_ip or link.last_view_user_agent %}
-                    <div class="small mt-2">
-                        {% if link.last_view_ip %}
-                            <div class="text-muted">IP：{{ link.last_view_ip }}</div>
-                        {% endif %}
-                        {% if link.last_view_user_agent %}
-                            <div class="text-muted text-break">UA：{{ link.last_view_user_agent }}</div>
-                        {% endif %}
-                    </div>
-                    {% endif %}
-                </div>
+                </article>
                 {% endwith %}
             {% empty %}
-            <div class="list-group-item text-center text-muted py-5">
+            <div class="share-audit-mobile-empty text-center text-muted py-5">
                 {% if is_filtered %}
                 未找到匹配的链接，请尝试调整筛选条件。
                 {% else %}
@@ -285,8 +306,8 @@
             {% endfor %}
         </div>
     </div>
-    <div class="table-responsive d-none d-md-block">
-        <table class="table table-striped table-hover align-middle mb-0">
+    <div class="table-responsive d-none d-md-block share-audit-table-wrap">
+        <table class="table align-middle mb-0 share-audit-table">
             <thead>
             <tr>
                 <th class="text-nowrap">
@@ -308,12 +329,13 @@
             {% for item in records %}
                 {% with link=item.link %}
                 <tr>
-                    <td class="text-nowrap">
+                    <td class="text-nowrap share-audit-cell-select">
                         <input class="form-check-input" type="checkbox" value="{{ link.id }}" data-link-select data-status-key="{{ item.status_key }}" aria-label="选择链接">
                     </td>
-                    <td>
-                        <div class="fw-semibold">{{ link.entry.name }}</div>
-                        <div class="text-muted small">
+                    <td class="share-audit-cell-entry">
+                        <div class="share-audit-entry">
+                            <div class="share-audit-entry-name">{{ link.entry.name }}</div>
+                            <div class="share-audit-entry-meta">
                             {% if link.entry.group %}
                                 分组：{{ link.entry.group.name }}
                             {% else %}
@@ -322,53 +344,54 @@
                             {% if link.entry.team %}
                                 · 团队：{{ link.entry.team.name }}
                             {% endif %}
+                            </div>
                             {% if link.note %}
-                                <div class="text-muted small">备注：{{ link.note }}</div>
+                                <div class="share-audit-entry-note">备注：{{ link.note }}</div>
                             {% endif %}
-                            <div class="text-muted small">ID：{{ link.id }}</div>
+                            <div class="share-audit-entry-meta">ID：{{ link.id }}</div>
                         </div>
                     </td>
                     {% if is_team_audit %}
-                    <td class="text-nowrap">
+                    <td class="text-nowrap share-audit-cell-creator">
                         {{ link.created_by.username }}
                     </td>
                     {% endif %}
-                    <td class="text-nowrap">
-                        <span class="badge text-bg-{{ item.badge_class }}">{{ item.status_label }}</span>
+                    <td class="text-nowrap share-audit-cell-status">
+                        <span class="badge rounded-pill text-bg-{{ item.badge_class }}">{{ item.status_label }}</span>
                     </td>
-                    <td>
-                        <div>{{ link.view_count }} / {{ link.max_views }}</div>
-                        <div class="text-muted small">剩余 {{ item.remaining_views }} 次</div>
+                    <td class="share-audit-cell-views">
+                        <div class="share-audit-count">{{ link.view_count }} / {{ link.max_views }}</div>
+                        <div class="share-audit-submeta">剩余 {{ item.remaining_views }} 次</div>
                     </td>
-                    <td class="text-nowrap">
-                        <div>{{ link.created_at|date:"Y-m-d H:i" }}</div>
-                        <div class="text-muted small">过期：{{ link.expires_at|date:"Y-m-d H:i" }}</div>
+                    <td class="text-nowrap share-audit-cell-time">
+                        <div class="share-audit-date">{{ link.created_at|date:"Y-m-d H:i" }}</div>
+                        <div class="share-audit-submeta">过期：{{ link.expires_at|date:"Y-m-d H:i" }}</div>
                     </td>
-                    <td class="text-nowrap">
+                    <td class="text-nowrap share-audit-cell-visit">
                         {% if link.first_viewed_at %}
-                            <div>首次：{{ link.first_viewed_at|date:"Y-m-d H:i" }}</div>
+                            <div class="share-audit-date">首次：{{ link.first_viewed_at|date:"Y-m-d H:i" }}</div>
                         {% else %}
-                            <div class="text-muted">尚未访问</div>
+                            <div class="share-audit-submeta">尚未访问</div>
                         {% endif %}
                         {% if link.last_viewed_at %}
-                            <div class="text-muted small">最近：{{ link.last_viewed_at|date:"Y-m-d H:i" }}</div>
+                            <div class="share-audit-submeta">最近：{{ link.last_viewed_at|date:"Y-m-d H:i" }}</div>
                         {% endif %}
                     </td>
-                    <td style="max-width: 260px;">
+                    <td class="share-audit-cell-client">
                         {% if link.last_view_ip %}
-                            <div>IP：{{ link.last_view_ip }}</div>
+                            <div class="share-audit-date">IP：{{ link.last_view_ip }}</div>
                         {% endif %}
                         {% if link.last_view_user_agent %}
-                            <div class="text-muted small text-truncate" title="{{ link.last_view_user_agent }}">
+                            <div class="share-audit-submeta text-truncate" title="{{ link.last_view_user_agent }}">
                                 UA：{{ link.last_view_user_agent }}
                             </div>
                         {% endif %}
                         {% if not link.last_view_ip and not link.last_view_user_agent %}
-                            <div class="text-muted">暂无记录</div>
+                            <div class="share-audit-submeta">暂无记录</div>
                         {% endif %}
                     </td>
-                    <td class="text-nowrap">
-                        <div class="d-flex flex-wrap gap-2">
+                    <td class="text-nowrap share-audit-cell-actions">
+                        <div class="entry-actions share-audit-actions">
                             <button type="button" class="btn btn-sm btn-outline-secondary copy-link-id-btn"
                                     data-copy-text="{{ link.id }}" aria-label="复制链接 ID">
                                 <i class="bi bi-clipboard"></i>
@@ -383,7 +406,7 @@
                 </tr>
                 {% endwith %}
             {% empty %}
-            <tr>
+            <tr class="no-data">
                 <td colspan="{% if is_team_audit %}9{% else %}8{% endif %}" class="text-center text-muted py-5">
                     {% if is_filtered %}
                     未找到匹配的链接，请尝试调整筛选条件。

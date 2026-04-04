@@ -463,20 +463,24 @@
 
 <div class="modal fade" id="renameTeamModal" tabindex="-1" aria-labelledby="renameTeamModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
-        <div class="modal-content border-0 rounded-3 shadow">
+        <div class="modal-content app-modal-shell border-0 shadow">
             <form method="post" action="" id="renameTeamForm">
                 {% csrf_token %}
-                <div class="modal-header">
-                    <h5 class="modal-title" id="renameTeamModalLabel">修改团队名称</h5>
+                <div class="modal-header app-modal-header">
+                    <div class="app-modal-title-wrap">
+                        <div class="app-modal-kicker">团队设置</div>
+                        <h5 class="modal-title app-modal-title" id="renameTeamModalLabel">修改团队名称</h5>
+                        <div class="app-modal-copy">团队名称会同步显示在工作台、成员列表和协作入口中。</div>
+                    </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body app-modal-body">
                     <div class="mb-3">
                         <label class="form-label" for="renameTeamNameInput">团队名称</label>
                         <input type="text" id="renameTeamNameInput" name="name" class="form-control" maxlength="80" required>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer app-modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
                     <button class="btn btn-primary" type="submit">保存</button>
                 </div>

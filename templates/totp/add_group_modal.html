@@ -1,23 +1,29 @@
 <div class="modal fade" id="addGroupModal" tabindex="-1" aria-labelledby="addGroupModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
-        <div class="modal-content border-0 rounded-3 shadow">
+        <div class="modal-content app-modal-shell border-0 shadow">
             <form method="post" action="{% url 'totp:add_group' %}">
                 {% csrf_token %}
-                <div class="modal-header">
-                    <h5 class="modal-title" id="addGroupModalLabel">添加分组</h5>
+                <div class="modal-header app-modal-header">
+                    <div class="app-modal-title-wrap">
+                        <div class="app-modal-kicker">个人空间整理</div>
+                        <h5 class="modal-title app-modal-title" id="addGroupModalLabel">添加分组</h5>
+                        <div class="app-modal-copy">新建分组，并在当前弹窗中直接管理已有分组，让个人密钥保持清晰有序。</div>
+                    </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body app-modal-body">
                     <div class="mb-3">
                         <label class="form-label" for="addGroupName">名称</label>
                         <input id="addGroupName" name="name" class="form-control" placeholder="如：工作" required maxlength="40" data-autofocus>
                         <div class="form-text">名称将限制在 40 个字符以内。</div>
                     </div>
 
-                    <div class="border-top pt-3 mt-3">
-                        <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
-                            <h6 class="mb-0">管理已有分组</h6>
-                            <small class="text-muted">可直接修改名称或删除分组</small>
+                    <div class="app-modal-panel app-modal-panel-subtle">
+                        <div class="app-modal-section-head">
+                            <div>
+                                <div class="app-modal-section-title">管理已有分组</div>
+                                <div class="app-modal-section-note">可直接修改名称或删除分组。</div>
+                            </div>
                         </div>
                         <div id="groupManageAlert" class="alert alert-danger d-none small py-2 px-3" role="alert"></div>
                         <div class="list-group" id="groupManageList">
@@ -47,7 +53,7 @@
                         <div class="form-text mt-2">删除后，分组内的密钥会移动到「未分组」。</div>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer app-modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
                     <button class="btn btn-primary" type="submit">保存</button>
                 </div>

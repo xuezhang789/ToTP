@@ -1,12 +1,17 @@
 <div class="modal fade" id="addModal" tabindex="-1" aria-labelledby="addModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
-        <div class="modal-content border-0 rounded-3 shadow">
+        <div class="modal-content app-modal-shell border-0 shadow">
             <form id="addEntryForm" class="needs-validation" novalidate method="post" action="{% url 'totp:add' %}">
                 {% csrf_token %}
-                <div class="modal-header"><h5 class="modal-title" id="addModalLabel">添加密钥</h5>
+                <div class="modal-header app-modal-header">
+                    <div class="app-modal-title-wrap">
+                        <div class="app-modal-kicker">密钥工作台</div>
+                        <h5 class="modal-title app-modal-title" id="addModalLabel">添加密钥</h5>
+                        <div class="app-modal-copy">填写名称和密钥后即可保存到个人空间或可管理的团队空间。</div>
+                    </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body app-modal-body">
                     <div id="addEntryAlert" class="alert alert-danger d-none" role="alert"></div>
                     <div class="mb-2">
                         <label class="form-label" for="addEntryName">名称</label>
@@ -57,7 +62,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer app-modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
                     <button class="btn btn-primary" id="addEntrySubmitBtn" type="submit">保存</button>
                 </div>

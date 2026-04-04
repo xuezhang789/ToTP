@@ -303,6 +303,41 @@ main.app-main {
   border: none;
 }
 
+.modal {
+  --bs-modal-width: min(40rem, calc(100vw - 2rem));
+}
+
+.modal-backdrop.show {
+  opacity: 1;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(10px);
+}
+
+.modal-dialog {
+  margin: clamp(1rem, 4vh, 2rem) auto;
+}
+
+.modal-content {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(191, 219, 254, 0.28), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.97));
+}
+
+.modal-content::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.12), rgba(37, 99, 235, 0.92), rgba(96, 165, 250, 0.3));
+  pointer-events: none;
+}
+
+.app-modal-shell {
+  border-radius: calc(var(--app-radius-md) + 2px);
+}
+
 .card-header,
 .card-footer {
   background: var(--app-surface);
@@ -477,6 +512,161 @@ textarea.form-control {
 .modal-header,
 .modal-footer {
   padding: 1rem 1.1rem;
+}
+
+.app-modal-header {
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.1rem 1.15rem 0.95rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.88));
+}
+
+.app-modal-title-wrap {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.app-modal-kicker {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--app-muted-color);
+}
+
+.app-modal-title {
+  font-size: 1.16rem;
+  line-height: 1.18;
+}
+
+.app-modal-copy {
+  max-width: 34rem;
+  color: var(--app-muted-color);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.modal-header .btn-close,
+.offcanvas-header .btn-close {
+  margin: 0;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  padding: 0.78rem;
+  background-color: rgba(248, 250, 252, 0.94);
+  box-shadow: 0 12px 28px -24px rgba(15, 23, 42, 0.35);
+  opacity: 0.78;
+  transition: transform 0.16s ease, opacity 0.16s ease, border-color 0.16s ease;
+}
+
+.modal-header .btn-close:hover,
+.modal-header .btn-close:focus-visible,
+.offcanvas-header .btn-close:hover,
+.offcanvas-header .btn-close:focus-visible {
+  border-color: rgba(37, 99, 235, 0.28);
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.app-modal-body {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem 1.15rem 1.05rem;
+}
+
+.app-modal-body > :last-child {
+  margin-bottom: 0 !important;
+}
+
+.app-modal-panel,
+.app-modal-result {
+  padding: 0.9rem 0.95rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+  box-shadow: 0 18px 34px -32px rgba(15, 23, 42, 0.24);
+}
+
+.app-modal-panel-subtle {
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.96));
+}
+
+.app-modal-result {
+  border-color: rgba(37, 99, 235, 0.16);
+  background:
+    radial-gradient(circle at top right, rgba(191, 219, 254, 0.22), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(239, 246, 255, 0.95));
+}
+
+.app-modal-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.app-modal-section-title {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--app-text-color);
+}
+
+.app-modal-section-note {
+  color: var(--app-muted-color);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.modal .form-control-plaintext {
+  padding: 0.78rem 0.9rem;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(248, 250, 252, 0.92);
+  line-height: 1.45;
+}
+
+.modal .table-responsive {
+  border-radius: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.modal .table thead th {
+  background: rgba(248, 250, 252, 0.96);
+  color: var(--app-muted-color);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+.modal .table tbody td {
+  vertical-align: middle;
+}
+
+.modal .list-group {
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.modal .btn-group > .btn {
+  min-height: 2.75rem;
+}
+
+.app-modal-footer {
+  padding: 0.95rem 1.15rem 1.15rem;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.4), rgba(255, 255, 255, 0.94));
+}
+
+.app-modal-footer .btn {
+  min-height: 2.75rem;
+  padding-inline: 1rem;
+}
+
+.app-modal-footer .btn-primary {
+  min-width: 7rem;
 }
 
 .modal-title,
@@ -3515,6 +3705,301 @@ textarea.form-control {
 
 .trash-entry-actions .btn {
   min-width: 4.2rem;
+}
+
+.share-audit-list-card {
+  overflow: hidden;
+}
+
+.share-audit-list-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.85rem 1rem;
+  align-items: center;
+}
+
+.share-audit-list-head-main {
+  display: grid;
+  gap: 0.24rem;
+  min-width: 0;
+}
+
+.share-audit-list-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem 1rem;
+  flex-wrap: wrap;
+}
+
+.share-audit-list-summary {
+  color: var(--app-muted-color);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.share-audit-list-tools {
+  display: grid;
+  gap: 0.55rem;
+  justify-items: end;
+  min-width: min(100%, 25rem);
+}
+
+.share-audit-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.share-audit-mobile-toggle {
+  min-height: 1.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.share-audit-table-wrap {
+  padding: 0.08rem 1rem 0.95rem;
+}
+
+.share-audit-table {
+  --bs-table-bg: transparent;
+  --bs-table-striped-bg: transparent;
+  --bs-table-hover-bg: transparent;
+  border-collapse: separate;
+  border-spacing: 0 0.56rem;
+}
+
+.share-audit-table thead {
+  background: transparent;
+}
+
+.share-audit-table thead th {
+  padding: 0.74rem 0.85rem;
+  border-top: 1px solid rgba(226, 232, 240, 0.96);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.96);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.98));
+  color: rgba(100, 116, 139, 0.98);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  text-transform: none;
+  vertical-align: middle;
+}
+
+.share-audit-table thead th:first-child {
+  width: 3.5rem;
+  border-left: 1px solid rgba(226, 232, 240, 0.96);
+  border-radius: 0.95rem 0 0 0.95rem;
+  text-align: center;
+  padding-left: 1rem;
+}
+
+.share-audit-table thead th:last-child {
+  border-right: 1px solid rgba(226, 232, 240, 0.96);
+  border-radius: 0 0.95rem 0.95rem 0;
+  text-align: right;
+  padding-right: 1rem;
+}
+
+.share-audit-table tbody tr {
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.share-audit-table tbody tr > td {
+  padding: 0.8rem 0.85rem;
+  border-top: 1px solid rgba(226, 232, 240, 0.92);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.98));
+  box-shadow: 0 18px 36px -34px rgba(15, 23, 42, 0.28);
+  vertical-align: middle;
+}
+
+.share-audit-table tbody tr > td:first-child {
+  border-left: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 1.1rem 0 0 1.1rem;
+  padding-left: 1rem;
+  text-align: center;
+}
+
+.share-audit-table tbody tr > td:last-child {
+  border-right: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 0 1.1rem 1.1rem 0;
+  padding-right: 1rem;
+}
+
+.share-audit-table tbody tr:hover > td {
+  border-color: rgba(96, 165, 250, 0.34);
+  box-shadow: 0 24px 44px -38px rgba(37, 99, 235, 0.3);
+}
+
+.share-audit-table tbody tr.no-data > td {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 3rem 1rem;
+}
+
+.share-audit-entry {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.share-audit-entry-name {
+  color: var(--app-text-color);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.share-audit-entry-meta,
+.share-audit-submeta {
+  color: var(--app-muted-color);
+  font-size: 0.72rem;
+  line-height: 1.38;
+}
+
+.share-audit-entry-note {
+  color: var(--app-text-color);
+  font-size: 0.76rem;
+  line-height: 1.42;
+}
+
+.share-audit-count,
+.share-audit-date {
+  color: var(--app-text-color);
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.22;
+}
+
+.share-audit-cell-creator,
+.share-audit-cell-status,
+.share-audit-cell-select {
+  white-space: nowrap;
+}
+
+.share-audit-cell-client {
+  max-width: 17rem;
+}
+
+.share-audit-actions {
+  justify-content: flex-end;
+  gap: 0.38rem;
+}
+
+.share-audit-actions .btn {
+  min-width: 2.3rem;
+  min-height: 2.3rem;
+}
+
+.share-audit-mobile-wrap {
+  padding: 0.08rem 1rem 1rem;
+}
+
+.share-audit-mobile-list {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.share-audit-mobile-item {
+  padding: 0.9rem 0.95rem;
+  border-radius: 1.05rem;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.98));
+  box-shadow: 0 18px 34px -30px rgba(15, 23, 42, 0.24);
+}
+
+.share-audit-mobile-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.share-audit-mobile-title-wrap {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.share-audit-mobile-title {
+  color: var(--app-text-color);
+  font-size: 0.98rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.share-audit-mobile-meta,
+.share-audit-mobile-meta-block {
+  color: var(--app-muted-color);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.share-audit-mobile-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  flex: 0 0 auto;
+}
+
+.share-audit-mobile-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.share-audit-mobile-metric {
+  display: grid;
+  gap: 0.14rem;
+  padding: 0.68rem 0.74rem;
+  border-radius: 0.92rem;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.share-audit-mobile-metric-label {
+  color: var(--app-muted-color);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.share-audit-mobile-metric-value {
+  color: var(--app-text-color);
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.share-audit-mobile-meta-block {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.75rem;
+}
+
+.share-audit-mobile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.share-audit-mobile-actions .btn {
+  flex: 1 1 9rem;
+}
+
+.share-audit-mobile-empty {
+  padding: 2.6rem 1rem;
+  border-radius: 1rem;
+  border: 1px dashed rgba(148, 163, 184, 0.24);
+  background: rgba(248, 250, 252, 0.82);
 }
 
 @media (min-width: 768px) {

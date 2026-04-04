@@ -370,14 +370,18 @@
 
 <div class="modal fade" id="shareLinkModal" tabindex="-1" aria-labelledby="shareLinkModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="shareLinkModalLabel">生成一次性访问链接</h5>
+        <div class="modal-content app-modal-shell">
+            <div class="modal-header app-modal-header">
+                <div class="app-modal-title-wrap">
+                    <div class="app-modal-kicker">只读分享</div>
+                    <h5 class="modal-title app-modal-title" id="shareLinkModalLabel">生成一次性访问链接</h5>
+                    <div class="app-modal-copy">用于临时协作和应急查看。创建后会直接显示可复制链接，并保留失效入口。</div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body app-modal-body">
                 <div id="shareLinkAlert" class="alert alert-danger d-none" role="alert"></div>
-                <div class="mb-3">
+                <div class="app-modal-panel app-modal-panel-subtle">
                     <label class="form-label">当前密钥</label>
                     <div class="form-control-plaintext fw-semibold" id="shareLinkEntryLabel">--</div>
                 </div>
@@ -415,7 +419,7 @@
                     <div class="alert alert-info mt-3 mb-0">
                         <div class="small">点击“生成链接”后会立即创建只读分享链接，并直接显示在下方。请仅共享给可信任的对象。</div>
                     </div>
-                    <div class="border rounded-3 bg-light-subtle p-3 mt-3 d-none" id="shareLinkResult">
+                    <div class="app-modal-result mt-3 d-none" id="shareLinkResult">
                         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                             <div class="fw-semibold">分享链接已生成</div>
                             <button type="button" class="btn btn-sm btn-outline-danger d-none" id="shareLinkInvalidateBtn">
@@ -436,7 +440,7 @@
                     </div>
                 </form>
             </div>
-            <div class="modal-footer d-flex flex-wrap gap-2">
+            <div class="modal-footer app-modal-footer d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="button" class="btn btn-primary" id="shareLinkSubmitBtn">
                     <span class="spinner-border spinner-border-sm me-2 d-none" id="shareLinkSpinner" role="status" aria-hidden="true"></span>
@@ -449,12 +453,16 @@
 
 <div class="modal fade" id="renameModal" tabindex="-1" aria-labelledby="renameModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="renameModalLabel">修改密钥名称</h5>
+        <div class="modal-content app-modal-shell">
+            <div class="modal-header app-modal-header">
+                <div class="app-modal-title-wrap">
+                    <div class="app-modal-kicker">名称调整</div>
+                    <h5 class="modal-title app-modal-title" id="renameModalLabel">修改密钥名称</h5>
+                    <div class="app-modal-copy">修改后会同步更新到列表、分享链接和相关审计记录。</div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body app-modal-body">
                 <div id="renameAlert" class="alert alert-danger d-none" role="alert"></div>
                 <form id="renameForm" class="needs-validation" novalidate>
                     <input type="hidden" id="renameEntryId" name="entry_id">
@@ -466,7 +474,7 @@
                     </div>
                 </form>
             </div>
-            <div class="modal-footer d-flex flex-wrap gap-2">
+            <div class="modal-footer app-modal-footer d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="button" class="btn btn-primary" id="renameSubmitBtn">
                     <span class="spinner-border spinner-border-sm d-none me-2" id="renameSpinner" role="status" aria-hidden="true"></span>
@@ -482,14 +490,18 @@
 {% include 'totp/add_group_modal.html' %}
 <div class="modal fade" id="exportEncryptedModal" tabindex="-1" aria-labelledby="exportEncryptedModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
-        <div class="modal-content border-0 rounded-3 shadow">
+        <div class="modal-content app-modal-shell border-0 shadow">
             <form method="post" action="{% url 'totp:export_encrypted' %}">
                 {% csrf_token %}
-                <div class="modal-header">
-                    <h5 class="modal-title" id="exportEncryptedModalLabel">加密导出</h5>
+                <div class="modal-header app-modal-header">
+                    <div class="app-modal-title-wrap">
+                        <div class="app-modal-kicker">安全备份</div>
+                        <h5 class="modal-title app-modal-title" id="exportEncryptedModalLabel">加密导出</h5>
+                        <div class="app-modal-copy">导出前设置口令，下载后的文件可用于离线备份与迁移，请妥善保管导出文件和口令。</div>
+                    </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body app-modal-body">
                     <div class="alert alert-warning bg-warning-subtle border-0">
                         导出文件将使用你输入的口令加密。请妥善保管口令，遗失后无法恢复。
                     </div>
@@ -503,7 +515,7 @@
                         <input class="form-control" type="password" name="passphrase2" minlength="8" autocomplete="new-password" required>
                     </div>
                 </div>
-                <div class="modal-footer d-flex flex-wrap gap-2">
+                <div class="modal-footer app-modal-footer d-flex flex-wrap gap-2">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
                     <button type="submit" class="btn btn-primary">下载加密包</button>
                 </div>

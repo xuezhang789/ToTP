@@ -47,16 +47,20 @@
 <div class="visually-hidden" id="appLiveRegion" aria-live="polite" aria-atomic="true"></div>
 <div class="modal fade" id="appConfirmModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
-        <div class="modal-content border-0 rounded-3 shadow">
-            <div class="modal-header">
-                <h5 class="modal-title" id="appConfirmTitle">请确认操作</h5>
+        <div class="modal-content app-modal-shell border-0 shadow">
+            <div class="modal-header app-modal-header">
+                <div class="app-modal-title-wrap">
+                    <div class="app-modal-kicker">操作确认</div>
+                    <h5 class="modal-title app-modal-title" id="appConfirmTitle">请确认操作</h5>
+                    <div class="app-modal-copy">确认后将立即执行当前操作。涉及删除、导出或权限变更时，请再次核对内容。</div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body app-modal-body">
                 <div id="appConfirmMessage" class="mb-0"></div>
                 <div id="appConfirmHint" class="text-muted small mt-2 d-none"></div>
             </div>
-            <div class="modal-footer d-flex flex-wrap gap-2">
+            <div class="modal-footer app-modal-footer d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" id="appConfirmCancelBtn">取消</button>
                 <button type="button" class="btn btn-danger" id="appConfirmOkBtn">确认</button>
             </div>
