@@ -63,3 +63,28 @@ class ApiTokensTests(TestCase):
         items = payload.get("items") or []
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["id"], first.id)
+
+    def test_undecryptable_entry_does_not_break_other_tokens(self):
+        valid_entry = TOTPEntry.objects.create(
+            user=self.user,
+            name="Valid Entry",
+            secret_encrypted=encrypt_str("JBSWY3DPEHPK3PXP"),
+        )
+        broken_entry = TOTPEntry.objects.create(
+            user=self.user,
+            name="Broken Entry",
+            secret_encrypted="not-a-valid-token",
+        )
+
+        response = self.client.get(
+            reverse("totp:api_tokens"),
+            {"ids": f"{valid_entry.id},{broken_entry.id}"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        items_by_id = {item["id"]: item for item in payload.get("items") or []}
+        self.assertIn(valid_entry.id, items_by_id)
+        self.assertEqual(len(items_by_id[valid_entry.id]["code"]), 6)
+        self.assertIn(broken_entry.id, items_by_id)
+        self.assertEqual(items_by_id[broken_entry.id]["error"], "unavailable")

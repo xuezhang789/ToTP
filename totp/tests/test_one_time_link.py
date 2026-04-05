@@ -108,6 +108,19 @@ class OneTimeLinkTests(TestCase):
         self.assertEqual(view_resp.status_code, 410)
         self.assertContains(view_resp, "撤销", status_code=410)
 
+    def test_undecryptable_secret_does_not_consume_view_quota(self):
+        self.entry.secret_encrypted = "not-a-valid-token"
+        self.entry.save(update_fields=["secret_encrypted"])
+        data = self._create_link(max_views=2)
+        token = data["url"].rstrip("/").split("/")[-1]
+
+        response = self.client.get(reverse("totp:one_time_view", args=[token]))
+
+        self.assertEqual(response.status_code, 503)
+        self.assertContains(response, "链接暂时不可用", status_code=503)
+        link = OneTimeLink.objects.get(pk=data["id"])
+        self.assertEqual(link.view_count, 0)
+
     def test_audit_requires_login(self):
         self.client.logout()
         response = self.client.get(reverse("totp:one_time_audit"))
@@ -116,7 +129,7 @@ class OneTimeLinkTests(TestCase):
 
     def test_audit_displays_links_with_status(self):
         now = timezone.now()
-        link_active = OneTimeLink.objects.create(
+        OneTimeLink.objects.create(
             entry=self.entry,
             created_by=self.user,
             token_hash=hashlib.sha256(b"token-active").hexdigest(),
@@ -128,7 +141,7 @@ class OneTimeLinkTests(TestCase):
             last_view_ip="1.2.3.4",
             last_view_user_agent="UnitTestAgent/1.0",
         )
-        link_used = OneTimeLink.objects.create(
+        OneTimeLink.objects.create(
             entry=self.entry,
             created_by=self.user,
             token_hash=hashlib.sha256(b"token-used").hexdigest(),

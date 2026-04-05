@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.http import JsonResponse
@@ -6,6 +8,20 @@ from django.views.decorators.cache import never_cache
 
 from .models import TOTPEntry
 from .utils import decrypt_str, totp_code_base32
+
+logger = logging.getLogger(__name__)
+DECRYPT_FAILURE_LOG_TTL_SECONDS = 300
+
+
+def _log_refresh_failure_once(entry_id: int, user_id: int, exc: Exception):
+    cache_key = f"totp:api_tokens:decrypt_warn:v1:{user_id}:{entry_id}:{type(exc).__name__}"
+    if cache.add(cache_key, 1, DECRYPT_FAILURE_LOG_TTL_SECONDS):
+        logger.warning(
+            "failed to refresh totp token for entry_id=%s user_id=%s: %s",
+            entry_id,
+            user_id,
+            type(exc).__name__,
+        )
 
 
 @login_required
@@ -53,13 +69,23 @@ def api_tokens(request):
         return response
 
     for entry in queryset.iterator(chunk_size=200):
-        secret = decrypt_str(entry.secret_encrypted)
-        code, item_remaining = totp_code_base32(
-            secret,
-            digits=6,
-            period=period,
-            timestamp=timestamp,
-        )
+        try:
+            secret = decrypt_str(entry.secret_encrypted)
+            code, item_remaining = totp_code_base32(
+                secret,
+                digits=6,
+                period=period,
+                timestamp=timestamp,
+            )
+        except Exception as exc:
+            _log_refresh_failure_once(entry.id, request.user.id, exc)
+            items.append(
+                {
+                    "id": entry.id,
+                    "error": "unavailable",
+                }
+            )
+            continue
         items.append(
             {
                 "id": entry.id,

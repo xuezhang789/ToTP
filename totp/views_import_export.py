@@ -40,6 +40,27 @@ def _import_entries_limit() -> int:
     return int(getattr(settings, "IMPORT_MAX_ENTRIES", 500) or 500)
 
 
+def _collect_exportable_entries(queryset):
+    exportable_entries = []
+    skipped_entries = []
+    for entry in queryset.iterator(chunk_size=200):
+        try:
+            secret = decrypt_str(entry.secret_encrypted)
+        except Exception:
+            skipped_entries.append(entry)
+            continue
+        exportable_entries.append((entry, secret))
+    return exportable_entries, skipped_entries
+
+
+def _notify_export_skips(request, skipped_count: int):
+    if skipped_count > 0:
+        messages.warning(
+            request,
+            f"已跳过 {skipped_count} 条无法解密的密钥，导出结果仅包含其余可用条目。",
+        )
+
+
 @login_required
 @require_POST
 def batch_import_preview(request):
@@ -474,13 +495,19 @@ def export_entries(request):
         messages.info(request, "当前没有可以导出的密钥")
         return redirect("totp:list")
 
+    exportable_entries, skipped_entries = _collect_exportable_entries(queryset)
+    if not exportable_entries:
+        messages.error(request, "当前密钥均无法解密，无法导出。请先修复异常数据后再试。")
+        return redirect("totp:list")
+
+    _notify_export_skips(request, len(skipped_entries))
+
     filename = timezone.now().strftime("totp-export-%Y%m%d-%H%M%S.txt")
     quoted = quote(filename)
 
     def row_stream():
         audit_rows = []
-        for entry in queryset.iterator(chunk_size=200):
-            secret = decrypt_str(entry.secret_encrypted)
+        for entry, secret in exportable_entries:
             parts = [secret, entry.name]
             if entry.group_id:
                 parts.append(entry.group.name)
@@ -509,6 +536,8 @@ def export_entries(request):
     )
     response["Cache-Control"] = "no-store"
     response["Pragma"] = "no-cache"
+    response["X-Exported-Entries"] = str(len(exportable_entries))
+    response["X-Export-Skipped-Unavailable"] = str(len(skipped_entries))
     return response
 
 
@@ -551,11 +580,17 @@ def export_encrypted_package(request):
         )
         return redirect(f"{reverse('totp:list')}?modal=export_encrypted")
 
+    exportable_entries, skipped_entries = _collect_exportable_entries(queryset)
+    if not exportable_entries:
+        messages.error(request, "当前密钥均无法解密，无法生成加密导出。请先修复异常数据后再试。")
+        return redirect(f"{reverse('totp:list')}?modal=export_encrypted")
+
+    _notify_export_skips(request, len(skipped_entries))
+
     buffer = io.StringIO()
     audit_rows = []
     entry_count = 0
-    for entry in queryset.iterator(chunk_size=200):
-        secret = decrypt_str(entry.secret_encrypted)
+    for entry, secret in exportable_entries:
         parts = [secret, entry.name]
         if entry.group:
             parts.append(entry.group.name)
@@ -600,6 +635,12 @@ def export_encrypted_package(request):
         "meta": {
             "generated_at": timezone.now().isoformat(),
             "count": entry_count,
+            "skipped_unavailable": len(skipped_entries),
+            "warnings": (
+                [f"已跳过 {len(skipped_entries)} 条无法解密的密钥"]
+                if skipped_entries
+                else []
+            ),
         },
     }
 
@@ -614,6 +655,8 @@ def export_encrypted_package(request):
     )
     response["Cache-Control"] = "no-store"
     response["Pragma"] = "no-cache"
+    response["X-Exported-Entries"] = str(entry_count)
+    response["X-Export-Skipped-Unavailable"] = str(len(skipped_entries))
     if audit_rows:
         TOTPEntryAudit.objects.bulk_create(audit_rows)
     return response
@@ -655,10 +698,16 @@ def export_offline_package(request):
         )
         return redirect("totp:list")
 
+    exportable_entries, skipped_entries = _collect_exportable_entries(queryset)
+    if not exportable_entries:
+        messages.error(request, "当前密钥均无法解密，无法生成离线包。请先修复异常数据后再试。")
+        return redirect("totp:list")
+
+    _notify_export_skips(request, len(skipped_entries))
+
     entries_payload = []
     audit_rows = []
-    for entry in queryset.iterator(chunk_size=200):
-        secret = decrypt_str(entry.secret_encrypted)
+    for entry, secret in exportable_entries:
         issuer = entry.group.name if entry.group else request.user.username
         entries_payload.append(
             {
@@ -695,6 +744,7 @@ def export_offline_package(request):
             "owner": request.user,
             "entries_payload": entries_payload,
             "entry_count": len(entries_payload),
+            "skipped_unavailable": len(skipped_entries),
             "site_url": request.build_absolute_uri(reverse("dashboard")),
             "site_host": request.get_host(),
         },
@@ -705,6 +755,8 @@ def export_offline_package(request):
     )
     response["Cache-Control"] = "no-store"
     response["Pragma"] = "no-cache"
+    response["X-Exported-Entries"] = str(len(entries_payload))
+    response["X-Export-Skipped-Unavailable"] = str(len(skipped_entries))
     if audit_rows:
         TOTPEntryAudit.objects.bulk_create(audit_rows)
     return response

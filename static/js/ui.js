@@ -20,6 +20,31 @@
     }, 10);
   }
 
+  function appFocusElement(target, { select = false } = {}) {
+    if (!target || typeof target.focus !== 'function') {
+      return false;
+    }
+    try {
+      target.focus({ preventScroll: true });
+    } catch (error) {
+      try {
+        target.focus();
+      } catch (focusError) {
+        return false;
+      }
+    }
+    if (
+      select
+      && typeof target.select === 'function'
+      && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')
+    ) {
+      try {
+        target.select();
+      } catch (error) {}
+    }
+    return true;
+  }
+
   function appSetButtonLoading(button, loading, { label = '', showSpinner = true } = {}) {
     if (!button) {
       return;
@@ -112,9 +137,7 @@
       return null;
     }
     const invalid = form.querySelector(':invalid');
-    if (invalid && invalid.focus) {
-      invalid.focus({ preventScroll: true });
-    }
+    appFocusElement(invalid);
     if (toastMessage && window.appToast) {
       window.appToast('warning', toastMessage);
     }
@@ -128,14 +151,7 @@
         return;
       }
       const target = modal.querySelector('[data-autofocus]') || modal.querySelector('input, textarea, select, button');
-      if (target && target.focus) {
-        target.focus({ preventScroll: true });
-        if (target.select && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
-          try {
-            target.select();
-          } catch (e) {}
-        }
-      }
+      appFocusElement(target, { select: true });
     });
   }
 
@@ -218,8 +234,7 @@
     temp.style.position = 'fixed';
     temp.style.opacity = '0';
     document.body.appendChild(temp);
-    temp.focus({ preventScroll: true });
-    temp.select();
+    appFocusElement(temp, { select: true });
     try {
       const copied = document.execCommand('copy');
       if (!copied) {
@@ -301,11 +316,7 @@
         if (!triggerEl || !(triggerEl instanceof HTMLElement) || !triggerEl.isConnected) {
           return;
         }
-        try {
-          triggerEl.focus({ preventScroll: true });
-        } catch (e) {
-          triggerEl.focus();
-        }
+        appFocusElement(triggerEl);
       }
       function settle(value) {
         if (settled) return;
@@ -364,6 +375,48 @@
       }
     }
     form.submit();
+  }
+
+  function setFormSubmittingState(form, submitter = null) {
+    if (!form || form.dataset.appSubmitting === '1') {
+      return false;
+    }
+    form.dataset.appSubmitting = '1';
+    const controls = form.querySelectorAll('button[type="submit"], button:not([type]), input[type="submit"]');
+    controls.forEach((control) => {
+      if (!(control instanceof HTMLElement)) {
+        return;
+      }
+      control.dataset.appSubmitManaged = '1';
+      if (control.dataset.appOriginalDisabled == null) {
+        control.dataset.appOriginalDisabled = control.disabled ? '1' : '0';
+      }
+      if (control === submitter && control.tagName === 'BUTTON') {
+        appSetButtonLoading(control, true, { label: control.dataset.loadingLabel || '' });
+      } else {
+        control.disabled = true;
+      }
+      control.setAttribute('aria-disabled', 'true');
+    });
+    return true;
+  }
+
+  function resetSubmittingForms() {
+    document.querySelectorAll('form[data-app-submitting="1"]').forEach((form) => {
+      delete form.dataset.appSubmitting;
+      form.querySelectorAll('[data-app-submit-managed="1"], [data-appSubmitManaged="1"]').forEach((control) => {
+        if (!(control instanceof HTMLElement)) {
+          return;
+        }
+        if (control.tagName === 'BUTTON' && control.dataset.appOriginalHtml != null) {
+          appSetButtonLoading(control, false);
+        } else {
+          control.disabled = control.dataset.appOriginalDisabled === '1';
+        }
+        control.removeAttribute('aria-disabled');
+        delete control.dataset.appSubmitManaged;
+      });
+    });
   }
 
   function resetNavBusyState() {
@@ -438,8 +491,15 @@
 
   function appInitNavigationFeedback() {
     resetNavBusyState();
-    window.addEventListener('load', resetNavBusyState, { once: true });
-    window.addEventListener('pageshow', resetNavBusyState);
+    resetSubmittingForms();
+    window.addEventListener('load', () => {
+      resetNavBusyState();
+      resetSubmittingForms();
+    }, { once: true });
+    window.addEventListener('pageshow', () => {
+      resetNavBusyState();
+      resetSubmittingForms();
+    });
 
     document.addEventListener('click', (event) => {
       if (event.defaultPrevented) {
@@ -461,6 +521,10 @@
       if (isOptedOutOfNavFeedback(form) || hasNonSelfTarget(form)) {
         return;
       }
+      if (form.dataset.appSubmitting === '1' && form.dataset.confirmBypassed !== '1') {
+        event.preventDefault();
+        return;
+      }
       if (typeof form.checkValidity === 'function' && !form.noValidate && !form.checkValidity()) {
         if (window.appFocusFirstInvalid) {
           window.appFocusFirstInvalid(form, { toastMessage: '请检查必填项后再继续。' });
@@ -471,6 +535,7 @@
       if (submitter && (submitter.hasAttribute('data-bs-toggle') || isOptedOutOfNavFeedback(submitter))) {
         return;
       }
+      setFormSubmittingState(form, submitter);
       markNavBusy(submitter || form);
     });
   }
@@ -503,8 +568,15 @@
       return;
     }
     if (isLink) {
+      if (!isOptedOutOfNavFeedback(el) && !hasNonSelfTarget(el)) {
+        markNavBusy(el);
+      }
       window.location.href = el.getAttribute('href');
       return;
+    }
+    if (!isOptedOutOfNavFeedback(form) && !hasNonSelfTarget(form) && !isOptedOutOfNavFeedback(el)) {
+      setFormSubmittingState(form, isSubmit ? el : null);
+      markNavBusy(isSubmit ? el : form);
     }
     submitFormSafely(form, isSubmit ? el : null);
   });
@@ -513,6 +585,7 @@
   window.appInlineAlert = appInlineAlert;
   window.appNotify = appNotify;
   window.appAnnounce = appAnnounce;
+  window.appFocusElement = appFocusElement;
   window.appSetButtonLoading = appSetButtonLoading;
   window.appCopyWithFeedback = appCopyWithFeedback;
   window.appFocusFirstInvalid = appFocusFirstInvalid;

@@ -164,7 +164,11 @@
   });
 
   renameModalEl?.addEventListener('shown.bs.modal', () => {
-    renameInput?.focus({ preventScroll: true });
+    if (window.appFocusElement) {
+      window.appFocusElement(renameInput, { select: true });
+      return;
+    }
+    renameInput?.focus();
     renameInput?.select();
   });
 

@@ -260,8 +260,12 @@
         const password = shuffle(parts).join('');
         passwordInput.value = password;
         passwordInput.dispatchEvent(new Event('input'));
-        passwordInput.focus();
-        passwordInput.select();
+        if (window.appFocusElement) {
+          window.appFocusElement(passwordInput, { select: true });
+        } else {
+          passwordInput.focus();
+          passwordInput.select();
+        }
         if (window.appAnnounce) {
           window.appAnnounce('已生成强密码并填入');
         }

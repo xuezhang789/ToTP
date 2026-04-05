@@ -83,6 +83,9 @@
                     {% elif reason == 'revoked' %}
                     <h2 class="h4 mb-2">链接已被撤销</h2>
                     <p class="text-muted">分享者已手动失效此链接，请联系对方获取新的链接。</p>
+                    {% elif reason == 'unavailable' %}
+                    <h2 class="h4 mb-2">链接暂时不可用</h2>
+                    <p class="text-muted">当前无法安全读取关联密钥，请稍后重试或联系分享者重新处理。</p>
                     {% else %}
                     <h2 class="h4 mb-2">链接不可用</h2>
                     <p class="text-muted">无法找到对应的一次性访问链接，或已失效。</p>

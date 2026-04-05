@@ -42,6 +42,33 @@ class OfflineExportTests(TestCase):
         self.assertIn("离线验证码包", content)
         self.assertTrue(entry.audits.filter(action="offline_exported").exists())
 
+    def test_offline_export_skips_undecryptable_entries(self):
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["reauth_at"] = int(timezone.now().timestamp())
+        session.save()
+        valid_entry = TOTPEntry.objects.create(
+            user=self.user,
+            name="GitLab",
+            secret_encrypted=encrypt_str("JBSWY3DPEHPK3PXP"),
+        )
+        TOTPEntry.objects.create(
+            user=self.user,
+            name="Broken",
+            secret_encrypted="not-a-valid-token",
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["X-Exported-Entries"], "1")
+        self.assertEqual(response["X-Export-Skipped-Unavailable"], "1")
+        content = response.content.decode("utf-8")
+        self.assertIn("已跳过 1 条无法解密的密钥", content)
+        self.assertIn("GitLab", content)
+        self.assertNotIn("Broken", content)
+        self.assertTrue(valid_entry.audits.filter(action="offline_exported").exists())
+
     def test_export_with_no_entries_redirects(self):
         self.client.force_login(self.user)
         session = self.client.session

@@ -2,6 +2,7 @@ import csv
 import hashlib
 import io
 import json
+import logging
 import secrets
 from datetime import timedelta
 
@@ -40,6 +41,19 @@ from .views import (
     _reauth_json,
     _secret_preview,
 )
+
+logger = logging.getLogger(__name__)
+ONE_TIME_UNAVAILABLE_LOG_TTL_SECONDS = 300
+
+
+def _log_one_time_secret_failure_once(link_id: int, exc: Exception):
+    cache_key = f"totp:one_time_view:decrypt_warn:v1:{link_id}:{type(exc).__name__}"
+    if cache.add(cache_key, 1, ONE_TIME_UNAVAILABLE_LOG_TTL_SECONDS):
+        logger.warning(
+            "failed to render one-time link secret for link_id=%s: %s",
+            link_id,
+            type(exc).__name__,
+        )
 
 
 def _parse_ids(raw_ids, *, limit=50):
@@ -1095,6 +1109,12 @@ def one_time_view(request, token: str):
                     reason=_resolve_link_inactive_reason(link),
                 )
             try:
+                secret = decrypt_str(link.entry.secret_encrypted)
+                code, remaining = totp_code_base32(secret, digits=6, period=30)
+            except Exception as exc:
+                _log_one_time_secret_failure_once(link.id, exc)
+                return _render_one_time_invalid(request, reason="unavailable")
+            try:
                 link.mark_view(request)
             except ValueError:
                 return _render_one_time_invalid(
@@ -1104,8 +1124,6 @@ def one_time_view(request, token: str):
     except OneTimeLink.DoesNotExist:
         return _render_one_time_invalid(request, reason="not_found")
 
-    secret = decrypt_str(link.entry.secret_encrypted)
-    code, remaining = totp_code_base32(secret, digits=6, period=30)
     return render(
         request,
         "totp/one_time_link.html",
@@ -1128,6 +1146,7 @@ def _render_one_time_invalid(request, reason: str, status: int | None = None):
         "expired": 410,
         "used": 410,
         "revoked": 410,
+        "unavailable": 503,
     }
     return render(
         request,

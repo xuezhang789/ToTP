@@ -85,6 +85,7 @@
     }
     .table-responsive {
         -webkit-overflow-scrolling: touch;
+        scrollbar-gutter: stable both-edges;
     }
     .page-link {
         min-height: 44px;
@@ -153,15 +154,30 @@
     }
     .app-message-content {
         gap: 0.7rem;
+        align-items: flex-start;
+        flex-wrap: nowrap;
     }
     .app-message-icon {
         width: 2.1rem;
         height: 2.1rem;
+        flex: 0 0 auto;
+    }
+    .app-message-body {
+        min-width: 0;
+    }
+    .app-message .btn-close {
+        flex: 0 0 auto;
+        margin-top: 0.1rem;
     }
     #appToastContainer {
+        inset-inline: max(0.85rem, env(safe-area-inset-left));
         padding-right: max(0.85rem, env(safe-area-inset-right));
         padding-bottom: max(0.85rem, env(safe-area-inset-bottom));
         padding-left: max(0.85rem, env(safe-area-inset-left));
+    }
+    #appToastContainer .toast {
+        width: min(100%, 28rem);
+        margin-left: auto;
     }
     .team-home-hero {
         padding: 1.05rem;

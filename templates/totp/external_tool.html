@@ -208,8 +208,10 @@
         window.appFocusFirstInvalid(form, { toastMessage: '请检查填写内容后再提交。' });
       } else {
         const invalid = form.querySelector(':invalid');
-        if (invalid && invalid.focus) {
-          invalid.focus({ preventScroll: true });
+        if (window.appFocusElement) {
+          window.appFocusElement(invalid);
+        } else if (invalid && invalid.focus) {
+          invalid.focus();
         }
         if (window.appToast) {
           window.appToast('warning', '请检查填写内容后再提交。');

@@ -55,6 +55,24 @@
   let renameTargetRow = null;
   let renameSubmitUrl = '';
 
+  function focusElement(element, { select = false } = {}) {
+    if (!element) {
+      return false;
+    }
+    if (window.appFocusElement) {
+      return window.appFocusElement(element, { select });
+    }
+    try {
+      element.focus();
+      if (select && typeof element.select === 'function') {
+        element.select();
+      }
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
   function inlineAlert(alertEl, variant, message) {
     if (window.appInlineAlert) {
       window.appInlineAlert(alertEl, variant, message);
@@ -104,7 +122,9 @@
         copyBtn: tr.querySelector('.copy-btn'),
         progressEl: tr.querySelector('.progress-bar'),
         remainEl: tr.querySelector('.remain'),
+        remainSuffixEl: tr.querySelector('.entry-expiry-meta span:last-child'),
         remainMobileEl: tr.querySelector('.remain-mobile'),
+        hintDesktopEl: tr.querySelector('.entry-code-hint .d-none.d-md-inline'),
         period: Number(tr.dataset.period) || 30,
         lastCode: null,
         lastRemain: null,
@@ -219,7 +239,78 @@
     }
   }
 
+  function setRowUnavailable(row, message = '解密失败') {
+    if (row.tr) {
+      row.tr.dataset.tokenState = 'unavailable';
+    }
+    if (row.codeEl) {
+      row.codeEl.textContent = message;
+      row.codeEl.dataset.code = '';
+      row.codeEl.classList.remove('text-bg-dark');
+      row.codeEl.classList.add('text-bg-danger');
+      row.codeEl.removeAttribute('role');
+      row.codeEl.removeAttribute('tabindex');
+      row.codeEl.setAttribute('aria-label', message);
+    }
+    if (row.copyBtn) {
+      row.copyBtn.dataset.code = '';
+      row.copyBtn.disabled = true;
+      row.copyBtn.classList.remove('btn-outline-primary', 'btn-success', 'btn-danger');
+      row.copyBtn.classList.add('btn-outline-secondary');
+      row.copyBtn.setAttribute('aria-label', `${message}，无法复制`);
+      row.copyBtn.setAttribute('title', '当前密钥不可用');
+    }
+    if (row.remainEl) {
+      row.remainEl.textContent = '不可用';
+    }
+    if (row.remainSuffixEl) {
+      row.remainSuffixEl.textContent = '';
+    }
+    if (row.remainMobileEl) {
+      row.remainMobileEl.textContent = '不可用';
+    }
+    if (row.hintDesktopEl) {
+      row.hintDesktopEl.textContent = '当前密钥暂不可用';
+    }
+    if (row.progressEl) {
+      row.progressEl.style.width = '0%';
+    }
+    const progress = row.tr ? row.tr.querySelector('[role="progressbar"]') : null;
+    if (progress) {
+      progress.setAttribute('aria-valuenow', '0');
+    }
+    row.lastCode = null;
+    row.lastRemain = null;
+  }
+
+  function clearRowUnavailable(row) {
+    if (row.tr && row.tr.dataset.tokenState === 'unavailable') {
+      delete row.tr.dataset.tokenState;
+    }
+    if (row.codeEl) {
+      row.codeEl.classList.remove('text-bg-danger');
+      row.codeEl.classList.add('text-bg-dark');
+      row.codeEl.setAttribute('role', 'button');
+      row.codeEl.setAttribute('tabindex', '0');
+      row.codeEl.setAttribute('aria-label', '点击复制验证码');
+    }
+    if (row.copyBtn) {
+      row.copyBtn.disabled = false;
+      row.copyBtn.classList.remove('btn-outline-secondary');
+      row.copyBtn.classList.add('btn-outline-primary');
+      row.copyBtn.setAttribute('aria-label', '复制验证码');
+      row.copyBtn.setAttribute('title', '复制');
+    }
+    if (row.remainSuffixEl) {
+      row.remainSuffixEl.textContent = '后刷新';
+    }
+    if (row.hintDesktopEl) {
+      row.hintDesktopEl.textContent = '点击验证码即可复制';
+    }
+  }
+
   function renderRow(row, code, remain, period) {
+    clearRowUnavailable(row);
     if (code && row.codeEl && row.codeEl.textContent !== code) {
       row.codeEl.textContent = code;
     }
@@ -320,6 +411,10 @@
         state.forEach((row, id) => {
           const payload = items.get(id);
           if (!payload) {
+            return;
+          }
+          if (payload.error) {
+            setRowUnavailable(row, payload.error === 'unavailable' ? '解密失败' : '暂不可用');
             return;
           }
           const period = Number(payload.period) || row.period;
@@ -548,7 +643,7 @@
       if (window.appFocusFirstInvalid) {
         window.appFocusFirstInvalid(renameForm, { toastMessage: '请检查填写内容后再提交。' });
       } else {
-        renameNameInput.focus({ preventScroll: true });
+        focusElement(renameNameInput);
       }
       if (window.appNotify) {
         window.appNotify({ alertEl: renameAlert, variant: 'warning', message: '请检查填写内容后再提交。' });
@@ -558,7 +653,7 @@
     const value = renameNameInput.value.trim();
     if (!value) {
       showRenameError('名称不能为空');
-      renameNameInput.focus({ preventScroll: true });
+      focusElement(renameNameInput);
       return;
     }
 
@@ -609,8 +704,7 @@
       })
       .catch((err) => {
         showRenameError(err.message || '保存失败，请稍后再试');
-        renameNameInput.focus({ preventScroll: true });
-        renameNameInput.select();
+        focusElement(renameNameInput, { select: true });
       })
       .finally(() => {
         setRenameLoading(false);
@@ -618,8 +712,7 @@
   });
 
   renameModalEl?.addEventListener('shown.bs.modal', () => {
-    renameNameInput?.focus({ preventScroll: true });
-    renameNameInput?.select();
+    focusElement(renameNameInput, { select: true });
   });
 
   renameModalEl?.addEventListener('hidden.bs.modal', () => {
@@ -793,8 +886,7 @@
     if (key === '/' && !isTypingTarget) {
       if (qInput) {
         event.preventDefault();
-        qInput.focus({ preventScroll: true });
-        qInput.select();
+        focusElement(qInput, { select: true });
       }
       return;
     }

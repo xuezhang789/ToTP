@@ -45,3 +45,28 @@ class ExportEncryptedTests(TestCase):
         self.assertTrue(payload["cipher"]["token"])
         self.assertTrue(entry.audits.filter(action="encrypted_exported").exists())
 
+    def test_encrypted_export_skips_undecryptable_entries(self):
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["reauth_at"] = int(timezone.now().timestamp())
+        session.save()
+        valid_entry = TOTPEntry.objects.create(
+            user=self.user,
+            name="GitLab",
+            secret_encrypted=encrypt_str("JBSWY3DPEHPK3PXP"),
+        )
+        TOTPEntry.objects.create(
+            user=self.user,
+            name="Broken",
+            secret_encrypted="not-a-valid-token",
+        )
+
+        res = self.client.post(self.url, {"passphrase": "password123", "passphrase2": "password123"})
+
+        self.assertEqual(res.status_code, 200)
+        payload = json.loads(res.content.decode("utf-8"))
+        self.assertEqual(payload["meta"]["count"], 1)
+        self.assertEqual(payload["meta"]["skipped_unavailable"], 1)
+        self.assertTrue(payload["meta"]["warnings"])
+        self.assertEqual(res["X-Export-Skipped-Unavailable"], "1")
+        self.assertTrue(valid_entry.audits.filter(action="encrypted_exported").exists())

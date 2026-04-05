@@ -274,11 +274,21 @@
     }
 
     function focusImportInput(mode) {
+      const focusTarget = (element) => {
+        if (!element) {
+          return;
+        }
+        if (global.appFocusElement) {
+          global.appFocusElement(element);
+          return;
+        }
+        element.focus();
+      };
       if (mode === 'file') {
-        importFileInput?.focus({ preventScroll: true });
+        focusTarget(importFileInput);
         return;
       }
-      importManualText?.focus({ preventScroll: true });
+      focusTarget(importManualText);
     }
 
     function showImportWarnings(warnings) {

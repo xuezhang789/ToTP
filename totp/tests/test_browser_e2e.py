@@ -496,6 +496,39 @@ class BrowserRegressionTests(BrowserLiveServerTestCase):
             reverse("dashboard"),
         )
 
+    def test_confirmed_link_sets_nav_busy_feedback_before_navigation(self):
+        self.page.goto(self._absolute_url(reverse("accounts:login")), wait_until="domcontentloaded")
+        self.page.evaluate(
+            """
+            () => {
+              sessionStorage.removeItem('sawNavBusy');
+              const observer = new MutationObserver(() => {
+                if (document.body.classList.contains('app-nav-busy')) {
+                  sessionStorage.setItem('sawNavBusy', '1');
+                }
+              });
+              observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+              const link = document.createElement('a');
+              link.id = 'confirm-nav-link';
+              link.href = '/auth/login/?confirmed=1';
+              link.dataset.confirm = '确认前往登录页？';
+              link.dataset.confirmTitle = '确认跳转';
+              link.textContent = '确认跳转';
+              document.body.appendChild(link);
+            }
+            """
+        )
+
+        self.page.locator("#confirm-nav-link").click()
+        self.page.locator("#appConfirmModal.show").wait_for()
+
+        with self.page.expect_navigation(wait_until="domcontentloaded"):
+            self.page.locator("#appConfirmOkBtn").click()
+
+        self.assertTrue(self.page.evaluate("() => sessionStorage.getItem('sawNavBusy') === '1'"))
+        self.assertIn("confirmed=1", self.page.url)
+
     def test_member_removal_browser_flow_revokes_member_access(self):
         owner = self.user_model.objects.create_user(
             username="browser_owner",
